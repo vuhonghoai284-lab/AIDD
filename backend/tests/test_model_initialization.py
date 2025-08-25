@@ -6,8 +6,10 @@ import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 from app.core.config import init_settings
-from app.core.database import SessionLocal
+from app.core.database import SessionLocal, Base, engine
 from app.services.model_initializer import model_initializer
+# 确保导入所有模型
+from app.models import *
 
 
 class TestModelInitialization:
@@ -37,6 +39,9 @@ class TestModelInitialization:
     
     def test_model_database_initialization(self):
         """测试模型数据库初始化"""
+        # 创建所有表
+        Base.metadata.create_all(bind=engine)
+        
         settings = init_settings("config.test.yaml")
         db = SessionLocal()
         
@@ -67,6 +72,9 @@ class TestModelInitialization:
     
     def test_get_active_models(self):
         """测试获取活跃模型"""
+        # 创建所有表
+        Base.metadata.create_all(bind=engine)
+        
         settings = init_settings("config.test.yaml")
         db = SessionLocal()
         
@@ -88,6 +96,9 @@ class TestModelInitialization:
     
     def test_get_default_model(self):
         """测试获取默认模型"""
+        # 创建所有表
+        Base.metadata.create_all(bind=engine)
+        
         settings = init_settings("config.test.yaml")
         db = SessionLocal()
         
@@ -171,6 +182,9 @@ class TestModelInitializationIntegration:
     
     def test_startup_initializes_models_in_test_mode(self):
         """测试启动时在测试模式下也会初始化模型"""
+        # 创建所有表
+        Base.metadata.create_all(bind=engine)
+        
         # 这个测试验证startup事件会在测试模式下初始化模型
         # 我们可以通过检查数据库中是否有模型来验证
         
@@ -190,6 +204,9 @@ class TestModelInitializationIntegration:
     
     def test_model_api_integration_with_database(self, client: TestClient):
         """测试模型API与数据库的集成"""
+        # 创建所有表
+        Base.metadata.create_all(bind=engine)
+        
         # 这个测试验证API能够从数据库正确读取模型信息
         
         # 1. 先通过API获取模型列表

@@ -85,6 +85,14 @@ task_processing:
   task_timeout: 12000  # 任务超时时间（秒）
   retry_failed_tasks: true  # 是否重试失败的任务
   
+  # 大文档处理配置
+  document_processing:
+    max_document_chars: 1000000  # 允许处理的最大文档字符数（1M字符）
+    enable_intelligent_chunking: true  # 启用智能分块处理
+    chunk_overlap_chars: 200  # 分块重叠字符数
+    min_chunk_chars: 1000  # 最小分块大小
+    max_chunks_per_document: 50  # 单个文档最大分块数量
+  
   # 章节合并配置
   section_merge:
     enabled: true  # 是否启用章节合并

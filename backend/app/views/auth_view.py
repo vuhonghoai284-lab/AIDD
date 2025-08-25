@@ -121,7 +121,7 @@ class AuthView(BaseView):
             print(f'✅ 第三方登录成功，用户: {user_info.display_name}')
             
             return UserLoginResponse(
-                user=UserResponse.model_validate(login_result["user"]),
+                user=UserResponse.from_orm(login_result["user"]),
                 access_token=login_result["access_token"],
                 token_type=login_result["token_type"]
             )
@@ -175,7 +175,7 @@ class AuthView(BaseView):
             print(f'✅ [废弃接口] 第三方登录成功，用户: {user_info.display_name}')
             
             return UserLoginResponse(
-                user=UserResponse.model_validate(login_result["user"]),
+                user=UserResponse.from_orm(login_result["user"]),
                 access_token=login_result["access_token"],
                 token_type=login_result["token_type"]
             )
@@ -213,7 +213,7 @@ class AuthView(BaseView):
                 raise HTTPException(status_code=401, detail="登录失败")
             
             return UserLoginResponse(
-                user=UserResponse.model_validate(login_result["user"]),
+                user=UserResponse.from_orm(login_result["user"]),
                 access_token=login_result["access_token"],
                 token_type=login_result["token_type"]
             )

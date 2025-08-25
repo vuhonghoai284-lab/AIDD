@@ -110,7 +110,7 @@ class TestThirdPartyUserWorkflow:
             "code": "e2e_test_auth_code"
         }
         
-        login_response = client.post("/api/auth/thirdparty/login", json=third_party_auth)
+        login_response = client.post("/api/auth/thirdparty/login-legacy", json=third_party_auth)
         assert login_response.status_code == 200
         
         # 3. 第三方用户登录
@@ -159,7 +159,7 @@ class TestPermissionIsolationWorkflow:
         # 创建两个不同用户
         # 用户A：第三方用户
         user_a_auth = {"code": "user_a_auth_code"}
-        user_a_response = client.post("/api/auth/thirdparty/login", json=user_a_auth)
+        user_a_response = client.post("/api/auth/thirdparty/login-legacy", json=user_a_auth)
         assert user_a_response.status_code == 200
         
         user_a_token = user_a_response.json()["access_token"]
@@ -187,7 +187,7 @@ class TestPermissionIsolationWorkflow:
         
         # 创建另一个普通用户C
         user_c_auth = {"code": "user_c_auth_code"}
-        user_c_response = client.post("/api/auth/thirdparty/login", json=user_c_auth)
+        user_c_response = client.post("/api/auth/thirdparty/login-legacy", json=user_c_auth)
         assert user_c_response.status_code == 200
         
         user_c_token = user_c_response.json()["access_token"]

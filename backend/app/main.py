@@ -25,7 +25,7 @@ def create_app() -> FastAPI:
         description="基于AI的文档质量检测系统后端API",
         version="2.0.0",
         debug=settings.server_config.get('debug', False),
-        redirect_slashes=False  # 禁用自动斜杠重定向
+        redirect_slashes=True  # 启用自动斜杠重定向
     )
     
     # 配置CORS - 允许所有来源访问
@@ -76,7 +76,7 @@ def setup_routes(app: FastAPI):
     app.include_router(task_view.router, prefix="/api/tasks", tags=["任务"])
     
     # 注册用户相关路由
-    app.include_router(user_view.router, prefix="/api/users", tags=["用户"])
+    app.include_router(user_view.router, prefix="/api", tags=["用户"])
     
     # 注册AI输出相关路由
     from app.views.ai_output_view import task_ai_output_view, single_ai_output_view

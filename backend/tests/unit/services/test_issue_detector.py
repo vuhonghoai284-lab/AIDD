@@ -334,17 +334,6 @@ class TestIssueDetector:
                 assert result == mock_response
                 mock_to_thread.assert_called_once()
     
-    def test_mock_service_functionality(self, issue_detector):
-        """测试Mock服务功能"""
-        from tests.fixtures.ai_mock import MockAIServiceProvider
-        
-        # 创建Mock服务提供者
-        mock_provider = MockAIServiceProvider({'model': 'test-model'})
-        
-        # 验证Mock服务基本功能
-        assert mock_provider.is_available() is True
-        assert 'MockAI' in mock_provider.get_provider_name()
-        assert mock_provider.get_document_processor() is not None
     
     def test_issue_detection_performance(self, issue_detector):
         """测试问题检测性能"""

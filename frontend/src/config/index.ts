@@ -23,8 +23,9 @@ const getDefaultApiUrl = () => {
     return `${window.location.protocol}//${window.location.host}/api`;
   }
   
-  // 开发环境默认配置
-  return `${window.location.protocol}//${window.location.hostname}:8080/api`;
+  // 开发环境默认配置 - 支持环境变量指定后端端口
+  const backendPort = import.meta.env.VITE_BACKEND_PORT || '8080';
+  return `${window.location.protocol}//${window.location.hostname}:${backendPort}/api`;
 };
 
 const getDefaultWsUrl = () => {
@@ -39,9 +40,10 @@ const getDefaultWsUrl = () => {
     return `${protocol}//${window.location.host}`;
   }
   
-  // 开发环境默认配置
+  // 开发环境默认配置 - 支持环境变量指定后端端口
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.hostname}:8080`;
+  const backendPort = import.meta.env.VITE_BACKEND_PORT || '8080';
+  return `${protocol}//${window.location.hostname}:${backendPort}`;
 };
 
 const config: AppConfig = {
@@ -70,6 +72,11 @@ if (config.isDev) {
     appTitle: config.appTitle,
     appVersion: config.appVersion,
     environment: config.isDev ? '开发环境' : '生产环境',
+    environmentVariables: {
+      VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
+      VITE_WS_BASE_URL: import.meta.env.VITE_WS_BASE_URL,
+      VITE_BACKEND_PORT: import.meta.env.VITE_BACKEND_PORT,
+    },
   });
 }
 

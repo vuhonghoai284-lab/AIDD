@@ -57,15 +57,30 @@ class DocumentProcessor:
             console_handler.setFormatter(formatter)
             self.logger.addHandler(console_handler)
         
-        # 从配置中提取参数 - 直接从model_config获取，因为传入的已经是config部分
-        self.provider = model_config.get('provider', 'openai')  # 这个字段可能不在config中
-        self.api_key = model_config.get('api_key')
-        self.api_base = model_config.get('base_url')
-        self.model_name = model_config.get('model')
-        self.temperature = model_config.get('temperature', 0.3)
-        self.max_tokens = model_config.get('max_tokens', 4000)
-        self.timeout = model_config.get('timeout', 60)
-        self.max_retries = model_config.get('max_retries', 3)
+        # 从配置中提取参数 - 兼容两种配置格式
+        if 'config' in model_config:
+            # 新格式：model_config包含provider和config
+            config = model_config['config']
+            self.provider = model_config.get('provider', 'openai')
+        else:
+            # 旧格式：model_config直接包含配置
+            config = model_config
+            self.provider = model_config.get('provider', 'openai')
+        
+        self.api_key = config.get('api_key')
+        self.api_base = config.get('base_url')
+        self.model_name = config.get('model')
+        self.temperature = config.get('temperature', 0.3)
+        self.max_tokens = config.get('max_tokens', 4000)
+        self.timeout = config.get('timeout', 60)
+        self.max_retries = config.get('max_retries', 3)
+        
+        # 智能分块配置
+        self.context_window = config.get('context_window', 128000)
+        self.reserved_tokens = config.get('reserved_tokens', 2000)
+        self.chunk_overlap = 200  # 分块重叠字符数
+        # 计算可用于文档内容的字符数（粗略估算：1个token约等于4个字符）
+        self.max_chunk_chars = (self.context_window - self.reserved_tokens) * 4
         
         # 检查API密钥是否正确获取
         if not self.api_key:
@@ -122,119 +137,64 @@ class DocumentProcessor:
             # 从模板加载提示词
             system_prompt = prompt_loader.get_system_prompt('document_preprocess')
             
-            # 构建用户提示
-            user_prompt = prompt_loader.get_user_prompt(
-                'document_preprocess',
-                format_instructions=self.structure_parser.get_format_instructions(),
-                document_content=text[:10000]  # 限制长度以避免超出token限制
-            )
-
-            # 创建消息
-            messages = [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_prompt)
-            ]
+            # 智能分块处理大文档
+            chunks = self._split_document_intelligently(text)
             
-            if progress_callback:
-                await progress_callback("正在调用AI模型分析文档...", 10)
+            all_sections = []
+            total_chunks = len(chunks)
             
-            # 调用模型（仅在此处进行mock判断）
-            self.logger.info("📤 调用AI模型进行文档预处理")
-            response = await self._call_ai_model(messages)
+            for chunk_idx, chunk in enumerate(chunks):
+                if progress_callback:
+                    progress = 10 + (chunk_idx / total_chunks) * 10  # 10%-20%的进度
+                    await progress_callback(f"正在分析第{chunk_idx + 1}/{total_chunks}个文档片段...", int(progress))
+                
+                # 构建用户提示
+                user_prompt = prompt_loader.get_user_prompt(
+                    'document_preprocess',
+                    format_instructions=self.structure_parser.get_format_instructions(),
+                    document_content=chunk
+                )
+                
+                # 创建消息
+                messages = [
+                    SystemMessage(content=system_prompt),
+                    HumanMessage(content=user_prompt)
+                ]
+                
+                # 调用模型处理单个分块
+                self.logger.info(f"📤 调用AI模型处理第{chunk_idx + 1}/{total_chunks}个文档片段")
+                response = await self._call_ai_model(messages)
+                
+                # 解析这个分块的结果
+                chunk_sections = self._parse_response(response.content, f"chunk_{chunk_idx}")
+                if chunk_sections:
+                    all_sections.extend(chunk_sections)
+            
+            # 合并相邻的相似章节（去重）
+            merged_sections = self._merge_similar_sections(all_sections)
+            
             processing_time = time.time() - start_time
-            
-            self.logger.info(f"📥 收到预处理响应 (耗时: {processing_time:.2f}s)")
-            
-            # 保存AI输出到数据库
+            self.logger.info(f"📥 文档预处理完成，共处理{total_chunks}个片段，得到{len(merged_sections)}个章节 (耗时: {processing_time:.2f}s)")
+
+            # 保存合并后的结果到数据库
             if self.db and task_id:
                 ai_output = AIOutput(
                     task_id=task_id,
                     operation_type="preprocess",
-                    input_text=text[:10000],  # 保存部分输入文本
-                    raw_output=response.content,
+                    input_text=text[:1000],  # 保存前1000字符作为样本
+                    raw_output=json.dumps({"sections": merged_sections}, ensure_ascii=False),
+                    parsed_output={"sections": merged_sections},
                     processing_time=processing_time,
                     status="success"
                 )
+                self.db.add(ai_output)
+                self.db.commit()
             
             if progress_callback:
-                await progress_callback("正在解析AI分析结果...", 15)
+                await progress_callback(f"文档解析完成，识别到 {len(merged_sections)} 个章节", 20)
             
-            # 解析响应
-            try:
-                content = response.content
-                self.logger.debug(f"原始响应 (前500字符): {str(content)[:500]}")
-                
-                # 尝试解析JSON
-                if isinstance(content, str):
-                    self.logger.debug(f"响应长度: {len(content)} 字符")
-                    
-                    # 查找JSON内容
-                    json_match = re.search(r'\{.*\}', content, re.DOTALL)
-                    if json_match:
-                        json_str = json_match.group()
-                        self.logger.debug(f"找到JSON (前200字符): {json_str[:200]}...")
-                        
-                        try:
-                            result = json.loads(json_str)
-                            sections_count = len(result.get('sections', []))
-                            self.logger.info(f"✅ 预处理JSON解析成功，包含 {sections_count} 个章节")
-                            
-                            if progress_callback:
-                                await progress_callback(f"文档解析完成，识别到 {sections_count} 个章节", 20)
-                                
-                        except json.JSONDecodeError as je:
-                            self.logger.error(f"❌ 预处理JSON解析失败: {str(je)}")
-                            self.logger.error(f"JSON内容: {json_str[:500]}...")
-                            # 如果没有找到JSON，返回原文作为单一章节
-                            result = {
-                                "sections": [{
-                                    "section_title": "文档内容",
-                                    "content": text,
-                                    "level": 1
-                                }]
-                            }
-                    else:
-                        self.logger.warning("⚠️ 预处理响应中未找到JSON格式")
-                        self.logger.debug(f"完整响应: {content[:1000]}...")
-                        # 如果没有找到JSON，返回原文作为单一章节
-                        result = {
-                            "sections": [{
-                                "section_title": "文档内容",
-                                "content": text,
-                                "level": 1
-                            }]
-                        }
-                else:
-                    self.logger.warning(f"⚠️ 预处理响应不是字符串: {type(content)}")
-                    result = {"sections": [{"section_title": "文档内容", "content": text, "level": 1}]}
-                
-                # 更新数据库中的解析结果
-                if self.db and task_id:
-                    ai_output.parsed_output = result
-                    self.db.add(ai_output)
-                    self.db.commit()
-                
-                sections_list = result.get('sections', [])
-                self.logger.info(f"✅ 文档预处理完成，识别到 {len(sections_list)} 个章节")
-                return sections_list
-                
-            except Exception as e:
-                import traceback
-                self.logger.error(f"⚠️ 文档结构解析失败，使用原始文本: {str(e)}")
-                self.logger.error(f"错误类型: {type(e).__name__}")
-                self.logger.error(f"完整堆栈:\n{traceback.format_exc()}")
-                
-                # 保存解析错误信息
-                if self.db and task_id:
-                    ai_output.status = "parsing_error"
-                    ai_output.error_message = str(e)
-                    self.db.add(ai_output)
-                    self.db.commit()
-                
-                if progress_callback:
-                    await progress_callback("文档解析失败，使用原始文档", 20)
-                
-                return [{"section_title": "文档内容", "content": text, "level": 1}]
+            self.logger.info(f"✅ 文档预处理完成，识别到 {len(merged_sections)} 个章节")
+            return merged_sections
                 
         except Exception as e:
             self.logger.error(f"❌ 文档预处理失败: {str(e)}")
@@ -298,6 +258,168 @@ class DocumentProcessor:
         
         self.logger.info(f"📊 章节验证完成: {len(sections)} -> {len(valid_sections)}")
         return valid_sections
+    
+    def _split_document_intelligently(self, text: str) -> List[str]:
+        """
+        智能分割文档，优先按章节分割，其次按段落分割
+        
+        Args:
+            text: 原始文档文本
+            
+        Returns:
+            分割后的文本块列表
+        """
+        if len(text) <= self.max_chunk_chars:
+            return [text]
+        
+        chunks = []
+        current_chunk = ""
+        
+        # 首先尝试按章节分割（标题模式：# 、## 、### 等）
+        sections = re.split(r'\n(?=#{1,6}\s)', text)
+        
+        self.logger.info(f"📄 文档按章节分割为 {len(sections)} 个部分")
+        
+        for section in sections:
+            # 如果单个章节就超过限制，需要进一步分割
+            if len(section) > self.max_chunk_chars:
+                # 保存当前累积的内容
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                    current_chunk = ""
+                
+                # 对超长章节按段落分割
+                paragraphs = section.split('\n\n')
+                section_chunk = ""
+                
+                for paragraph in paragraphs:
+                    if len(section_chunk + paragraph) > self.max_chunk_chars:
+                        if section_chunk:
+                            chunks.append(section_chunk.strip())
+                        section_chunk = paragraph + "\n\n"
+                    else:
+                        section_chunk += paragraph + "\n\n"
+                
+                if section_chunk.strip():
+                    chunks.append(section_chunk.strip())
+            else:
+                # 检查加入当前章节后是否超过限制
+                if len(current_chunk + section) > self.max_chunk_chars:
+                    if current_chunk:
+                        chunks.append(current_chunk.strip())
+                    current_chunk = section
+                else:
+                    current_chunk += "\n" + section if current_chunk else section
+        
+        # 添加最后一个分块
+        if current_chunk.strip():
+            chunks.append(current_chunk.strip())
+        
+        self.logger.info(f"📊 文档最终分割为 {len(chunks)} 个处理单元，平均长度: {sum(len(c) for c in chunks) // len(chunks)} 字符")
+        return chunks
+    
+    def _parse_response(self, content: str, chunk_id: str) -> List[Dict]:
+        """
+        解析AI响应内容
+        
+        Args:
+            content: AI返回的原始内容
+            chunk_id: 分块标识
+            
+        Returns:
+            解析出的章节列表
+        """
+        try:
+            # 查找JSON内容
+            json_match = re.search(r'\{.*\}', content, re.DOTALL)
+            if json_match:
+                json_str = json_match.group()
+                result = json.loads(json_str)
+                sections = result.get('sections', [])
+                self.logger.info(f"✅ {chunk_id} 解析成功，得到 {len(sections)} 个章节")
+                return sections
+            else:
+                self.logger.warning(f"⚠️ {chunk_id} 响应中未找到JSON格式，尝试文本解析")
+                return self._parse_text_fallback(content)
+        except json.JSONDecodeError as e:
+            self.logger.error(f"❌ {chunk_id} JSON解析失败: {str(e)}，尝试文本解析")
+            return self._parse_text_fallback(content)
+        except Exception as e:
+            self.logger.error(f"❌ {chunk_id} 解析完全失败: {str(e)}")
+            return []
+    
+    def _parse_text_fallback(self, content: str) -> List[Dict]:
+        """
+        当JSON解析失败时的文本解析后备方案
+        
+        Args:
+            content: AI响应内容
+            
+        Returns:
+            解析出的章节列表
+        """
+        sections = []
+        # 简单的基于标题的文本分割
+        parts = re.split(r'\n(?=#{1,6}\s)', content)
+        
+        for i, part in enumerate(parts):
+            if part.strip():
+                title_match = re.match(r'^(#{1,6})\s*(.+)', part.strip())
+                if title_match:
+                    level = len(title_match.group(1))
+                    title = title_match.group(2)
+                    content_text = part[len(title_match.group(0)):].strip()
+                else:
+                    level = 1
+                    title = f"章节 {i+1}"
+                    content_text = part.strip()
+                
+                if len(content_text) > 20:  # 过滤太短的内容
+                    sections.append({
+                        "section_title": title,
+                        "content": content_text,
+                        "level": level
+                    })
+        
+        # 如果没有找到任何有效章节，返回默认章节
+        if not sections:
+            sections.append({
+                "section_title": "文档内容",
+                "content": content,
+                "level": 1
+            })
+        
+        return sections
+    
+    def _merge_similar_sections(self, sections: List[Dict]) -> List[Dict]:
+        """
+        合并相邻的相似章节，去除重复内容
+        
+        Args:
+            sections: 原始章节列表
+            
+        Returns:
+            合并后的章节列表
+        """
+        if not sections:
+            return sections
+        
+        merged = [sections[0]]
+        
+        for current in sections[1:]:
+            last_merged = merged[-1]
+            
+            # 检查标题相似度
+            if (current.get('section_title', '').strip() == last_merged.get('section_title', '').strip() and
+                current.get('level', 1) == last_merged.get('level', 1)):
+                # 合并内容
+                last_merged['content'] = last_merged.get('content', '') + '\n\n' + current.get('content', '')
+                self.logger.debug(f"🔄 合并重复章节: {current.get('section_title', '未知')}")
+            else:
+                merged.append(current)
+        
+        self.logger.info(f"📋 章节合并完成: {len(sections)} -> {len(merged)}")
+        return merged
     
     async def _call_ai_model(self, messages):
         """

@@ -1,0 +1,117 @@
+# 测试环境配置
+server:
+  host: "0.0.0.0"
+  port: 8080
+  debug: true
+  reload: false
+  workers: 1
+  external_host: "localhost"
+  external_port: 8080
+  external_protocol: "http"
+
+# 数据库配置 - 使用内存数据库进行测试
+database:
+  type: "sqlite"
+  sqlite:
+    path: ":memory:"
+  # 移除MySQL连接池配置，SQLite不需要
+
+# AI模型配置 - 测试模式使用真实配置但Mock HTTP请求
+ai_models:
+  default_index: 0
+  models:
+    - label: "GPT-4o Mini (测试)"
+      provider: "openai"
+      config:
+        api_key: "test-api-key-12345"
+        base_url: "https://api.openai.com/v1"
+        model: "gpt-4o-mini"
+        temperature: 0.3
+        max_tokens: 8000
+        context_window: 128000
+        reserved_tokens: 2000
+        timeout: 12000
+        max_retries: 3
+      description: "测试环境OpenAI模型（使用Mock响应）"
+    - label: "GPT-3.5 Turbo (测试)"
+      provider: "openai"
+      config:
+        api_key: "test-api-key-67890"
+        base_url: "https://api.openai.com/v1"
+        model: "gpt-3.5-turbo"
+        temperature: 0.5
+        max_tokens: 4000
+        context_window: 64000
+        reserved_tokens: 1000
+        timeout: 6000
+        max_retries: 2
+      description: "测试环境GPT-3.5模型（使用Mock响应）"
+
+# 文件设置
+file_settings:
+  max_file_size: 10485760
+  chunk_size: 4000
+  allowed_extensions:
+    - pdf
+    - docx
+    - md
+    - txt
+
+# 目录配置 - 测试环境使用临时目录
+directories:
+  upload_dir: ./data/test/uploads
+  report_dir: ./data/test/reports
+  log_dir: ./data/test/logs
+  temp_dir: ./data/test/temp
+
+# 日志配置
+logging:
+  level: "DEBUG"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "./data/test/logs/test.log"
+  max_size: 10485760
+  backup_count: 5
+
+# 任务处理配置
+task_processing:
+  max_concurrent_tasks: 5
+  task_timeout: 60  # 测试环境更短的超时时间
+  retry_failed_tasks: true
+  section_merge:
+    enabled: true
+    max_chars: 5000
+    min_chars: 100
+    preserve_structure: true
+
+# CORS配置
+cors:
+  enabled: true
+  origins:
+    - "http://localhost:3000"
+    - "http://127.0.0.1:3000"
+    - "http://localhost:5173"
+  allow_credentials: true
+  allow_methods: ["*"]
+  allow_headers: ["*"]
+  development_mode: true
+
+# 第三方登录配置 - 测试环境
+third_party_auth:
+  provider_type: "gitee"
+  client_id: "test_client_id"
+  client_secret: "test_client_secret"
+  frontend_domain: "http://localhost:3000"
+  redirect_path: "/third-login/callback"
+  scope: "user_info"
+  api_endpoints:
+    authorization_url: "https://gitee.com/oauth/authorize"
+    token_url: "https://gitee.com/oauth/token"
+    userinfo_url: "https://gitee.com/api/v5/user"
+  request_timeout: 30
+  max_retries: 3
+
+# JWT配置 - 测试环境
+jwt:
+  secret_key: "test_secret_key_123456"
+  algorithm: "HS256"
+  access_token_expire_minutes: 30

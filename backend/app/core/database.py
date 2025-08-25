@@ -43,8 +43,7 @@ def get_engine_config():
                 "isolation_level": None
             },
             'pool_pre_ping': True,
-            'pool_recycle': 3600,
-            'max_overflow': 0  # SQLite不支持连接池
+            'echo': False
         }
 
 # 创建数据库引擎

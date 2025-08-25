@@ -31,20 +31,26 @@ class TestAIServiceExtended:
     async def test_ai_service_basic_functionality(self):
         """测试AI服务基础功能"""
         from app.services.ai_service import AIService
+        from app.core.config import get_settings
+        from app.core.database import SessionLocal
+        
+        # 使用测试设置创建AI服务
+        settings = get_settings()
+        db = SessionLocal()
         
         try:
-            # 创建AI服务实例（不使用真实模型）
-            ai_service = AIService()
+            # 创建AI服务实例，传入必要的参数
+            ai_service = AIService(db_session=db, settings=settings)
             
             # 测试文档预处理
             test_text = """
 # 标题1
-这是第一段内容。这里有一些文字。
+这是第一段内容。这里有一些文字，足够长以通过验证。
 
 ## 子标题
-这是第二段内容。这里也有一些文字。
+这是第二段内容。这里也有一些文字，足够长以通过验证。
 
-这是第三段内容，没有标题。
+这是第三段内容，没有标题，但是内容足够长以通过验证。
             """.strip()
             
             # 测试文档预处理
@@ -54,9 +60,10 @@ class TestAIServiceExtended:
             
             for section in sections:
                 assert isinstance(section, dict)
-                # 验证基本结构（具体字段可能因实现而异）
-                if 'section_title' in section:
-                    assert isinstance(section['section_title'], str)
+                assert 'section_title' in section
+                assert 'content' in section
+                assert isinstance(section['section_title'], str)
+                assert isinstance(section['content'], str)
             
             # 测试问题检测
             issues = await ai_service.detect_issues(test_text)
@@ -64,15 +71,12 @@ class TestAIServiceExtended:
             
             for issue in issues:
                 assert isinstance(issue, dict)
-                # 验证基本结构（具体字段可能因实现而异）
+                # 验证基本结构
                 if 'type' in issue:
                     assert isinstance(issue['type'], str)
                     
-        except ImportError as e:
-            pytest.skip(f"AI服务模块不可用: {e}")
-        except Exception as e:
-            # 在测试环境中，某些功能可能不可用，这是正常的
-            pytest.skip(f"AI服务功能在当前环境不可用: {e}")
+        finally:
+            db.close()
     
     @pytest.mark.asyncio
     async def test_ai_service_factory_integration(self):
@@ -99,9 +103,15 @@ class TestAIServiceExtended:
     async def test_ai_service_error_handling(self):
         """测试AI服务错误处理"""
         from app.services.ai_service import AIService
+        from app.core.config import get_settings
+        from app.core.database import SessionLocal
+        
+        # 使用测试设置创建AI服务
+        settings = get_settings()
+        db = SessionLocal()
         
         try:
-            ai_service = AIService()
+            ai_service = AIService(db_session=db, settings=settings)
             
             # 测试空文档处理
             empty_sections = await ai_service.preprocess_document("")
@@ -119,7 +129,5 @@ class TestAIServiceExtended:
                 # 这是预期的错误，某些实现可能会抛出异常
                 pass
                 
-        except ImportError as e:
-            pytest.skip(f"AI服务模块不可用: {e}")
-        except Exception as e:
-            pytest.skip(f"AI服务在当前环境不可用: {e}")
+        finally:
+            db.close()

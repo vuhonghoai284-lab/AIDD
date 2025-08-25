@@ -9,10 +9,12 @@ from sqlalchemy.pool import StaticPool
 import sys
 import os
 import tempfile
+import json
 from unittest.mock import patch, AsyncMock
 
 # 设置测试环境变量（必须在导入应用之前）
 os.environ['APP_MODE'] = 'test'
+os.environ['CONFIG_FILE'] = 'config.test.yaml'
 
 # 设置第三方认证的mock配置
 os.environ.setdefault('FRONTEND_DOMAIN', 'http://localhost:3000')
@@ -74,21 +76,21 @@ def client():
         
         test_model = AIModel(
             model_key="gpt-4o-mini",
-            label="GPT-4o Mini (快速)",
+            label="GPT-4o Mini (测试)",
             provider="openai",
             model_name="gpt-4o-mini",
-            description="OpenAI GPT-4o Mini模型",
+            description="测试环境OpenAI模型（使用Mock响应）",
             is_active=True,
             is_default=True,
             sort_order=0
         )
         
         test_model2 = AIModel(
-            model_key="claude-3-sonnet",
-            label="Claude 3 Sonnet",
-            provider="anthropic", 
-            model_name="claude-3-sonnet-20240229",
-            description="Anthropic Claude 3 Sonnet模型",
+            model_key="gpt-3.5-turbo",
+            label="GPT-3.5 Turbo (测试)",
+            provider="openai", 
+            model_name="gpt-3.5-turbo",
+            description="测试环境GPT-3.5模型（使用Mock响应）",
             is_active=True,
             is_default=False,
             sort_order=1
@@ -247,11 +249,26 @@ def mock_third_party_auth():
     
     async def mock_token_request(*args, **kwargs):
         """Mock token获取请求"""
+        # 从请求中获取auth code来生成不同的access token
+        request_json = kwargs.get('json', {})
+        request_data = kwargs.get('data', {})
+        
+        # 获取auth code
+        auth_code = request_data.get('code') or request_json.get('code')
+        
         class MockResponse:
             def json(self):
+                # 根据auth code生成不同的access token
+                if auth_code == "user_a_auth_code":
+                    access_token = "mock_access_token_user_a"
+                elif auth_code == "user_c_auth_code":
+                    access_token = "mock_access_token_user_c"
+                else:
+                    access_token = "mock_access_token_default"
+                
                 return {
-                    "access_token": "mock_access_token_12345",
-                    "refresh_token": "mock_refresh_token_67890", 
+                    "access_token": access_token,
+                    "refresh_token": f"mock_refresh_token_{auth_code[:10]}", 
                     "scope": "base.profile",
                     "expires_in": 3600
                 }
@@ -263,35 +280,50 @@ def mock_third_party_auth():
     
     async def mock_userinfo_request(*args, **kwargs):
         """Mock用户信息获取请求"""
-        # 从请求中获取auth code来生成不同的用户信息
+        # 从请求中获取access_token来生成不同的用户信息
         request_url = args[0] if args else kwargs.get('url', '')
         request_json = kwargs.get('json', {})
         request_data = kwargs.get('data', {})
         
-        # 获取auth code
-        auth_code = request_data.get('code') or request_json.get('code')
+        # 获取access_token - 可能来自URL查询参数(GET)或请求体(POST)
+        access_token = None
+        if request_url and 'access_token=' in request_url:
+            # 从URL查询参数中提取access_token (Gitee使用GET请求)
+            import urllib.parse
+            parsed_url = urllib.parse.urlparse(request_url)
+            query_params = urllib.parse.parse_qs(parsed_url.query)
+            access_token = query_params.get('access_token', [None])[0]
+        else:
+            # 从请求体中获取access_token (通用OAuth使用POST请求)
+            access_token = request_data.get('access_token') or request_json.get('access_token')
         
         class MockResponse:
             def json(self):
-                # 根据auth code生成不同的用户信息
-                if auth_code == "user_a_auth_code":
+                # 根据access_token生成不同的用户信息
+                if access_token == "mock_access_token_user_a":
                     return {
-                        "uid": "test_user_a",
-                        "displayNameCn": "测试用户A",
-                        "email": "user_a@test.com"
+                        "id": 12345,
+                        "login": "test_user_a",
+                        "name": "测试用户A",
+                        "email": "user_a@test.com",
+                        "avatar_url": "https://avatars.test.com/u/12345"
                     }
-                elif auth_code == "user_c_auth_code":
+                elif access_token == "mock_access_token_user_c":
                     return {
-                        "uid": "test_user_c", 
-                        "displayNameCn": "测试用户C",
-                        "email": "user_c@test.com"
+                        "id": 67890,
+                        "login": "test_user_c",
+                        "name": "测试用户C",
+                        "email": "user_c@test.com",
+                        "avatar_url": "https://avatars.test.com/u/67890"
                     }
                 else:
-                    # 默认测试用户
+                    # 默认测试用户 - 使用Gitee格式
                     return {
-                        "uid": "test_third_party_user",
-                        "displayNameCn": "第三方测试用户",
-                        "email": "third_party@test.com"
+                        "id": 999999,
+                        "login": "test_third_party_user",
+                        "name": "第三方测试用户",
+                        "email": "third_party@test.com",
+                        "avatar_url": "https://avatars.test.com/u/999999"
                     }
             
             def raise_for_status(self):
@@ -325,5 +357,144 @@ def mock_third_party_auth():
         
         mock_instance.post = post_handler
         mock_instance.get = get_handler
+        
+        yield mock_client
+
+
+@pytest.fixture(autouse=True)
+def mock_openai_api():
+    """Mock OpenAI API请求"""
+    
+    async def mock_openai_request(*args, **kwargs):
+        """Mock OpenAI API响应"""
+        class MockResponse:
+            def json(self):
+                # 根据请求内容返回不同的响应
+                messages = kwargs.get('json', {}).get('messages', [])
+                last_message = messages[-1].get('content', '') if messages else ''
+                
+                # 如果是预处理请求
+                if 'preprocess' in last_message.lower() or '章节' in last_message:
+                    return {
+                        "id": "chatcmpl-test-preprocess",
+                        "object": "chat.completion",
+                        "model": "gpt-4o-mini",
+                        "choices": [{
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": json.dumps({
+                                    "structure": {
+                                        "sections": [
+                                            {"title": "第1节", "content": "测试内容1", "level": 1},
+                                            {"title": "第2节", "content": "测试内容2", "level": 1}
+                                        ],
+                                        "total_sections": 2
+                                    },
+                                    "metadata": {
+                                        "word_count": 100,
+                                        "char_count": 300,
+                                        "paragraph_count": 5
+                                    }
+                                })
+                            },
+                            "finish_reason": "stop"
+                        }],
+                        "usage": {
+                            "prompt_tokens": 100,
+                            "completion_tokens": 200,
+                            "total_tokens": 300
+                        }
+                    }
+                # 如果是问题检测请求
+                elif 'issues' in last_message.lower() or '问题' in last_message:
+                    return {
+                        "id": "chatcmpl-test-issues",
+                        "object": "chat.completion", 
+                        "model": "gpt-4o-mini",
+                        "choices": [{
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": json.dumps({
+                                    "issues": [
+                                        {
+                                            "type": "语法错误",
+                                            "description": "发现测试错误",
+                                            "severity": "medium",
+                                            "confidence": 0.9,
+                                            "suggestion": "修复建议"
+                                        }
+                                    ],
+                                    "summary": {
+                                        "total_issues": 1,
+                                        "critical_issues": 0,
+                                        "medium_issues": 1,
+                                        "low_issues": 0
+                                    }
+                                })
+                            },
+                            "finish_reason": "stop"
+                        }],
+                        "usage": {
+                            "prompt_tokens": 150,
+                            "completion_tokens": 100,
+                            "total_tokens": 250
+                        }
+                    }
+                # 通用响应
+                else:
+                    return {
+                        "id": "chatcmpl-test-general",
+                        "object": "chat.completion",
+                        "model": "gpt-4o-mini", 
+                        "choices": [{
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": json.dumps({
+                                    "analysis": "测试分析结果",
+                                    "summary": {"word_count": 50, "char_count": 150}
+                                })
+                            },
+                            "finish_reason": "stop"
+                        }],
+                        "usage": {
+                            "prompt_tokens": 80,
+                            "completion_tokens": 50,
+                            "total_tokens": 130
+                        }
+                    }
+            
+            def raise_for_status(self):
+                pass
+                
+        return MockResponse()
+    
+    # Mock httpx.AsyncClient的post方法用于OpenAI API
+    with patch('httpx.AsyncClient') as mock_client:
+        mock_instance = AsyncMock()
+        mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
+        
+        async def post_handler(*args, **kwargs):
+            url = args[0] if args else kwargs.get('url', '')
+            if 'openai.com' in url:
+                return await mock_openai_request(*args, **kwargs)
+            else:
+                # 对于第三方认证的请求，返回默认mock响应
+                class MockResponse:
+                    def json(self):
+                        return {
+                            "access_token": "mock_access_token_12345",
+                            "refresh_token": "mock_refresh_token_67890", 
+                            "scope": "base.profile",
+                            "expires_in": 3600
+                        }
+                    def raise_for_status(self):
+                        pass
+                return MockResponse()
+        
+        mock_instance.post = post_handler
         
         yield mock_client

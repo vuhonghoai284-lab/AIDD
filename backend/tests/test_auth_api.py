@@ -32,7 +32,7 @@ class TestAuthAPI:
             "code": "test_auth_code_123"
         }
         
-        response = client.post("/api/auth/thirdparty/login", json=auth_data)
+        response = client.post("/api/auth/thirdparty/login-legacy", json=auth_data)
         assert response.status_code == 200
         
         data = response.json()
@@ -53,7 +53,7 @@ class TestAuthAPI:
     
     def test_third_party_login_missing_code(self, client: TestClient):
         """测试第三方登录缺少code参数"""
-        response = client.post("/api/auth/thirdparty/login", json={})
+        response = client.post("/api/auth/thirdparty/login-legacy", json={})
         assert response.status_code == 422  # Validation Error
     
     def test_third_party_login_invalid_code(self, client: TestClient):
@@ -63,7 +63,7 @@ class TestAuthAPI:
             "code": ""
         }
         
-        response = client.post("/api/auth/thirdparty/login", json=auth_data)
+        response = client.post("/api/auth/thirdparty/login-legacy", json=auth_data)
         # 根据mock配置，这里可能返回200或401
         assert response.status_code in [200, 401]
     

@@ -157,10 +157,10 @@ class TestThirdPartyAuthDeep:
         auth_url = auth_service.get_authorization_url("test_state_123")
         
         assert isinstance(auth_url, str)
-        assert "oauth2/authorize" in auth_url
+        assert "oauth/authorize" in auth_url  # Gitee使用oauth而不是oauth2
         assert "client_id=" in auth_url
         assert "response_type=code" in auth_url
-        assert "redirect_url=" in auth_url
+        assert "redirect_uri=" in auth_url  # 应该是redirect_uri而不是redirect_url
         assert "scope=" in auth_url
         assert "state=test_state_123" in auth_url
         
@@ -172,7 +172,10 @@ class TestThirdPartyAuthDeep:
         from app.services.auth import AuthService
         from app.dto.user import UserCreate
         from datetime import timedelta
-        from app.core.database import SessionLocal
+        from app.core.database import SessionLocal, Base, engine
+        
+        # 确保所有表都已创建
+        Base.metadata.create_all(bind=engine)
         
         db = SessionLocal()
         auth_service = AuthService(db)
@@ -213,7 +216,10 @@ class TestThirdPartyAuthDeep:
     def test_user_login_with_admin_privileges(self, client):
         """测试管理员权限用户登录"""
         from app.services.auth import AuthService
-        from app.core.database import SessionLocal
+        from app.core.database import SessionLocal, Base, engine
+        
+        # 确保所有表都已创建
+        Base.metadata.create_all(bind=engine)
         
         db = SessionLocal()
         auth_service = AuthService(db)

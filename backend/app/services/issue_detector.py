@@ -65,15 +65,23 @@ class IssueDetector:
             console_handler.setFormatter(formatter)
             self.logger.addHandler(console_handler)
         
-        # 从配置中提取参数 - 直接从model_config获取，因为传入的已经是config部分
-        self.provider = model_config.get('provider', 'openai')  # 这个字段可能不在config中
-        self.api_key = model_config.get('api_key')
-        self.api_base = model_config.get('base_url')
-        self.model_name = model_config.get('model')
-        self.temperature = model_config.get('temperature', 0.3)
-        self.max_tokens = model_config.get('max_tokens', 4000)
-        self.timeout = model_config.get('timeout', 60)
-        self.max_retries = model_config.get('max_retries', 3)
+        # 从配置中提取参数 - 兼容两种配置格式
+        if 'config' in model_config:
+            # 新格式：model_config包含provider和config
+            config = model_config['config']
+            self.provider = model_config.get('provider', 'openai')
+        else:
+            # 旧格式：model_config直接包含配置
+            config = model_config
+            self.provider = model_config.get('provider', 'openai')
+        
+        self.api_key = config.get('api_key')
+        self.api_base = config.get('base_url')
+        self.model_name = config.get('model')
+        self.temperature = config.get('temperature', 0.3)
+        self.max_tokens = config.get('max_tokens', 4000)
+        self.timeout = config.get('timeout', 60)
+        self.max_retries = config.get('max_retries', 3)
         
         self.logger.info(f"🔍 问题检测器初始化: Provider={self.provider}, Model={self.model_name}")
         

@@ -27,7 +27,7 @@ class TestLoginPageUI:
     def test_third_party_login_functionality(self, client: TestClient):
         """测试第三方登录功能"""
         # 模拟第三方登录回调
-        response = client.post("/api/auth/thirdparty/login", json={
+        response = client.post("/api/auth/thirdparty/login-legacy", json={
             "code": "ui_test_auth_code"
         })
         assert response.status_code == 200
@@ -81,7 +81,7 @@ class TestLoginPageUI:
         # 使用模拟的authorization code进行登录
         mock_code = f"mock_auth_code_{pytest.current_test_id if hasattr(pytest, 'current_test_id') else 'test'}"
         
-        response = client.post("/api/auth/thirdparty/login", json={
+        response = client.post("/api/auth/thirdparty/login-legacy", json={
             "code": mock_code
         })
         assert response.status_code == 200
@@ -93,7 +93,7 @@ class TestLoginPageUI:
     def test_user_display_info_for_ui(self, client: TestClient):
         """测试用户显示信息用于UI展示"""
         # 测试第三方用户的显示信息
-        response = client.post("/api/auth/thirdparty/login", json={
+        response = client.post("/api/auth/thirdparty/login-legacy", json={
             "code": "display_test_code"
         })
         assert response.status_code == 200

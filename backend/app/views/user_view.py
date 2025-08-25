@@ -22,8 +22,8 @@ class UserView(BaseView):
     
     def _setup_routes(self):
         """设置路由"""
-        self.router.add_api_route("/me", self.get_current_user_info, methods=["GET"], response_model=UserResponse)
-        self.router.add_api_route("/", self.get_users, methods=["GET"], response_model=List[UserResponse])
+        self.router.add_api_route("/users/me", self.get_current_user_info, methods=["GET"], response_model=UserResponse)
+        self.router.add_api_route("/users", self.get_users, methods=["GET"], response_model=List[UserResponse])
     
     def get_current_user_info(
         self,
