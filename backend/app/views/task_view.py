@@ -38,13 +38,13 @@ class TaskView(BaseView):
         background_tasks: BackgroundTasks,
         file: UploadFile = File(...),
         title: Optional[str] = Form(None),
-        ai_model_index: Optional[int] = Form(None),
+        model_index: Optional[int] = Form(None),
         current_user: User = Depends(BaseView.get_current_user),
         db: Session = Depends(get_db)
     ) -> TaskResponse:
         """创建任务"""
         service = TaskService(db)
-        return await service.create_task(file, title, ai_model_index, user_id=current_user.id)
+        return await service.create_task(file, title, model_index, user_id=current_user.id)
     
     def get_tasks(
         self,

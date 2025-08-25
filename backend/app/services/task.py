@@ -34,7 +34,7 @@ class TaskService(ITaskService):
         self.user_repo = UserRepository(db)
         self.settings = get_settings()
     
-    async def create_task(self, file: UploadFile, title: Optional[str] = None, ai_model_index: Optional[int] = None, user_id: Optional[int] = None) -> TaskResponse:
+    async def create_task(self, file: UploadFile, title: Optional[str] = None, model_index: Optional[int] = None, user_id: Optional[int] = None) -> TaskResponse:
         """创建任务"""
         # 验证文件
         file_settings = self.settings.file_settings
@@ -86,16 +86,21 @@ class TaskService(ITaskService):
             )
         
         # 获取AI模型
-        if ai_model_index is not None:
-            # 使用传统的ai_model_index方式获取模型
+        if model_index is not None:
+            # 使用用户选择的模型索引
             active_models = self.model_repo.get_active_models()
-            if ai_model_index < len(active_models):
-                ai_model = active_models[ai_model_index]
+            print(f"🎯 用户选择模型索引: {model_index}, 可用模型数量: {len(active_models)}")
+            if model_index < len(active_models):
+                ai_model = active_models[model_index]
+                print(f"✅ 使用用户选择的模型: {ai_model.label}")
             else:
+                # 索引超出范围，使用默认模型
                 ai_model = self.model_repo.get_default_model()
+                print(f"⚠️ 模型索引超出范围，使用默认模型: {ai_model.label if ai_model else 'None'}")
         else:
             # 使用默认模型
             ai_model = self.model_repo.get_default_model()
+            print(f"🔧 未指定模型，使用默认模型: {ai_model.label if ai_model else 'None'}")
         
         if not ai_model:
             raise HTTPException(400, "没有可用的AI模型")
