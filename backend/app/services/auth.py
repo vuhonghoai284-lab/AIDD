@@ -146,16 +146,6 @@ class AuthService(IAuthService):
     
     async def exchange_code_for_token(self, code: str) -> ThirdPartyTokenResponse:
         """使用authorization code交换access token"""
-        # 检查是否是模拟代码（开发/测试模式）
-        if code.startswith("mock_auth_code_"):
-            print(f"🔧 检测到模拟授权码，使用开发模式: {code}")
-            # 返回模拟的token响应
-            return ThirdPartyTokenResponse(
-                access_token=f"mock_access_token_{int(time.time())}",
-                refresh_token=f"mock_refresh_token_{int(time.time())}",
-                scope="base.profile",
-                expires_in=86400  # 24小时
-            )
         
         import httpx
         
@@ -228,16 +218,6 @@ class AuthService(IAuthService):
     
     async def get_third_party_user_info(self, access_token: str) -> ThirdPartyUserInfoResponse:
         """使用access token获取用户信息"""
-        # 检查是否是模拟token（开发/测试模式）
-        if access_token.startswith("mock_access_token_"):
-            print(f"🔧 检测到模拟访问Token，使用开发模式: {access_token[:20]}...")
-            # 返回模拟的用户信息
-            return ThirdPartyUserInfoResponse(
-                uid="mock_user_12345",
-                display_name="测试用户",
-                email="test_user@mock.local",
-                avatar_url="https://api.dicebear.com/7.x/avataaars/svg?seed=mock_user"
-            )
         
         # 从配置构建请求参数
         payload = {

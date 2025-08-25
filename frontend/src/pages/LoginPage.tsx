@@ -179,56 +179,16 @@ const LoginPage: React.FC = () => {
     setThirdPartyError('');
     
     try {
-      // 1. 获取第三方认证URL
+      // 获取第三方认证URL
       const response = await fetch(`${config.apiBaseUrl}/auth/thirdparty/url`);
       const { auth_url } = await response.json();
       
-      // 2. 检查是否强制使用真实认证（通过查询参数或环境变量）
-      const urlParams = new URLSearchParams(window.location.search);
-      const forceRealAuth = urlParams.get('real_auth') === 'true' || 
-                           localStorage.getItem('force_real_auth') === 'true' ||
-                           import.meta.env.VITE_FORCE_REAL_AUTH === 'true';
+      // 保存当前页面状态，以便认证后返回
+      sessionStorage.setItem('preLoginLocation', window.location.pathname);
       
-      // 3. 检查是否是开发/测试环境且未强制使用真实认证
-      const isDevelopment = process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost';
+      // 跳转到第三方认证页面进行真实认证
+      window.location.href = auth_url;
       
-      if (isDevelopment && !forceRealAuth) {
-        // 开发/测试环境：模拟第三方认证流程
-        setThirdPartyLoginState('processing');
-        
-        // 生成模拟的authorization code
-        const mockCode = `mock_auth_code_${Date.now()}`;
-        
-        // 直接使用模拟code进行登录（业务流程与生产环境完全一致）
-        const result = await loginWithThirdParty(mockCode);
-        
-        if (result.success) {
-          message.success('登录成功');
-          localStorage.setItem('user', JSON.stringify(result.user));
-          localStorage.setItem('token', result.access_token || '');
-          setThirdPartyLoginState('success');
-          
-          // 触发用户登录事件，通知App组件更新状态
-          window.dispatchEvent(new CustomEvent('userLogin', { 
-            detail: { user: result.user, token: result.access_token } 
-          }));
-          
-          setTimeout(() => {
-            navigate('/');
-          }, 500);
-        } else {
-          setThirdPartyLoginState('error');
-          setThirdPartyError(result.message || '登录失败');
-          message.error(result.message || '登录失败');
-        }
-      } else {
-        // 生产环境或强制使用真实认证：跳转到真实的第三方认证页面
-        // 保存当前页面状态，以便认证后返回
-        sessionStorage.setItem('preLoginLocation', window.location.pathname);
-        
-        // 跳转到第三方认证页面
-        window.location.href = auth_url;
-      }
     } catch (error) {
       console.error('第三方登录错误:', error);
       setThirdPartyLoginState('error');
