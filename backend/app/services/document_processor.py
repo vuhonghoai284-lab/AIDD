@@ -284,14 +284,24 @@ class DocumentProcessor:
         Returns:
             分割后的批次列表，每批次适合AI拆分章节处理
         """
-        # 计算批次大小：使用上下文窗口的60%，为系统提示和输出预留空间
-        batch_chars = int(self.max_chunk_chars * 0.6)  # 约30万字符 * 0.6 = 18万字符/批次
-        min_batch_chars = 10000  # 最小批次10K字符
+        # 动态计算批次大小：根据文档长度和页面大小调整
+        # 基础批次大小：约8-12页PDF的内容量
+        base_batch_chars = 50000  # 50K字符，约10-15页PDF
+        max_batch_chars = int(self.max_chunk_chars * 0.6)  # 最大批次限制：约30万字符
+        min_batch_chars = 20000  # 最小批次20K字符，约5-8页PDF
         
-        self.logger.info(f"📐 批次分割参数：目标批次大小={batch_chars}字符，最小批次={min_batch_chars}字符")
+        # 根据文档总长度动态调整批次大小
+        if len(text) > 200000:  # 超过20万字符(约40页)，使用较大批次
+            batch_chars = min(80000, max_batch_chars)  # 80K字符批次
+        elif len(text) > 100000:  # 超过10万字符(约20页)，使用中等批次  
+            batch_chars = min(60000, max_batch_chars)  # 60K字符批次
+        else:  # 较小文档，使用小批次
+            batch_chars = min(base_batch_chars, max_batch_chars)  # 50K字符批次
+        
+        self.logger.info(f"📐 批次分割参数：文档{len(text)}字符，目标批次大小={batch_chars}字符")
         
         if len(text) <= batch_chars:
-            self.logger.info(f"📄 文档长度{len(text)}字符，单批次处理")
+            self.logger.info(f"📄 文档较小({len(text)}字符 <= {batch_chars})，单批次处理")
             return [text]
         
         batches = []
@@ -300,6 +310,11 @@ class DocumentProcessor:
         # 第一步：按章节分割（标题模式：# 、## 、### 等）
         sections = re.split(r'\n(?=#{1,6}\s)', text)
         self.logger.info(f"📖 文档初步按章节分割为{len(sections)}个部分")
+        
+        # 如果章节很少但文档较长，强制按长度分割
+        if len(sections) <= 3 and len(text) > batch_chars * 1.5:
+            self.logger.info(f"📄 章节数量较少({len(sections)}个)但文档较长，按段落强制分割")
+            return self._force_split_by_length(text, batch_chars, min_batch_chars)
         
         for section_idx, section in enumerate(sections):
             section_length = len(section)
@@ -540,6 +555,42 @@ class DocumentProcessor:
                 consolidated.append(current)
         
         return consolidated
+    
+    def _force_split_by_length(self, text: str, batch_chars: int, min_batch_chars: int) -> List[str]:
+        """
+        当章节划分不理想时，强制按长度分割文档
+        
+        Args:
+            text: 文档文本
+            batch_chars: 目标批次大小
+            min_batch_chars: 最小批次大小
+            
+        Returns:
+            分割后的批次列表
+        """
+        batches = []
+        current_batch = ""
+        
+        # 按段落分割
+        paragraphs = text.split('\n\n')
+        
+        for paragraph in paragraphs:
+            # 如果添加这个段落会超过批次限制
+            if current_batch and len(current_batch + paragraph) > batch_chars:
+                if len(current_batch) >= min_batch_chars:
+                    batches.append(current_batch.strip())
+                    current_batch = paragraph + '\n\n'
+                else:
+                    current_batch += paragraph + '\n\n'
+            else:
+                current_batch += paragraph + '\n\n'
+        
+        # 添加最后一个批次
+        if current_batch.strip() and len(current_batch) >= min_batch_chars:
+            batches.append(current_batch.strip())
+        
+        self.logger.info(f"🔨 强制分割完成：{len(batches)}个批次")
+        return batches
     
     async def _call_ai_model(self, messages):
         """
