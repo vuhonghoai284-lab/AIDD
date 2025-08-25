@@ -369,9 +369,31 @@ class LogService {
     try {
       // 动态获取API URL
       const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || `${window.location.protocol}//${window.location.host}/api`;
-      const response = await fetch(`${apiBaseUrl}/tasks/${taskId}/logs/history`);
+      
+      // 准备请求头，包含认证token
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      
+      const token = localStorage.getItem('token');
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+      
+      const response = await fetch(`${apiBaseUrl}/tasks/${taskId}/logs/history`, {
+        method: 'GET',
+        headers: headers
+      });
+      
       if (!response.ok) {
-        throw new Error('Failed to fetch log history');
+        if (response.status === 401) {
+          // 认证失败，清除token并跳转登录页
+          localStorage.removeItem('user');
+          localStorage.removeItem('token');
+          window.location.href = '/login';
+          throw new Error('Authentication failed');
+        }
+        throw new Error(`Failed to fetch log history: ${response.status} ${response.statusText}`);
       }
       
       const logs = await response.json();
