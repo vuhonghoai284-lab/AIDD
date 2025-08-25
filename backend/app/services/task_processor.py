@@ -181,11 +181,22 @@ class TaskProcessor:
                 "processing_time": 2.0
             }
             
+            # 构建章节摘要信息，用于记录实际输入内容
+            sections_summary = []
+            for i, section in enumerate(sections):
+                title = section.get('section_title', f'章节{i+1}')
+                content_length = len(section.get('content', ''))
+                sections_summary.append(f"{title}({content_length}字符)")
+            
+            sections_input_summary = f"输入{len(sections)}个章节: " + ", ".join(sections_summary[:3])
+            if len(sections) > 3:
+                sections_input_summary += f"等{len(sections)}个章节"
+            
             # 保存问题检测结果
             self._save_ai_output(
                 task_id=task_id,
                 operation_type="detect_issues",
-                input_text=f"检测{len(sections)}个章节，共{len(file_content)}字符",
+                input_text=sections_input_summary,
                 result=issues_result
             )
             
