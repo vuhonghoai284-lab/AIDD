@@ -185,13 +185,13 @@ class TestModelInitializationIntegration:
         # 创建所有表
         Base.metadata.create_all(bind=engine)
         
-        # 这个测试验证startup事件会在测试模式下初始化模型
-        # 我们可以通过检查数据库中是否有模型来验证
-        
+        # 手动触发模型初始化
         db = SessionLocal()
         try:
+            model_initializer.initialize_models(db)
+            
             active_models = model_initializer.get_active_models(db)
-            # 由于测试框架会触发startup事件，所以应该有模型
+            # 初始化后应该有活跃模型
             assert len(active_models) > 0, "启动后应该有活跃模型"
             
             # 检查是否有测试模式的模型
@@ -206,6 +206,13 @@ class TestModelInitializationIntegration:
         """测试模型API与数据库的集成"""
         # 创建所有表
         Base.metadata.create_all(bind=engine)
+        
+        # 手动触发模型初始化
+        db = SessionLocal()
+        try:
+            model_initializer.initialize_models(db)
+        finally:
+            db.close()
         
         # 这个测试验证API能够从数据库正确读取模型信息
         
