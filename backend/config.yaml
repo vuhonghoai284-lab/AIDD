@@ -90,8 +90,17 @@ task_processing:
     max_document_chars: 1000000  # 允许处理的最大文档字符数（1M字符）
     enable_intelligent_chunking: true  # 启用智能分块处理
     chunk_overlap_chars: 200  # 分块重叠字符数
-    min_chunk_chars: 1000  # 最小分块大小
+    min_chunk_chars: 20000  # 最小分批大小（20K字符，约5-8页PDF）
     max_chunks_per_document: 50  # 单个文档最大分块数量
+    
+    # 分批处理配置
+    batch_size_small: 50000   # 小文档批次大小（50K字符，约10-15页PDF）
+    batch_size_medium: 60000  # 中等文档批次大小（60K字符，约12-18页PDF） 
+    batch_size_large: 80000   # 大文档批次大小（80K字符，约16-24页PDF）
+    
+    # 文档大小阈值（字符数）
+    small_doc_threshold: 100000   # 小文档阈值（10万字符，约20页）
+    large_doc_threshold: 200000   # 大文档阈值（20万字符，约40页）
   
   # 章节合并配置
   section_merge:

@@ -258,6 +258,18 @@ class Settings:
         return self.config.get('task_processing', {})
     
     @property
+    def document_processing_config(self) -> Dict[str, Any]:
+        """文档处理配置"""
+        task_config = self.task_processing_config
+        return task_config.get('document_processing', {
+            'max_document_chars': 1000000,
+            'enable_intelligent_chunking': True,
+            'chunk_overlap_chars': 200,
+            'min_chunk_chars': 1000,
+            'max_chunks_per_document': 50
+        })
+    
+    @property
     def section_merge_config(self) -> Dict[str, Any]:
         """章节合并配置"""
         task_config = self.task_processing_config

@@ -284,19 +284,27 @@ class DocumentProcessor:
         Returns:
             分割后的批次列表，每批次适合AI拆分章节处理
         """
-        # 动态计算批次大小：根据文档长度和页面大小调整
-        # 基础批次大小：约8-12页PDF的内容量
-        base_batch_chars = 50000  # 50K字符，约10-15页PDF
-        max_batch_chars = int(self.max_chunk_chars * 0.6)  # 最大批次限制：约30万字符
-        min_batch_chars = 20000  # 最小批次20K字符，约5-8页PDF
+        # 从配置文件获取文档处理参数
+        from app.core.config import get_settings
+        settings = get_settings()
+        doc_config = settings.document_processing_config
         
-        # 根据文档总长度动态调整批次大小
-        if len(text) > 200000:  # 超过20万字符(约40页)，使用较大批次
-            batch_chars = min(80000, max_batch_chars)  # 80K字符批次
-        elif len(text) > 100000:  # 超过10万字符(约20页)，使用中等批次  
-            batch_chars = min(60000, max_batch_chars)  # 60K字符批次
-        else:  # 较小文档，使用小批次
-            batch_chars = min(base_batch_chars, max_batch_chars)  # 50K字符批次
+        # 获取配置值
+        min_batch_chars = doc_config.get('min_chunk_chars', 20000)
+        small_doc_threshold = doc_config.get('small_doc_threshold', 100000)
+        large_doc_threshold = doc_config.get('large_doc_threshold', 200000)
+        batch_size_small = doc_config.get('batch_size_small', 50000)
+        batch_size_medium = doc_config.get('batch_size_medium', 60000)
+        batch_size_large = doc_config.get('batch_size_large', 80000)
+        max_batch_chars = int(self.max_chunk_chars * 0.6)  # 最大批次限制
+        
+        # 根据配置和文档总长度动态调整批次大小
+        if len(text) > large_doc_threshold:  # 大文档
+            batch_chars = min(batch_size_large, max_batch_chars)
+        elif len(text) > small_doc_threshold:  # 中等文档
+            batch_chars = min(batch_size_medium, max_batch_chars)
+        else:  # 小文档
+            batch_chars = min(batch_size_small, max_batch_chars)
         
         self.logger.info(f"📐 批次分割参数：文档{len(text)}字符，目标批次大小={batch_chars}字符")
         
