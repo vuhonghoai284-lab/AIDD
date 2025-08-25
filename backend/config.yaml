@@ -1,0 +1,148 @@
+# 服务器配置
+server:
+  host: "0.0.0.0"  # 监听地址
+  port: 8080  # 监听端口
+  debug: false  # 调试模式
+  reload: false  # 自动重载
+  workers: 1  # 工作进程数
+
+# 数据库配置
+database:
+  # 数据库类型: sqlite 或 mysql
+  type: "sqlite"
+  
+  # SQLite配置（默认）
+  sqlite:
+    path: "./data/app.db"
+  
+  # MySQL配置（可选）
+  mysql:
+    host: "${MYSQL_HOST:localhost}"
+    port: "${MYSQL_PORT:3306}"
+    username: "${MYSQL_USERNAME:root}"
+    password: "${MYSQL_PASSWORD}"
+    database: "${MYSQL_DATABASE:ai_doc_test}"
+    charset: "utf8mb4"
+    # 连接池配置
+    pool:
+      pool_size: 5
+      max_overflow: 10
+      pool_timeout: 30
+      pool_recycle: 3600
+      pool_pre_ping: true
+
+# AI模型配置（保持现有结构）
+ai_models:
+  default_index: 0
+  models:
+    - label: "GPT-4o Mini (快速)"
+      provider: "openai"
+      config:
+        api_key: "${OPENAI_API_KEY}"
+        base_url: "https://api.openai.com/v1"
+        model: "gpt-4o-mini"
+        temperature: 0.3
+        max_tokens: 8000
+        context_window: 128000
+        reserved_tokens: 2000
+        timeout: 12000
+        max_retries: 3
+      description: "适合快速处理，成本较低"
+
+
+# 文件设置  
+file_settings:
+  max_file_size: 10485760  # 10MB
+  chunk_size: 4000  # 文本分块大小（废弃，改为从模型配置动态计算）
+  allowed_extensions:
+    - pdf
+    - docx
+    - md
+    - txt
+
+# 目录配置
+directories:
+  upload_dir: ./data/uploads
+  report_dir: ./data/reports
+  log_dir: ./data/logs
+  temp_dir: ./data/temp
+
+# 日志配置
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "./data/logs/app.log"
+  max_size: 10485760  # 10MB
+  backup_count: 5
+
+# 任务处理配置
+task_processing:
+  max_concurrent_tasks: 3  # 最大并发任务数
+  task_timeout: 12000  # 任务超时时间（秒）
+  retry_failed_tasks: true  # 是否重试失败的任务
+  
+  # 章节合并配置
+  section_merge:
+    enabled: true  # 是否启用章节合并
+    max_chars: 5000  # 合并后章节最大字符数
+    min_chars: 100  # 最小章节字符数（短于此数值的章节总是被合并）
+    preserve_structure: true  # 是否保持章节层级结构
+  
+# CORS配置
+cors:
+  enabled: true
+  origins:
+    - "http://localhost:3000"
+    - "http://localhost:3001"
+    - "http://localhost:3002"
+    - "http://localhost:3003"
+    - "http://localhost:5173"
+    - "http://127.0.0.1:3000"
+    - "http://127.0.0.1:5173"
+    # 动态配置：支持自定义前端地址
+    - "${FRONTEND_URL}"  # 从环境变量获取前端地址
+  allow_credentials: true
+  allow_methods: ["*"]
+  allow_headers: ["*"]
+  # 开发模式：允许更宽松的CORS策略
+  development_mode: "${CORS_DEVELOPMENT_MODE:false}"  # 默认false，可通过环境变量启用
+
+
+# 第三方登录配置
+# Gitee OAuth真实配置
+third_party_auth:
+  # 提供商类型：使用Gitee
+  provider_type: "gitee"
+  
+  # 实际的Gitee应用配置
+  client_id: "077b1f29dbb4c4fda233c93ba34676b00421b2b16d11abc36b38f6298e495876"
+  client_secret: "f3d0cfe1a3143a1b99ca58f234920f0ac63645e6272f65c5771a3a4e4f085fa4"
+  
+  # 回调配置 - 注意前端端口是3000
+  frontend_domain: "http://localhost:3000"
+  redirect_path: "/third-login/callback"
+  
+  # Gitee权限范围
+  scope: "user_info"
+  
+  # Gitee标准API端点（会自动设置，这里列出供参考）
+  api_endpoints:
+    authorization_url: "https://gitee.com/oauth/authorize"
+    token_url: "https://gitee.com/oauth/token"
+    userinfo_url: "https://gitee.com/api/v5/user"
+  
+  
+  # 超时和重试配置
+  request_timeout: 30  # 请求超时时间（秒）
+  max_retries: 3  # 最大重试次数
+  
+
+# JWT配置
+jwt:
+  secret_key: "${JWT_SECRET_KEY}"  # 从环境变量获取
+  algorithm: "HS256"
+  access_token_expire_minutes: 30
+  
+# 环境变量映射（可选）
+env_mapping:
+  JWT_SECRET_KEY: "JWT_SECRET_KEY"

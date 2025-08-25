@@ -1,0 +1,693 @@
+/* 登录页面现代化主题样式 */
+.login-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+  transition: background 0.6s ease;
+}
+
+/* 主题切换器 */
+.theme-switcher {
+  position: absolute;
+  top: 30px;
+  right: 30px;
+  z-index: 1000;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(20px);
+  border-radius: 16px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.theme-switcher-title {
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.theme-options {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.theme-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  min-width: 60px;
+}
+
+.theme-option:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.theme-option.active {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-2px);
+}
+
+.theme-option span {
+  white-space: nowrap;
+}
+
+/* 背景装饰 */
+.login-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    radial-gradient(circle at 20% 80%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 40% 40%, rgba(255, 255, 255, 0.05) 0%, transparent 50%);
+  animation: backgroundFloat 25s ease-in-out infinite;
+}
+
+.login-container::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(45deg, 
+    transparent 25%, 
+    rgba(255, 255, 255, 0.02) 25%, 
+    rgba(255, 255, 255, 0.02) 50%, 
+    transparent 50%, 
+    transparent 75%, 
+    rgba(255, 255, 255, 0.02) 75%
+  );
+  background-size: 60px 60px;
+  animation: shimmer 30s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-60px) translateY(-60px); }
+  100% { transform: translateX(60px) translateY(60px); }
+}
+
+@keyframes backgroundFloat {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-20px) rotate(1deg); }
+}
+
+/* 浮动装饰元素 */
+.floating-elements {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.floating-circle {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  animation: float 6s ease-in-out infinite;
+}
+
+.floating-circle:nth-child(1) {
+  width: 80px;
+  height: 80px;
+  top: 10%;
+  left: 10%;
+  animation-delay: 0s;
+}
+
+.floating-circle:nth-child(2) {
+  width: 120px;
+  height: 120px;
+  top: 70%;
+  left: 20%;
+  animation-delay: 2s;
+}
+
+.floating-circle:nth-child(3) {
+  width: 60px;
+  height: 60px;
+  top: 20%;
+  right: 10%;
+  animation-delay: 4s;
+}
+
+.floating-circle:nth-child(4) {
+  width: 100px;
+  height: 100px;
+  bottom: 20%;
+  right: 20%;
+  animation-delay: 1s;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translateY(-20px) rotate(180deg);
+    opacity: 0.6;
+  }
+}
+
+/* 主要内容区域 */
+.login-main-content {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 80px;
+  padding: 40px;
+  position: relative;
+  z-index: 1;
+}
+
+/* 左侧介绍区域 */
+.login-left-section {
+  flex: 1;
+  max-width: 580px;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 48px;
+}
+
+/* 品牌区域 */
+.brand-container {
+  text-align: center;
+}
+
+.login-logo {
+  font-size: 56px;
+  font-weight: 900;
+  margin-bottom: 16px;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+  letter-spacing: -2px;
+  line-height: 1;
+}
+
+.logo-ai {
+  background: linear-gradient(45deg, #fff, #f8f9fa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.logo-docs {
+  background: linear-gradient(45deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.7));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.logo-pro {
+  background: linear-gradient(45deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.6));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-size: 0.9em;
+}
+
+.login-subtitle {
+  font-size: 24px;
+  margin-bottom: 8px;
+  opacity: 0.95;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.login-tagline {
+  font-size: 16px;
+  opacity: 0.8;
+  font-weight: 300;
+  font-style: italic;
+}
+
+/* 价值主张区域 */
+.value-proposition {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  text-align: left;
+}
+
+.value-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 24px;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(15px);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.4s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.value-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, 
+    transparent 0%, 
+    rgba(255, 255, 255, 0.1) 50%, 
+    transparent 100%
+  );
+  transition: left 0.6s ease;
+}
+
+.value-item:hover::before {
+  left: 100%;
+}
+
+.value-item:hover {
+  background: rgba(255, 255, 255, 0.18);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+}
+
+.value-icon {
+  width: 48px;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.value-content {
+  flex: 1;
+}
+
+.value-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+
+.value-desc {
+  font-size: 14px;
+  opacity: 0.85;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+/* 信任指标 */
+.trust-indicators {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  text-align: center;
+}
+
+.trust-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.trust-icon {
+  font-size: 24px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+}
+
+/* 右侧登录区域 */
+.login-right-section {
+  width: 420px;
+  flex-shrink: 0;
+}
+
+.login-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(15px);
+  border-radius: 24px;
+  box-shadow: 
+    0 25px 50px rgba(0, 0, 0, 0.15),
+    0 0 0 1px rgba(255, 255, 255, 0.2);
+  border: none;
+  overflow: hidden;
+}
+
+.login-card .ant-card-head {
+  border-bottom: none;
+  padding: 32px 32px 16px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+}
+
+.login-card .ant-card-head-title {
+  color: #333;
+  font-size: 24px;
+  font-weight: 700;
+  text-align: center;
+  margin: 0;
+}
+
+.login-card .ant-card-body {
+  padding: 24px 32px 32px;
+}
+
+/* 标签页样式 */
+.login-tabs .ant-tabs-nav {
+  margin-bottom: 24px;
+}
+
+.login-tabs .ant-tabs-tab {
+  font-size: 15px;
+  padding: 10px 20px;
+  font-weight: 500;
+}
+
+/* 表单样式 */
+.login-form-item {
+  margin-bottom: 20px;
+}
+
+.login-input {
+  height: 46px;
+  border-radius: 12px;
+  border: 2px solid #f0f0f0;
+  transition: all 0.3s ease;
+  font-size: 15px;
+}
+
+.login-input:focus {
+  border-color: currentColor;
+  box-shadow: 0 0 0 2px rgba(116, 185, 255, 0.2);
+}
+
+/* 按钮样式 */
+.login-button {
+  height: 46px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.login-button:hover {
+  transform: translateY(-2px);
+}
+
+/* 提示文字 */
+.login-tips {
+  text-align: center;
+  font-size: 12px;
+  color: #666;
+  margin-top: 16px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 3px solid currentColor;
+}
+
+/* 响应式设计 */
+@media (max-width: 1200px) {
+  .login-main-content {
+    gap: 60px;
+  }
+  
+  .login-left-section {
+    max-width: 520px;
+    gap: 36px;
+  }
+  
+  .login-logo {
+    font-size: 48px;
+  }
+  
+  .value-item {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 992px) {
+  .login-main-content {
+    flex-direction: column;
+    gap: 40px;
+    padding: 20px;
+  }
+  
+  .login-left-section {
+    order: 2;
+    max-width: 100%;
+    gap: 32px;
+  }
+  
+  .login-right-section {
+    order: 1;
+    width: 100%;
+    max-width: 400px;
+  }
+  
+  .login-logo {
+    font-size: 42px;
+  }
+  
+  .login-subtitle {
+    font-size: 20px;
+  }
+  
+  .login-tagline {
+    font-size: 15px;
+  }
+  
+  .value-item {
+    padding: 18px;
+    gap: 16px;
+  }
+  
+  .value-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+  }
+  
+  .value-title {
+    font-size: 16px;
+  }
+  
+  .value-desc {
+    font-size: 13px;
+  }
+  
+  .trust-indicators {
+    gap: 24px;
+  }
+  
+  .trust-item {
+    font-size: 13px;
+  }
+  
+  .trust-icon {
+    font-size: 20px;
+    padding: 10px;
+  }
+  
+  .theme-switcher {
+    top: 20px;
+    right: 20px;
+    padding: 12px;
+  }
+  
+  .theme-options {
+    gap: 6px;
+  }
+  
+  .theme-option {
+    padding: 6px 8px;
+    min-width: 50px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 576px) {
+  .login-main-content {
+    padding: 15px;
+  }
+  
+  .login-left-section {
+    gap: 24px;
+  }
+  
+  .login-card .ant-card-head {
+    padding: 24px 20px 12px;
+  }
+  
+  .login-card .ant-card-body {
+    padding: 16px 20px 24px;
+  }
+  
+  .login-logo {
+    font-size: 36px;
+  }
+  
+  .login-subtitle {
+    font-size: 18px;
+  }
+  
+  .login-tagline {
+    font-size: 14px;
+    margin-bottom: 12px;
+  }
+  
+  .value-item {
+    padding: 16px;
+    gap: 12px;
+  }
+  
+  .value-icon {
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+  }
+  
+  .value-title {
+    font-size: 15px;
+  }
+  
+  .value-desc {
+    font-size: 12px;
+  }
+  
+  .trust-indicators {
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  
+  .trust-item {
+    font-size: 12px;
+    min-width: 80px;
+  }
+  
+  .trust-icon {
+    font-size: 18px;
+    padding: 8px;
+  }
+}
+
+/* 动画增强 */
+.login-card {
+  animation: slideInUp 0.6s ease-out;
+}
+
+.login-left-section {
+  animation: slideInLeft 0.8s ease-out;
+}
+
+.theme-switcher {
+  animation: slideInDown 0.5s ease-out;
+}
+
+.brand-container {
+  animation: fadeInUp 1s ease-out;
+}
+
+.value-proposition {
+  animation: fadeInUp 1.2s ease-out;
+}
+
+.value-item:nth-child(1) {
+  animation: slideInLeft 0.8s ease-out 0.2s both;
+}
+
+.value-item:nth-child(2) {
+  animation: slideInLeft 0.8s ease-out 0.4s both;
+}
+
+.value-item:nth-child(3) {
+  animation: slideInLeft 0.8s ease-out 0.6s both;
+}
+
+.trust-indicators {
+  animation: fadeInUp 1.4s ease-out;
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

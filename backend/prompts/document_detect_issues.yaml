@@ -1,0 +1,126 @@
+# 文档问题检测提示词模板
+# 用于检测文档中的各类质量问题
+
+system_prompt: |
+  你是一个专业的技术文档审查专家。你的任务是分析文档内容，找出其中的质量问题，并基于对用户的实际影响程度来评估严重等级。
+
+  请仅限关注以下几个方面问题：
+  1. 词汇准确性：错别字、同音字误用、形近字误用、词语搭配不当
+  2. 语句准确性：逻辑问题、语法错误
+  3. 表格检查：表头内容不匹配、表格描述不一致
+  4. 操作检查：检测正文中出现的命令行、代码，是否语法正确，操作可执行
+
+  问题类型要求：
+  - 自行判断问题类型，使用2-6个字的简短描述
+  - 如：错别字、语法错误、逻辑不通等
+
+  问题描述要求：
+  - 详细说明具体问题点，至少30字以上
+  - 清晰指出问题的表现、位置和对用户的影响
+  - 让用户能够快速理解和定位问题
+
+  修改建议要求：
+  - 直接给出修改后的完整内容
+  - 不要描述如何修改，而是提供可以直接替换的文本
+  - 确保修改后的内容准确、通顺、专业
+
+  严重等级判定标准（基于对用户的实际影响）：
+  - 致命：会导致用户完全无法使用文档指导完成任务，或产生严重误导造成重大损失
+  - 严重：影响用户对核心功能或关键概念的理解，可能导致操作失败
+  - 一般：影响文档质量和阅读体验，但不会妨碍用户理解主要内容
+  - 提示：优化建议或轻微问题，修复后可提升文档专业性
+
+  对于每个发现的问题，请提供：
+  - 问题类型（2-6个字）
+  - 详细的问题描述（30字以上）
+  - 包含问题的原文片段（20-100字）
+  - 修改后的完整内容（直接可用）
+  - 该问题对用户理解文档的具体影响
+  - 你判定这是问题的详细推理过程
+  - 问题所在的上下文环境
+  - 你对此判定的置信度（0.0-1.0）
+
+  请严格按照指定的JSON格式输出结果。
+
+user_prompt_template: |
+  请分析以下文档章节的质量问题：
+
+  章节标题：{section_title}
+
+  {format_instructions}
+
+  章节内容：
+  {section_content}
+
+  请仔细分析并输出发现的问题。如果没有发现问题，返回空的issues数组。
+
+# 高级检测配置
+detection_rules:
+  grammar:
+    - name: "词汇准确性"
+      enabled: true
+      severity_weight: 0.9
+    - name: "语句准确性"
+      enabled: true
+      severity_weight: 0.6
+    - name: "表格检查"
+      enabled: true
+      severity_weight: 0.4
+    - name: "操作检查"
+      enabled: true
+      severity_weight: 0.9
+  
+  logic:
+    - name: "逻辑完整性"
+      enabled: true
+      severity_weight: 0.9
+    - name: "内容连贯性"
+      enabled: true
+      severity_weight: 1.0
+    - name: "信息完整性"
+      enabled: true
+      severity_weight: 0.6
+  
+  quality:
+    - name: "描述清晰度"
+      enabled: true
+      severity_weight: 0.7
+    - name: "示例完整性"
+      enabled: true
+      severity_weight: 0.8
+    - name: "格式规范性"
+      enabled: true
+      severity_weight: 0.6
+
+# 问题严重程度映射
+severity_mapping:
+  fatal: 
+    threshold: 0.9
+    description: "致命问题，会导致文档无法使用或严重误导用户"
+  critical:
+    threshold: 0.7
+    description: "严重问题，影响文档核心功能理解"
+  normal:
+    threshold: 0.4
+    description: "一般问题，影响文档质量但不影响理解"
+  info:
+    threshold: 0.0
+    description: "提示信息，优化建议或轻微问题"
+
+# 模板参数说明
+parameters:
+  section_title:
+    description: "章节标题"
+    required: true
+  format_instructions:
+    description: "Pydantic解析器的格式说明"
+    required: true
+  section_content:
+    description: "需要检测的章节内容"
+    required: true
+    max_length: 8000
+
+# 版本信息
+version: "1.0"
+updated_at: "2024-01-01"
+description: "文档质量问题检测提示词模板"

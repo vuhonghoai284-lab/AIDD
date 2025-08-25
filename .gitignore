@@ -1,0 +1,121 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+env/
+ENV/
+.venv/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.npm
+.yarn-integrity
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+data/app.db*
+backend/data/app.db*
+
+# Application data directories
+data/
+backend/data/
+!backend/data/.gitkeep
+backend/uploads/
+backend/reports/
+backend/logs/
+backend/temp/
+
+# Keep important config files
+!backend/config.yaml
+!backend/config.*.yaml
+
+# IDE and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+backend/data/logs/
+
+# Testing
+coverage/
+.coverage
+.pytest_cache/
+htmlcov/
+.nyc_output/
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+frontend/playwright/.cache/
+
+# Build outputs
+frontend/build/
+frontend/dist/
+backend/dist/
+backend/build/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Security
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Claude Code specific
+.claude/
+*.claude.*

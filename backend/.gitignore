@@ -1,0 +1,8 @@
+# Ignore test files and uploads
+data/uploads/
+test_processing.md
+test_task.md
+*.pyc
+__pycache__/
+.env
+

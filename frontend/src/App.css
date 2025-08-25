@@ -1,0 +1,285 @@
+.ant-layout-header {
+  position: fixed;
+  z-index: 1000;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  background: #001529 !important;
+  border-bottom: 1px solid #303030;
+  transition: all 0.3s ease;
+}
+
+.ant-layout-content {
+  margin-top: 64px;
+  background: #f0f2f5;
+  min-height: calc(100vh - 64px);
+}
+
+.upload-dragger {
+  background: #fafafa;
+  border: 1px dashed #d9d9d9;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 20px;
+  text-align: center;
+  transition: border-color 0.3s;
+}
+
+.upload-dragger:hover {
+  border-color: #1890ff;
+}
+
+.task-card {
+  margin-bottom: 16px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.task-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.issue-card {
+  margin-bottom: 16px;
+}
+
+.severity-fatal {
+  color: #ff4d4f;
+  font-weight: bold;
+}
+
+.severity-critical {
+  color: #fa8c16;
+  font-weight: bold;
+}
+
+.severity-normal {
+  color: #1890ff;
+  font-weight: bold;
+}
+
+.severity-info {
+  color: #52c41a;
+  font-weight: bold;
+}
+
+/* 突出显示问题描述 */
+.issue-description {
+  font-size: 18px;
+  font-weight: 700;
+  color: #141414;
+  line-height: 1.8;
+  padding: 12px 16px;
+  background: linear-gradient(to right, #f0f5ff 0%, transparent 100%);
+  border-left: 4px solid #1890ff;
+  margin: 12px 0;
+  border-radius: 4px;
+  display: block;
+}
+
+.issue-description:hover {
+  background: #f0f5ff;
+  transition: background 0.3s ease;
+}
+
+/* 问题卡片标题样式 */
+.issue-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.issue-card-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.issue-card-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 用户操作按钮样式 */
+.issue-feedback-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* 现代化头部导航样式 */
+.ant-layout-header {
+  background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%) !important;
+  border-bottom: none !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.ant-layout-header h1 {
+  background: linear-gradient(45deg, #fff, #e8f4fd);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: none;
+  font-weight: 700;
+}
+
+.ant-menu-horizontal {
+  background: transparent !important;
+  border-bottom: none !important;
+}
+
+.ant-menu-item {
+  color: rgba(255, 255, 255, 0.85) !important;
+  border-bottom: 2px solid transparent !important;
+  transition: all 0.3s ease !important;
+}
+
+.ant-menu-item:hover {
+  color: white !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-radius: 6px !important;
+  border-bottom: 2px solid #64b5f6 !important;
+}
+
+.ant-menu-item-selected {
+  color: white !important;
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-radius: 6px !important;
+  border-bottom: 2px solid #64b5f6 !important;
+}
+
+/* 现代化内容区域 */
+.ant-layout-content {
+  background: #f8fafc;
+  padding: 24px;
+}
+
+/* 卡片样式现代化 */
+.ant-card {
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.ant-card:hover {
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+.ant-card-head {
+  border-bottom: 1px solid #f0f0f0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px 12px 0 0;
+}
+
+.ant-card-head-title {
+  color: white;
+  font-weight: 600;
+}
+
+/* 按钮现代化 */
+.ant-btn-primary {
+  background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(116, 185, 255, 0.4);
+  transition: all 0.3s ease;
+}
+
+.ant-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(116, 185, 255, 0.6);
+}
+
+/* 输入框现代化 */
+.ant-input, .ant-select-selector {
+  border-radius: 8px;
+  border: 2px solid #f0f0f0;
+  transition: all 0.3s ease;
+}
+
+.ant-input:focus, .ant-select-selector:focus {
+  border-color: #74b9ff;
+  box-shadow: 0 0 0 2px rgba(116, 185, 255, 0.2);
+}
+
+/* 任务卡片现代化 */
+.task-card {
+  margin-bottom: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.task-card .ant-card-body {
+  padding: 20px;
+}
+
+/* 表格现代化 */
+.ant-table {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.ant-table-thead > tr > th {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-bottom: 2px solid #e2e8f0;
+  color: #334155;
+  font-weight: 600;
+}
+
+/* 标签现代化 */
+.ant-tag {
+  border-radius: 6px;
+  border: none;
+  font-weight: 500;
+  padding: 4px 12px;
+}
+
+/* 进度条现代化 */
+.ant-progress-circle .ant-progress-text {
+  font-weight: 600;
+  color: #334155;
+}
+
+/* 统计数值卡片现代化 */
+.ant-statistic {
+  text-align: center;
+}
+
+.ant-statistic-title {
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.ant-statistic-content {
+  color: #1e293b;
+  font-weight: 700;
+}
+
+/* 响应式优化 */
+@media (max-width: 768px) {
+  .ant-layout-header h1 {
+    font-size: 16px;
+  }
+  
+  .ant-menu-item {
+    padding: 0 12px;
+  }
+  
+  .ant-layout-content {
+    padding: 16px 12px;
+  }
+  
+  .ant-card {
+    margin-bottom: 12px;
+  }
+}
