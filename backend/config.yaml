@@ -1,10 +1,14 @@
 # 服务器配置
 server:
-  host: "0.0.0.0"  # 监听地址
-  port: 8080  # 监听端口
-  debug: false  # 调试模式
-  reload: false  # 自动重载
-  workers: 1  # 工作进程数
+  host: "${SERVER_HOST:0.0.0.0}"  # 监听地址
+  port: "${SERVER_PORT:8080}"  # 监听端口
+  debug: "${DEBUG:false}"  # 调试模式
+  reload: "${RELOAD:false}"  # 自动重载
+  workers: "${WORKERS:1}"  # 工作进程数
+  # 外部访问地址配置
+  external_host: "${EXTERNAL_HOST:localhost}"  # 外部访问主机名
+  external_port: "${EXTERNAL_PORT:8080}"  # 外部访问端口
+  external_protocol: "${EXTERNAL_PROTOCOL:http}"  # 外部访问协议
 
 # 数据库配置
 database:
@@ -92,15 +96,15 @@ task_processing:
 cors:
   enabled: true
   origins:
-    - "http://localhost:3000"
-    - "http://localhost:3001"
-    - "http://localhost:3002"
-    - "http://localhost:3003"
-    - "http://localhost:5173"
-    - "http://127.0.0.1:3000"
-    - "http://127.0.0.1:5173"
-    # 动态配置：支持自定义前端地址
-    - "${FRONTEND_URL}"  # 从环境变量获取前端地址
+    - "${FRONTEND_URL_1:http://localhost:3000}"  # 主前端地址
+    - "${FRONTEND_URL_2:http://localhost:3001}"  # 备用前端地址1
+    - "${FRONTEND_URL_3:http://localhost:3002}"  # 备用前端地址2
+    - "${FRONTEND_URL_4:http://localhost:3003}"  # 备用前端地址3
+    - "${FRONTEND_URL_5:http://localhost:5173}"  # Vite开发服务器地址
+    - "${FRONTEND_URL_6:http://127.0.0.1:3000}"  # 本地IP访问
+    - "${FRONTEND_URL_7:http://127.0.0.1:5173}"  # 本地IP Vite访问
+    # 生产环境前端地址
+    - "${FRONTEND_PRODUCTION_URL:}"  # 生产环境前端地址
   allow_credentials: true
   allow_methods: ["*"]
   allow_headers: ["*"]
@@ -118,9 +122,9 @@ third_party_auth:
   client_id: "077b1f29dbb4c4fda233c93ba34676b00421b2b16d11abc36b38f6298e495876"
   client_secret: "f3d0cfe1a3143a1b99ca58f234920f0ac63645e6272f65c5771a3a4e4f085fa4"
   
-  # 回调配置 - 注意前端端口是3000
-  frontend_domain: "http://localhost:3000"
-  redirect_path: "/third-login/callback"
+  # 回调配置 - 前端域名和路径
+  frontend_domain: "${FRONTEND_DOMAIN:http://localhost:3000}"
+  redirect_path: "${OAUTH_REDIRECT_PATH:/third-login/callback}"
   
   # Gitee权限范围
   scope: "user_info"

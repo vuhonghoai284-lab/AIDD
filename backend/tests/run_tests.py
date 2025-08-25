@@ -323,8 +323,13 @@ class TestRunner:
             except subprocess.CalledProcessError as e:
                 print(f"⚠️  安装失败: {dep} - {e}")
     
-    def check_server_status(self, base_url: str = "http://localhost:8080"):
+    def check_server_status(self, base_url: str = None):
         """检查服务器状态"""
+        if base_url is None:
+            from app.core.config import get_settings
+            settings = get_settings()
+            base_url = settings.server_external_url
+        
         try:
             import requests
             response = requests.get(f"{base_url}/", timeout=5)

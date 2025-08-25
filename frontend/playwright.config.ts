@@ -12,7 +12,7 @@ export default defineConfig({
     timeout: 10000,  // 增加断言超时时间
   },
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -46,7 +46,7 @@ export default defineConfig({
 
   webServer: {
     command: 'npm run dev',
-    url: 'http://localhost:3000',
+    url: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,  // 增加服务器启动超时
   },

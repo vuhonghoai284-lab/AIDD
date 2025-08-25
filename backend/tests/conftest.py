@@ -15,7 +15,7 @@ from unittest.mock import patch, AsyncMock
 os.environ['APP_MODE'] = 'test'
 
 # 设置第三方认证的mock配置
-os.environ['FRONTEND_DOMAIN'] = 'http://localhost:3000'
+os.environ.setdefault('FRONTEND_DOMAIN', 'http://localhost:3000')
 os.environ['THIRD_PARTY_CLIENT_ID'] = 'test_client_id'
 os.environ['THIRD_PARTY_CLIENT_SECRET'] = 'test_client_secret'
 os.environ['THIRD_PARTY_AUTH_URL'] = 'https://test-auth.example.com/oauth2/authorize'

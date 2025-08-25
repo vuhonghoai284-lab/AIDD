@@ -35,10 +35,11 @@ def create_app() -> FastAPI:
     server_port = settings.server_config.get('port', 8080)
     if server_port != 8080 or settings.server_config.get('debug', False):
         print(f"💡 检测到非标准端口({server_port})或调试模式，启用宽松CORS策略")
-        # 添加当前服务器端口的前端地址
+        # 从配置获取前端地址模式
         additional_origins = [
-            f"http://localhost:3000",
-            f"http://localhost:5173", 
+            settings.third_party_auth_config.get('frontend_domain', 'http://localhost:3000'),
+            f"http://{settings.server_config.get('external_host', 'localhost')}:3000",
+            f"http://{settings.server_config.get('external_host', 'localhost')}:5173", 
             f"http://127.0.0.1:3000",
             f"http://127.0.0.1:5173"
         ]

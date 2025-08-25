@@ -63,11 +63,11 @@ class AuthService(IAuthService):
                 "provider_type": "generic",
                 "client_id": "fallback_client",
                 "client_secret": "fallback_secret",
-                "frontend_domain": "http://localhost:5173",
+                "frontend_domain": self.settings.third_party_auth_config.get('frontend_domain', 'http://localhost:5173'),
                 "api_endpoints": {
-                    "authorization_url": "http://localhost:8080/mock/oauth/authorize",
-                    "token_url": "http://localhost:8080/mock/oauth/token",
-                    "userinfo_url": "http://localhost:8080/mock/oauth/userinfo"
+                    "authorization_url": f"{self.settings.server_external_url}/mock/oauth/authorize",
+                    "token_url": f"{self.settings.server_external_url}/mock/oauth/token",
+                    "userinfo_url": f"{self.settings.server_external_url}/mock/oauth/userinfo"
                 }
             }
             return create_oauth_provider("generic", fallback_config, self.settings)

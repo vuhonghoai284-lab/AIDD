@@ -20,7 +20,16 @@ def create_mock_dependencies():
     mock_file_storage = Mock()
     mock_file_storage.save_file = Mock(return_value="/fake/path/test_file.txt")
     mock_file_storage.delete_file = Mock(return_value=True)
-    mock_file_storage.get_file_url = Mock(return_value="http://localhost:8080/files/test_file.txt")
+    
+    # 动态获取服务器URL
+    try:
+        from app.core.config import get_settings
+        settings = get_settings()
+        server_url = settings.server_external_url
+    except:
+        server_url = "http://localhost:8080"  # 回退默认值
+        
+    mock_file_storage.get_file_url = Mock(return_value=f"{server_url}/files/test_file.txt")
     
     # Mock AI服务
     mock_ai_service = AsyncMock()

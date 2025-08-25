@@ -75,7 +75,7 @@ def main():
     print(f"📁 配置文件: {settings.config_file}")
     print(f"📊 数据库: {settings.database_url}")
     print(f"🌐 服务地址: http://{args.host}:{args.port}")
-    print(f"📚 API文档: http://localhost:{args.port}/docs")
+    print(f"📚 API文档: {settings.server_external_url}/docs")
     print("="*60)
     print("提示: 使用 Ctrl+C 停止服务")
     print()

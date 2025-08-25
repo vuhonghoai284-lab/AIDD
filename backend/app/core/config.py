@@ -38,22 +38,56 @@ class Settings:
         if isinstance(config, dict):
             for key, value in config.items():
                 if isinstance(value, str) and value.startswith('${') and value.endswith('}'):
-                    env_var = value[2:-1]
-                    default_value = self._get_default_value(env_var, value)
+                    env_var_spec = value[2:-1]  # 移除 ${ 和 }
+                    env_var, default_value = self._parse_env_var_spec(env_var_spec)
                     env_value = os.getenv(env_var, default_value)
+                    
+                    # 类型转换
+                    env_value = self._convert_type(env_value)
+                    
                     print(f"🔄 环境变量替换: {key}={value} -> {env_var}={env_value}")
                     config[key] = env_value
                 elif isinstance(value, (dict, list)):
                     self._replace_env_vars(value)
         elif isinstance(config, list):
-            for item in config:
-                if isinstance(item, (dict, list)):
+            for i, item in enumerate(config):
+                if isinstance(item, str) and item.startswith('${') and item.endswith('}'):
+                    env_var_spec = item[2:-1]
+                    env_var, default_value = self._parse_env_var_spec(env_var_spec)
+                    env_value = os.getenv(env_var, default_value)
+                    env_value = self._convert_type(env_value)
+                    config[i] = env_value
+                elif isinstance(item, (dict, list)):
                     self._replace_env_vars(item)
     
-    def _get_default_value(self, env_var: str, original_value: str) -> str:
-        """为环境变量提供默认值"""
-        # 如果环境变量不存在，返回空字符串
-        return ""
+    def _parse_env_var_spec(self, env_var_spec: str) -> tuple[str, str]:
+        """解析环境变量规范，支持默认值格式 VAR_NAME:default_value"""
+        if ':' in env_var_spec:
+            env_var, default_value = env_var_spec.split(':', 1)
+            return env_var, default_value
+        else:
+            return env_var_spec, ""
+    
+    def _convert_type(self, value: str) -> Any:
+        """将字符串值转换为合适的类型"""
+        if value.lower() in ('true', 'false'):
+            return value.lower() == 'true'
+        
+        # 尝试转换为整数
+        try:
+            if '.' not in value:
+                return int(value)
+        except ValueError:
+            pass
+        
+        # 尝试转换为浮点数
+        try:
+            return float(value)
+        except ValueError:
+            pass
+        
+        # 保持为字符串
+        return value
     
     
     @property
@@ -184,8 +218,25 @@ class Settings:
             'host': '0.0.0.0',
             'port': 8080,
             'debug': False,
-            'reload': False
+            'reload': False,
+            'external_host': 'localhost',
+            'external_port': 8080,
+            'external_protocol': 'http'
         })
+    
+    @property
+    def server_external_url(self) -> str:
+        """服务器外部访问URL"""
+        server_config = self.server_config
+        protocol = server_config.get('external_protocol', 'http')
+        host = server_config.get('external_host', 'localhost')
+        port = server_config.get('external_port', 8080)
+        
+        # 标准端口不需要显示
+        if (protocol == 'http' and port == 80) or (protocol == 'https' and port == 443):
+            return f"{protocol}://{host}"
+        else:
+            return f"{protocol}://{host}:{port}"
     
     @property
     def third_party_auth_config(self) -> Dict[str, Any]:

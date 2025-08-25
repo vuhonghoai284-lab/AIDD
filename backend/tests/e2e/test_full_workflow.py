@@ -300,7 +300,7 @@ class TestWebSocketRealTimeUpdates:
         
         try:
             # 尝试建立WebSocket连接
-            ws_url = f"ws://localhost/ws/task/{task_id}/logs"
+            ws_url = f"ws://localhost:8080/ws/task/{task_id}/logs"
             # ws = create_connection(ws_url)
             
             # 由于测试环境限制，这里只验证端点存在
