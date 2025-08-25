@@ -158,12 +158,24 @@ class IssueDetector:
                 # 从模板加载提示词
                 system_prompt = prompt_loader.get_system_prompt('document_detect_issues')
                 
-                # 构建用户提示
+                # 构建用户提示 - 动态计算章节内容长度限制
+                # 计算可用的上下文长度（预留给系统提示、格式说明等）
+                system_prompt_length = len(system_prompt) if system_prompt else 0
+                format_instructions_length = len(self.issues_parser.get_format_instructions())
+                reserved_length = system_prompt_length + format_instructions_length + 500  # 额外预留500字符
+                
+                # 可用于章节内容的字符数（基于模型的上下文窗口）
+                available_chars = max(8000, (self.model_config.get('config', {}).get('context_window', 8000) - reserved_length) * 3)
+                section_content_limited = section_content[:available_chars] if len(section_content) > available_chars else section_content
+                
+                if len(section_content) > available_chars:
+                    self.logger.info(f"⚠️ 章节 '{section_title}' 内容过长({len(section_content)}字符)，截取前{available_chars}字符进行检测")
+                
                 user_prompt = prompt_loader.get_user_prompt(
                     'document_detect_issues',
                     section_title=section_title,
                     format_instructions=self.issues_parser.get_format_instructions(),
-                    section_content=section_content[:4000]  # 限制每个章节的长度
+                    section_content=section_content_limited
                 )
 
                 # 创建消息
@@ -190,7 +202,7 @@ class IssueDetector:
                         operation_type="detect_issues",
                         section_title=section_title,
                         section_index=index,
-                        input_text=section_content[:4000],
+                        input_text=section_content_limited[:1000],  # 保存前1000字符作为样本
                         raw_output=response.content,
                         processing_time=processing_time,
                         status="success"
@@ -270,7 +282,7 @@ class IssueDetector:
                         operation_type="detect_issues",
                         section_title=section_title,
                         section_index=index,
-                        input_text=section_content[:4000],
+                        input_text=section_content[:1000],  # 保存前1000字符作为样本
                         raw_output="",
                         status="failed",
                         error_message=str(e),
