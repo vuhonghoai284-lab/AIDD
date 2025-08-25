@@ -1,7 +1,7 @@
 // 认证服务
 import axios from 'axios';
 import { User } from '../types';
-import config from '../config';
+import config from '../config/index';
 
 const API_BASE = config.apiBaseUrl;
 

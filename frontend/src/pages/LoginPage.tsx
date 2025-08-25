@@ -16,7 +16,7 @@ import {
   SunOutlined
 } from '@ant-design/icons';
 import { loginWithThirdParty, loginWithThirdPartyLegacy, loginWithSystem } from '../services/authService';
-import config from '../config';
+import config from '../config/index';
 import { useTheme } from '../hooks/useTheme';
 import './LoginPage.css';
 

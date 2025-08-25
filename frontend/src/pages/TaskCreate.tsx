@@ -3,7 +3,7 @@ import { Card, Upload, Button, Input, message, Progress, Space, Tag, Select, Too
 import { InboxOutlined, LoadingOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { taskAPI } from '../api';
 import { useNavigate } from 'react-router-dom';
-import config from '../config';
+import config from '../config/index';
 
 const { Dragger } = Upload;
 const { Option } = Select;

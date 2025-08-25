@@ -1,7 +1,7 @@
 // API服务封装
 import axios from 'axios';
 import { Task, TaskDetail, AIOutput, AnalyticsData, UserStats, TaskStats, SystemStats, IssueStats, ErrorStats } from './types';
-import config from './config';
+import config from './config/index';
 
 const API_BASE = config.apiBaseUrl;
 
