@@ -42,7 +42,7 @@ parameters:
   document_content:
     description: "需要处理的文档内容"
     required: true
-    max_length: 10000
+    # max_length: 移除长度限制，依赖分割逻辑确保批次大小合理
 
 # 版本信息
 version: "1.0"

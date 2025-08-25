@@ -431,7 +431,7 @@ class DocumentProcessor:
     
     def _split_by_paragraphs(self, text: str, batch_chars: int, min_batch_chars: int) -> List[str]:
         """
-        按段落分割文本
+        按段落分割文本，增强分割策略
         
         Args:
             text: 要分割的文本
@@ -444,14 +444,53 @@ class DocumentProcessor:
         batches = []
         current_batch = ""
         
-        # 按段落分割
+        # 尝试多种分割策略
+        # 1. 首先按双换行符分割
         paragraphs = text.split('\n\n')
+        self.logger.info(f"📄 按段落(\\n\\n)分割得到{len(paragraphs)}个段落")
         
-        for paragraph in paragraphs:
-            # 如果添加这个段落会超过批次限制
-            if current_batch and len(current_batch + paragraph) > batch_chars:
+        # 如果段落数量太少，尝试单换行符分割
+        if len(paragraphs) <= 3 and len(text) > batch_chars:
+            paragraphs = text.split('\n')
+            self.logger.info(f"📄 按行(\\n)分割得到{len(paragraphs)}个行")
+            
+            # 如果还是太少，按固定长度强制分割
+            if len(paragraphs) <= 10:
+                return self._force_split_by_length(text, batch_chars, min_batch_chars)
+        
+        for i, paragraph in enumerate(paragraphs):
+            paragraph = paragraph.strip()
+            if not paragraph:  # 跳过空段落
+                continue
+                
+            # 如果单个段落就超过批次大小，进一步分割
+            if len(paragraph) > batch_chars:
+                # 保存当前批次
+                if current_batch.strip():
+                    batches.append(current_batch.strip())
+                    current_batch = ""
+                
+                # 按句号分割超长段落
+                sentences = paragraph.split('。')
+                for sentence in sentences:
+                    if sentence.strip():
+                        sentence_with_period = sentence.strip() + '。' if not sentence.endswith('。') else sentence.strip()
+                        
+                        if current_batch and len(current_batch + sentence_with_period) > batch_chars:
+                            if len(current_batch) >= min_batch_chars:
+                                batches.append(current_batch.strip())
+                                current_batch = sentence_with_period
+                            else:
+                                current_batch += sentence_with_period
+                        else:
+                            current_batch += sentence_with_period if not current_batch else '\n' + sentence_with_period
+                continue
+            
+            # 正常段落处理
+            if current_batch and len(current_batch + '\n\n' + paragraph) > batch_chars:
                 if len(current_batch) >= min_batch_chars:
                     batches.append(current_batch.strip())
+                    self.logger.debug(f"📦 完成段落批次{len(batches)}：{len(current_batch)}字符")
                     current_batch = paragraph
                 else:
                     current_batch += '\n\n' + paragraph
@@ -462,6 +501,50 @@ class DocumentProcessor:
         if current_batch.strip():
             batches.append(current_batch.strip())
         
+        # 验证分割效果
+        total_chars = sum(len(batch) for batch in batches)
+        self.logger.info(f"📊 段落分割完成：{len(batches)}个批次，总计{total_chars}字符，平均{total_chars // len(batches) if batches else 0}字符/批次")
+        
+        return batches
+    
+    def _force_split_by_length(self, text: str, batch_chars: int, min_batch_chars: int) -> List[str]:
+        """
+        强制按长度分割文档
+        
+        Args:
+            text: 文档文本
+            batch_chars: 目标批次大小
+            min_batch_chars: 最小批次大小
+            
+        Returns:
+            分割后的批次列表
+        """
+        batches = []
+        start = 0
+        
+        while start < len(text):
+            # 计算这个批次的结束位置
+            end = start + batch_chars
+            
+            # 如果不是最后一批次，尝试在合适位置分割（避免在单词中间）
+            if end < len(text):
+                # 向后查找合适的分割点（换行符、句号、空格）
+                search_start = max(start + min_batch_chars, end - 500)  # 在目标位置前500字符内查找
+                for split_char in ['\n\n', '\n', '。', '！', '？', '，', ' ']:
+                    split_pos = text.rfind(split_char, search_start, end)
+                    if split_pos > search_start:
+                        end = split_pos + len(split_char)
+                        break
+            
+            # 提取这个批次
+            batch = text[start:end].strip()
+            if batch and len(batch) >= min_batch_chars:
+                batches.append(batch)
+                self.logger.debug(f"📦 强制分割批次{len(batches)}：{len(batch)}字符")
+            
+            start = end
+        
+        self.logger.info(f"🔨 强制分割完成：{len(batches)}个批次")
         return batches
     
     async def _ai_optimize_sections(self, sections: List[Dict], original_text: str) -> List[Dict]:
