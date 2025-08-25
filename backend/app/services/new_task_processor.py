@@ -93,7 +93,9 @@ class NewTaskProcessor:
             processing_chain = TaskProcessingChain(ai_service_provider)
             
             # 执行处理链
+            provider_info = ai_service_provider.get_provider_info()
             await self._log(task_id, "INFO", f"使用AI服务: {ai_service_provider.get_provider_name()}", "初始化", 10)
+            await self._log(task_id, "INFO", f"模型配置: {provider_info.get('model', 'unknown')} @ {provider_info.get('provider', 'unknown')}", "初始化", 12)
             
             async def progress_callback(message: str, progress: int):
                 """进度回调函数"""

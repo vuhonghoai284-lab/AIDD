@@ -96,18 +96,8 @@ class IssueDetector:
         self.logger.info(f"🔄 JSON解析重试配置: 最大重试{self.retry_config.max_retries}次, 基础延迟{self.retry_config.base_delay}秒")
         
         try:
-            # 初始化ChatOpenAI模型
-            self.model = ChatOpenAI(
-                api_key=self.api_key,
-                base_url=self.api_base,
-                model=self.model_name,
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-                request_timeout=self.timeout,
-                max_retries=self.max_retries
-            )
-            
-            # 初始化解析器
+            # 不在这里初始化ChatOpenAI模型，改为动态创建以支持模型切换
+            # 只初始化解析器
             self.issues_parser = PydanticOutputParser(pydantic_object=DocumentIssues)
             self.logger.info("✅ 问题检测器初始化成功")
             
@@ -402,7 +392,7 @@ class IssueDetector:
     
     async def _call_ai_model(self, messages):
         """
-        调用AI模型（仅在此方法内进行mock判断）
+        调用AI模型（动态创建模型实例以支持模型切换）
         
         Args:
             messages: 消息列表
@@ -410,8 +400,22 @@ class IssueDetector:
         Returns:
             AI模型响应
         """
-        # 直接进行真实的AI调用
-        return await asyncio.to_thread(self.model.invoke, messages)
+        # 动态创建ChatOpenAI实例，确保使用最新的模型配置
+        model = ChatOpenAI(
+            api_key=self.api_key,
+            base_url=self.api_base,
+            model=self.model_name,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+            request_timeout=self.timeout,
+            max_retries=self.max_retries
+        )
+        
+        # 记录实际使用的模型信息
+        self.logger.debug(f"🤖 动态创建AI模型: {self.model_name} @ {self.api_base}")
+        
+        # 调用模型
+        return await asyncio.to_thread(model.invoke, messages)
     
     async def analyze_document(self, text: str, prompt_type: str = "detect_issues") -> Dict[str, Any]:
         """
