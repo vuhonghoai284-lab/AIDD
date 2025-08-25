@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.services.prompt_loader import prompt_loader
 from app.models.ai_output import AIOutput
 from app.core.config import get_settings
+from app.utils.ai_retry_parser import ai_retry_parser, RetryConfig
 
 
 # 定义结构化输出模型
@@ -83,7 +84,16 @@ class IssueDetector:
         self.timeout = config.get('timeout', 60)
         self.max_retries = config.get('max_retries', 3)
         
+        # 配置JSON解析重试
+        self.retry_config = RetryConfig(
+            max_retries=config.get('json_parse_retries', 3),
+            base_delay=config.get('json_retry_delay', 1.0),
+            backoff_multiplier=2.0,
+            max_delay=10.0
+        )
+        
         self.logger.info(f"🔍 问题检测器初始化: Provider={self.provider}, Model={self.model_name}")
+        self.logger.info(f"🔄 JSON解析重试配置: 最大重试{self.retry_config.max_retries}次, 基础延迟{self.retry_config.base_delay}秒")
         
         try:
             # 初始化ChatOpenAI模型
@@ -194,85 +204,84 @@ class IssueDetector:
                     HumanMessage(content=user_prompt)
                 ]
                 
-                # 调用模型
-                self.logger.info(f"📤 调用模型检测章节 '{section_title}'")
-                self.logger.debug(f"System Prompt长度: {len(system_prompt)}")
-                self.logger.debug(f"User Prompt长度: {len(user_prompt)}")
+                # 使用重试解析器进行AI调用和JSON解析
+                self.logger.info(f"📤 调用模型检测章节 '{section_title}' (支持重试)")
                 
-                response = await self._call_ai_model(messages)
-                processing_time = time.time() - section_start_time
+                # 定义AI调用函数
+                async def ai_call_func():
+                    return await self._call_ai_model(messages)
                 
-                self.logger.info(f"📥 收到模型响应 (耗时: {processing_time:.2f}s)")
-                self.logger.debug(f"原始响应内容 (前500字符): {str(response.content)[:500]}")
-                
-                # 保存AI输出到数据库
-                if self.db and task_id:
-                    ai_output = AIOutput(
-                        task_id=task_id,
-                        operation_type="detect_issues",
-                        section_title=section_title,
-                        section_index=index,
-                        input_text=section_title + f" ({len(section_content)}字符)",  # 保存标题和长度信息
-                        raw_output=response.content,
-                        processing_time=processing_time,
-                        status="success"
-                    )
-                
-                # 解析响应
-                try:
-                    content = response.content
-                    self.logger.info(f"🔍 开始解析章节 '{section_title}' 的响应")
-                    
-                    if isinstance(content, str):
-                        self.logger.debug(f"响应内容长度: {len(content)} 字符")
-                        
-                        # 查找JSON内容
-                        json_match = re.search(r'\{.*\}', content, re.DOTALL)
-                        if json_match:
-                            json_str = json_match.group()
-                            self.logger.debug(f"找到JSON内容 (前200字符): {json_str[:200]}...")
-                            
-                            try:
-                                result = json.loads(json_str)
-                                issues_count = len(result.get('issues', []))
-                                self.logger.info(f"✅ JSON解析成功，包含 {issues_count} 个问题")
-                            except json.JSONDecodeError as je:
-                                self.logger.error(f"❌ JSON解析失败: {str(je)}")
-                                self.logger.error(f"JSON字符串: {json_str[:500]}...")
-                                result = {"issues": []}
-                        else:
-                            self.logger.warning(f"⚠️ 未找到JSON格式内容")
-                            self.logger.debug(f"完整响应: {content[:1000]}...")
-                            result = {"issues": []}
+                # 定义JSON提取函数
+                def json_extractor(content: str) -> Dict[str, Any]:
+                    # 查找JSON内容
+                    json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                    if json_match:
+                        json_str = json_match.group()
+                        result = json.loads(json_str)
+                        # 验证结果结构
+                        if 'issues' not in result:
+                            result = {'issues': []}
+                        return result
                     else:
-                        self.logger.warning(f"⚠️ 响应不是字符串类型: {type(content)}")
-                        result = {"issues": []}
+                        raise ValueError("未找到JSON格式内容")
+                
+                try:
+                    # 使用带重试的解析器
+                    result = await ai_retry_parser.parse_json_with_retry(
+                        ai_call_func=ai_call_func,
+                        json_extractor=json_extractor,
+                        retry_config=self.retry_config,
+                        operation_name=f"检测章节 '{section_title}'"
+                    )
                     
-                    # 更新数据库中的解析结果
+                    processing_time = time.time() - section_start_time
+                    issues = result.get('issues', [])
+                    
+                    self.logger.info(f"✅ 章节 '{section_title}' 检测完成，发现 {len(issues)} 个问题 (耗时: {processing_time:.2f}s)")
+                    
+                    # 保存成功结果到数据库
                     if self.db and task_id:
-                        ai_output.parsed_output = result
+                        ai_output = AIOutput(
+                            task_id=task_id,
+                            operation_type="detect_issues",
+                            section_title=section_title,
+                            section_index=index,
+                            input_text=section_title + f" ({len(section_content)}字符)",
+                            raw_output=json.dumps(result, ensure_ascii=False),
+                            parsed_output=result,
+                            processing_time=processing_time,
+                            status="success"
+                        )
                         self.db.add(ai_output)
                         self.db.commit()
                     
                     # 为每个问题添加章节信息
-                    issues = result.get('issues', [])
                     for issue in issues:
                         if 'location' in issue and section_title not in issue.get('location', ''):
                             issue['location'] = f"{section_title} - {issue['location']}"
                     
-                    self.logger.debug(f"✓ 章节 '{section_title}' 检测完成，发现 {len(issues)} 个问题")
                     return issues
-                    
+                
                 except Exception as e:
                     import traceback
-                    self.logger.error(f"⚠️ 解析章节 '{section_title}' 的响应失败: {str(e)}")
+                    processing_time = time.time() - section_start_time
+                    self.logger.error(f"❌ 章节 '{section_title}' 检测失败 (包含重试): {str(e)}")
                     self.logger.error(f"错误类型: {type(e).__name__}")
-                    self.logger.error(f"完整堆栈:\n{traceback.format_exc()}")
+                    self.logger.debug(f"完整堆栈:\n{traceback.format_exc()}")
                     
-                    # 保存解析错误信息
+                    # 保存失败结果到数据库
                     if self.db and task_id:
-                        ai_output.status = "parsing_error"
-                        ai_output.error_message = str(e)
+                        ai_output = AIOutput(
+                            task_id=task_id,
+                            operation_type="detect_issues",
+                            section_title=section_title,
+                            section_index=index,
+                            input_text=section_title + f" ({len(section_content)}字符)",
+                            raw_output="",
+                            processing_time=processing_time,
+                            status="failed_with_retry",
+                            error_message=str(e)
+                        )
                         self.db.add(ai_output)
                         self.db.commit()
                     

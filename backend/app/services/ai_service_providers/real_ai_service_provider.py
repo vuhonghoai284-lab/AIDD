@@ -39,6 +39,12 @@ class RealAIServiceProvider(IAIServiceProvider):
         self.model_config = model_config
         self.db_session = db_session
         
+        # 提取配置信息
+        self.provider = model_config.get('provider', 'unknown')
+        self.label = model_config.get('label', 'Unknown Model')
+        self.config = model_config.get('config', {})
+        self.model_name = self.config.get('model', 'unknown')
+        
         # 创建真实的处理器实例
         self._document_processor_impl = DocumentProcessor(model_config, db_session)
         self._issue_detector_impl = IssueDetector(model_config, db_session)
@@ -67,18 +73,17 @@ class RealAIServiceProvider(IAIServiceProvider):
     
     def get_provider_name(self) -> str:
         """获取服务提供者名称"""
-        model_name = self.model_config.get('model', 'unknown')
-        provider = self.model_config.get('provider', 'unknown')
-        return f"{provider} ({model_name})"
+        return f"{self.provider} ({self.model_name})"
     
     def get_provider_info(self) -> Dict[str, Any]:
         """获取服务提供者信息"""
         return {
             'name': self.get_provider_name(),
+            'label': self.label,
             'type': 'real',
-            'model': self.model_config.get('model', 'unknown'),
-            'provider': self.model_config.get('provider', 'unknown'),
-            'api_key_configured': bool(self.model_config.get('api_key')),
+            'model': self.model_name,
+            'provider': self.provider,
+            'api_key_configured': bool(self.config.get('api_key')),
             'capabilities': ['document_processing', 'issue_detection']
         }
     
@@ -86,8 +91,8 @@ class RealAIServiceProvider(IAIServiceProvider):
         """健康检查"""
         try:
             # 简单检查配置是否有效
-            return (self.model_config is not None and 
-                   'api_key' in self.model_config and 
-                   bool(self.model_config['api_key']))
+            return (self.config is not None and 
+                   'api_key' in self.config and 
+                   bool(self.config['api_key']))
         except Exception:
             return False

@@ -14,27 +14,13 @@ from app.models import *
 class TestThirdPartyAuthDeep:
     """第三方认证深度测试类"""
     
-    @classmethod
-    def setup_class(cls):
-        """设置测试类，创建数据库表"""
-        # 创建所有表
-        Base.metadata.create_all(bind=engine)
-    
-    @classmethod
-    def teardown_class(cls):
-        """清理测试类"""
-        # 可选：删除测试数据
-        pass
-    
-    def test_database_user_operations(self, client):
+    def test_database_user_operations(self, client, test_db_session):
         """测试数据库用户操作"""
         from app.services.auth import AuthService
         from app.dto.user import UserCreate
-        from app.core.database import SessionLocal
         
-        # 使用独立的数据库会话，但client fixture确保数据库表已创建
-        db = SessionLocal()
-        auth_service = AuthService(db)
+        # 使用fixture提供的数据库会话
+        auth_service = AuthService(test_db_session)
         
         # 测试创建用户
         unique_suffix = int(time.time())
@@ -70,11 +56,10 @@ class TestThirdPartyAuthDeep:
         assert verified_user is not None
         assert verified_user.uid == f"test_user_{unique_suffix + 1}"
         
-        # 清理数据库会话
-        db.close()
+        # 不需要手动关闭，由fixture管理
     
     @pytest.mark.asyncio
-    async def test_third_party_api_simulation_complete_flow(self, client):
+    async def test_third_party_api_simulation_complete_flow(self, client, test_db_session):
         """测试第三方API模拟的完整流程"""
         from app.services.auth import AuthService
         from app.core.config import get_settings
@@ -82,9 +67,8 @@ class TestThirdPartyAuthDeep:
         # 验证配置加载
         settings = get_settings()
         
-        from app.core.database import SessionLocal
-        db = SessionLocal()
-        auth_service = AuthService(db)
+        # 使用fixture提供的数据库会话
+        auth_service = AuthService(test_db_session)
         
         # 测试1: 令牌交换（业务流程与生产环境一致）
         test_code = "test_auth_code_12345"
@@ -121,17 +105,15 @@ class TestThirdPartyAuthDeep:
         assert "token_type" in login_result
         assert login_result["user"].uid == user_info.uid
         
-        # 清理数据库会话
-        db.close()
+        # 不需要手动关闭，由fixture管理
     
     @pytest.mark.asyncio
-    async def test_third_party_auth_error_handling(self, client):
+    async def test_third_party_auth_error_handling(self, client, test_db_session):
         """测试第三方认证错误处理"""
         from app.services.auth import AuthService
-        from app.core.database import SessionLocal
         
-        db = SessionLocal()
-        auth_service = AuthService(db)
+        # 使用fixture提供的数据库会话
+        auth_service = AuthService(test_db_session)
         
         # 测试无效token的处理
         try:
@@ -142,16 +124,14 @@ class TestThirdPartyAuthDeep:
             # 这也是正常的，说明错误处理在工作
             assert isinstance(e, Exception)
         
-        # 清理数据库会话
-        db.close()
+        # 不需要手动关闭，由fixture管理
     
-    def test_authorization_url_generation(self, client):
+    def test_authorization_url_generation(self, client, test_db_session):
         """测试认证URL生成"""
         from app.services.auth import AuthService
-        from app.core.database import SessionLocal
         
-        db = SessionLocal()
-        auth_service = AuthService(db)
+        # 使用fixture提供的数据库会话
+        auth_service = AuthService(test_db_session)
         
         # 测试获取认证URL
         auth_url = auth_service.get_authorization_url("test_state_123")
@@ -164,21 +144,16 @@ class TestThirdPartyAuthDeep:
         assert "scope=" in auth_url
         assert "state=test_state_123" in auth_url
         
-        # 清理数据库会话
-        db.close()
+        # 不需要手动关闭，由fixture管理
     
-    def test_jwt_token_operations(self, client):
+    def test_jwt_token_operations(self, client, test_db_session):
         """测试JWT令牌操作"""
         from app.services.auth import AuthService
         from app.dto.user import UserCreate
         from datetime import timedelta
-        from app.core.database import SessionLocal, Base, engine
         
-        # 确保所有表都已创建
-        Base.metadata.create_all(bind=engine)
-        
-        db = SessionLocal()
-        auth_service = AuthService(db)
+        # 使用fixture提供的数据库会话（表已由client fixture创建）
+        auth_service = AuthService(test_db_session)
         
         # 创建测试用户
         unique_suffix = int(time.time())
@@ -210,19 +185,14 @@ class TestThirdPartyAuthDeep:
         assert verified_user_2 is not None
         assert verified_user_2.id == user.id
         
-        # 清理数据库会话
-        db.close()
+        # 不需要手动关闭，由fixture管理
     
-    def test_user_login_with_admin_privileges(self, client):
+    def test_user_login_with_admin_privileges(self, client, test_db_session):
         """测试管理员权限用户登录"""
         from app.services.auth import AuthService
-        from app.core.database import SessionLocal, Base, engine
         
-        # 确保所有表都已创建
-        Base.metadata.create_all(bind=engine)
-        
-        db = SessionLocal()
-        auth_service = AuthService(db)
+        # 使用fixture提供的数据库会话（表已由client fixture创建）
+        auth_service = AuthService(test_db_session)
         
         # 测试管理员用户登录
         unique_suffix = int(time.time())
@@ -246,5 +216,4 @@ class TestThirdPartyAuthDeep:
         assert verified_admin.is_admin is True
         assert verified_admin.is_system_admin is True
         
-        # 清理数据库会话
-        db.close()
+        # 不需要手动关闭，由fixture管理

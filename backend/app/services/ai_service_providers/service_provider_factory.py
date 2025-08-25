@@ -26,8 +26,8 @@ class AIServiceProviderFactory:
         """
         # 获取指定索引的模型配置
         model_config = settings.ai_models[model_index]
-        # 创建真实AI服务提供者，传递配置中的config部分
-        return RealAIServiceProvider(model_config['config'], db_session)
+        # 创建真实AI服务提供者，传递完整的模型配置
+        return RealAIServiceProvider(model_config, db_session)
 
 # 全局工厂实例
 ai_service_provider_factory = AIServiceProviderFactory()

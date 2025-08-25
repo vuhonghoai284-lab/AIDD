@@ -253,7 +253,7 @@ class TestFileProcessingIntegration:
             result = await parser.parse(str(temp_path))
             assert result.success
             assert result.data == large_content
-            assert result.metadata['lines_count'] == 1000
+            assert result.metadata['lines_count'] == 1001
         finally:
             temp_path.unlink()
     

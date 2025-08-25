@@ -55,10 +55,37 @@ class NewTaskProcessor:
             # 准备处理上下文
             context = await self._prepare_context(task_id, task)
             
+            # 获取任务关联的AI模型并找到对应的索引
+            task_model_index = self.settings.default_model_index  # 默认值
+            if task.model_id:
+                # 根据model_id查找模型配置
+                ai_model = self.model_repo.get_by_id(task.model_id)
+                if ai_model:
+                    # 在settings的模型列表中查找对应的索引
+                    for index, model_config in enumerate(self.settings.ai_models):
+                        config_model_name = model_config.get('config', {}).get('model')
+                        config_provider = model_config.get('provider')
+                        
+                        # 使用model_name和provider进行匹配
+                        if (config_model_name == ai_model.model_name and 
+                            config_provider == ai_model.provider):
+                            task_model_index = index
+                            self.logger.info(f"🎯 找到用户选择的模型: {ai_model.label} (model: {ai_model.model_name}, provider: {ai_model.provider}, 索引: {index})")
+                            break
+                    else:
+                        self.logger.warning(f"⚠️ 未找到匹配的模型配置，使用默认模型。模型信息: label={ai_model.label}, model={ai_model.model_name}, provider={ai_model.provider}")
+                        self.logger.info("可用模型配置:")
+                        for i, cfg in enumerate(self.settings.ai_models):
+                            cfg_model = cfg.get('config', {}).get('model', 'unknown')
+                            cfg_provider = cfg.get('provider', 'unknown')
+                            self.logger.info(f"  [{i}] {cfg.get('label', 'unknown')} - {cfg_provider} ({cfg_model})")
+                else:
+                    self.logger.warning(f"⚠️ 任务关联的模型不存在(model_id={task.model_id})，使用默认模型")
+            
             # 创建AI服务提供者
             ai_service_provider = ai_service_provider_factory.create_provider(
                 settings=self.settings,
-                model_index=self.settings.default_model_index,
+                model_index=task_model_index,
                 db_session=self.db
             )
             

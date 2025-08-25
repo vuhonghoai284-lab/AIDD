@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.services.prompt_loader import prompt_loader
 from app.models.ai_output import AIOutput
+from app.utils.ai_retry_parser import ai_retry_parser, RetryConfig
 
 
 # 定义文档章节模型
@@ -85,6 +86,14 @@ class DocumentProcessor:
         self.available_tokens = self.max_tokens - self.reserved_tokens
         self.max_chunk_chars = self.available_tokens * 4
         
+        # 配置JSON解析重试
+        self.retry_config = RetryConfig(
+            max_retries=config.get('json_parse_retries', 3),
+            base_delay=config.get('json_retry_delay', 1.0),
+            backoff_multiplier=2.0,
+            max_delay=10.0
+        )
+        
         # 检查API密钥是否正确获取
         if not self.api_key:
             self.logger.error(f"❌ 未找到API密钥，模型配置: {model_config}")
@@ -92,6 +101,7 @@ class DocumentProcessor:
         
         self.logger.info(f"📚 文档处理器初始化: Provider={self.provider}, Model={self.model_name}")
         self.logger.info(f"🔑 API密钥状态: {'已配置' if self.api_key else '未配置'} (前6位: {self.api_key[:6]}...)")
+        self.logger.info(f"🔄 JSON解析重试配置: 最大重试{self.retry_config.max_retries}次, 基础延迟{self.retry_config.base_delay}秒")
         
         try:
             # 初始化ChatOpenAI模型 - 支持多种兼容OpenAI API的提供商
@@ -322,17 +332,55 @@ class DocumentProcessor:
             # 调用AI模型
             response = await self._call_ai_model(messages)
             
-            # 解析响应
-            sections = self._parse_response(response.content, f"batch_{batch_index + 1}")
+            # 使用重试解析器进行JSON解析
+            async def ai_call_func():
+                return response  # 直接返回已有的响应
             
-            if not sections:
-                # 如果解析失败，创建默认章节
-                sections = [{
-                    "section_title": f"批次 {batch_index + 1}",
-                    "content": batch_text,
-                    "level": 1,
-                    "completeness_status": "incomplete"  # 默认标记为不完整
-                }]
+            # 定义JSON提取函数
+            def json_extractor(content: str) -> Dict[str, Any]:
+                # 查找JSON内容
+                json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group()
+                    result = json.loads(json_str)
+                    # 验证结果结构
+                    if 'sections' not in result:
+                        result = {'sections': []}
+                    return result
+                else:
+                    raise ValueError("未找到JSON格式内容")
+            
+            try:
+                # 使用带重试的解析器
+                result = await ai_retry_parser.parse_json_with_retry(
+                    ai_call_func=ai_call_func,
+                    json_extractor=json_extractor,
+                    retry_config=self.retry_config,
+                    operation_name=f"解析批次 {batch_index + 1}"
+                )
+                
+                sections = result.get('sections', [])
+                
+                if not sections:
+                    # 如果解析成功但没有章节，创建默认章节
+                    sections = [{
+                        "section_title": f"批次 {batch_index + 1}",
+                        "content": batch_text,
+                        "level": 1,
+                        "completeness_status": "incomplete"
+                    }]
+                    
+            except Exception as e:
+                self.logger.error(f"❌ 批次 {batch_index + 1} JSON解析失败 (包含重试): {str(e)}")
+                # 如果重试解析都失败，使用文本回退方案
+                sections = self._parse_text_fallback(response.content)
+                if not sections:
+                    sections = [{
+                        "section_title": f"批次 {batch_index + 1} (解析失败)",
+                        "content": batch_text,
+                        "level": 1,
+                        "completeness_status": "incomplete"
+                    }]
             
             self.logger.info(f"✅ 批次 {batch_index + 1} 处理完成：识别到 {len(sections)} 个章节")
             
@@ -357,35 +405,6 @@ class DocumentProcessor:
                 "completeness_status": "incomplete"
             }]
     
-    def _parse_response(self, content: str, chunk_id: str) -> List[Dict]:
-        """
-        解析AI响应内容
-        
-        Args:
-            content: AI返回的原始内容
-            chunk_id: 分块标识
-            
-        Returns:
-            解析出的章节列表
-        """
-        try:
-            # 查找JSON内容
-            json_match = re.search(r'\{.*\}', content, re.DOTALL)
-            if json_match:
-                json_str = json_match.group()
-                result = json.loads(json_str)
-                sections = result.get('sections', [])
-                self.logger.info(f"✅ {chunk_id} 解析成功，得到 {len(sections)} 个章节")
-                return sections
-            else:
-                self.logger.warning(f"⚠️ {chunk_id} 响应中未找到JSON格式，尝试文本解析")
-                return self._parse_text_fallback(content)
-        except json.JSONDecodeError as e:
-            self.logger.error(f"❌ {chunk_id} JSON解析失败: {str(e)}，尝试文本解析")
-            return self._parse_text_fallback(content)
-        except Exception as e:
-            self.logger.error(f"❌ {chunk_id} 解析完全失败: {str(e)}")
-            return []
     
     def _parse_text_fallback(self, content: str) -> List[Dict]:
         """
