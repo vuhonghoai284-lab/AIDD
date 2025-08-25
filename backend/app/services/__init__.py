@@ -2,7 +2,7 @@
 服务模块
 """
 from app.services.task import TaskService
-from app.services.task_processor import TaskProcessor
+from app.services.new_task_processor import NewTaskProcessor as TaskProcessor
 from app.services.ai_service_factory import AIServiceFactory, ai_service_factory
 from app.services.websocket import manager
 from app.services.auth import AuthService

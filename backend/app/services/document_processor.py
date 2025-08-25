@@ -154,11 +154,14 @@ class DocumentProcessor:
                 self.logger.info(f"🤖 第{chunk_idx + 1}/{total_chunks}批次：调用AI拆分章节（{len(chunk)}字符）")
                 
                 # 构建用户提示
+                self.logger.debug(f"🔧 第{chunk_idx + 1}批次：构建AI提示")
                 user_prompt = prompt_loader.get_user_prompt(
                     'document_preprocess',
                     format_instructions=self.structure_parser.get_format_instructions(),
                     document_content=chunk
                 )
+                
+                self.logger.debug(f"📏 第{chunk_idx + 1}批次：提示长度 - 系统提示: {len(system_prompt)}字符, 用户提示: {len(user_prompt)}字符")
                 
                 # 创建消息
                 messages = [
@@ -167,11 +170,15 @@ class DocumentProcessor:
                 ]
                 
                 # 调用AI模型处理单个批次
+                self.logger.debug(f"📤 第{chunk_idx + 1}批次：发送请求到AI模型")
                 batch_start_time = time.time()
                 response = await self._call_ai_model(messages)
                 batch_time = time.time() - batch_start_time
                 
+                self.logger.info(f"📥 第{chunk_idx + 1}批次：收到AI响应 - 耗时: {batch_time:.2f}s, 响应长度: {len(response.content)}字符")
+                
                 # 解析这个批次的AI响应结果
+                self.logger.debug(f"🔍 第{chunk_idx + 1}批次：开始解析AI响应")
                 chunk_sections = self._parse_response(response.content, f"batch_{chunk_idx + 1}")
                 if chunk_sections:
                     self.logger.info(f"✅ 第{chunk_idx + 1}批次完成：识别到{len(chunk_sections)}个章节 (耗时: {batch_time:.2f}s)")

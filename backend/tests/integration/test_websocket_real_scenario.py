@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, patch
 from app.services.websocket import manager
 from app.models.task import Task
 from app.models.user import User
-from app.services.task_processor import TaskProcessor
+from app.services.new_task_processor import NewTaskProcessor as TaskProcessor
 # 相对导入修复
 import sys
 import os

@@ -153,9 +153,11 @@ class IssueDetector:
                 await progress_callback(f"正在检测章节 {index + 1}/{len(valid_sections)}: {section_title}", progress)
             
             self.logger.debug(f"🔍 [{index + 1}/{len(valid_sections)}] 检测章节: {section_title}")
+            self.logger.debug(f"📊 [{index + 1}] 章节信息 - 标题: '{section_title}', 内容长度: {len(section_content)}字符")
             
             try:
                 # 从模板加载提示词
+                self.logger.debug(f"🔧 [{index + 1}] 加载系统提示模板")
                 system_prompt = prompt_loader.get_system_prompt('document_detect_issues')
                 
                 # 构建用户提示 - 动态计算章节内容长度限制
@@ -165,11 +167,14 @@ class IssueDetector:
                 reserved_length = system_prompt_length + format_instructions_length + 500  # 额外预留500字符
                 
                 # 可用于章节内容的字符数（基于模型的上下文窗口）
-                available_chars = max(8000, (self.model_config.get('config', {}).get('context_window', 8000) - reserved_length) * 3)
+                context_window = self.model_config.get('config', {}).get('context_window', 8000)
+                available_chars = max(8000, (context_window - reserved_length) * 3)
                 section_content_limited = section_content[:available_chars] if len(section_content) > available_chars else section_content
                 
+                self.logger.debug(f"📏 [{index + 1}] 上下文计算 - 窗口: {context_window}, 预留: {reserved_length}, 可用: {available_chars}")
+                
                 if len(section_content) > available_chars:
-                    self.logger.info(f"⚠️ 章节 '{section_title}' 内容过长({len(section_content)}字符)，截取前{available_chars}字符进行检测")
+                    self.logger.info(f"⚠️ [{index + 1}] 章节 '{section_title}' 内容过长({len(section_content)}字符)，截取前{available_chars}字符进行检测")
                 
                 user_prompt = prompt_loader.get_user_prompt(
                     'document_detect_issues',
