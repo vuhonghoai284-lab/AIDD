@@ -28,33 +28,15 @@ def create_app() -> FastAPI:
         redirect_slashes=False  # 禁用自动斜杠重定向
     )
     
-    # 配置CORS
-    cors_origins = settings.cors_origins
-    
-    # 开发模式或端口不是8080时，允许更宽松的CORS
-    server_port = settings.server_config.get('port', 8080)
-    if server_port != 8080 or settings.server_config.get('debug', False):
-        print(f"💡 检测到非标准端口({server_port})或调试模式，启用宽松CORS策略")
-        # 从配置获取前端地址模式
-        additional_origins = [
-            settings.third_party_auth_config.get('frontend_domain', 'http://localhost:3000'),
-            f"http://{settings.server_config.get('external_host', 'localhost')}:3000",
-            f"http://{settings.server_config.get('external_host', 'localhost')}:5173", 
-            f"http://127.0.0.1:3000",
-            f"http://127.0.0.1:5173"
-        ]
-        for origin in additional_origins:
-            if origin not in cors_origins:
-                cors_origins.append(origin)
-    
-    print(f"🌐 CORS允许的源: {cors_origins}")
+    # 配置CORS - 允许所有来源访问
+    print("🌐 CORS配置: 允许所有来源访问 (已关闭CORS校验)")
     
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=cors_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=["*"],  # 允许所有来源
+        allow_credentials=False,  # 当allow_origins为["*"]时，必须设置为False
+        allow_methods=["*"],  # 允许所有HTTP方法
+        allow_headers=["*"],  # 允许所有请求头
     )
     
     return app
