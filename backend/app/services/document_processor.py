@@ -137,16 +137,21 @@ class DocumentProcessor:
             # 从模板加载提示词
             system_prompt = prompt_loader.get_system_prompt('document_preprocess')
             
-            # 智能分块处理大文档
+            # 分批处理大文档：每批调用AI进行章节拆分
             chunks = self._split_document_intelligently(text)
             
             all_sections = []
             total_chunks = len(chunks)
             
+            self.logger.info(f"📚 开始分批处理文档，共{total_chunks}个批次")
+            
+            # 第一阶段：分批AI拆分章节 (10%-16%的进度)
             for chunk_idx, chunk in enumerate(chunks):
+                batch_progress = 10 + (chunk_idx / total_chunks) * 6
                 if progress_callback:
-                    progress = 10 + (chunk_idx / total_chunks) * 10  # 10%-20%的进度
-                    await progress_callback(f"正在分析第{chunk_idx + 1}/{total_chunks}个文档片段...", int(progress))
+                    await progress_callback(f"AI拆分第{chunk_idx + 1}/{total_chunks}批次的章节...", int(batch_progress))
+                
+                self.logger.info(f"🤖 第{chunk_idx + 1}/{total_chunks}批次：调用AI拆分章节（{len(chunk)}字符）")
                 
                 # 构建用户提示
                 user_prompt = prompt_loader.get_user_prompt(
@@ -161,17 +166,26 @@ class DocumentProcessor:
                     HumanMessage(content=user_prompt)
                 ]
                 
-                # 调用模型处理单个分块
-                self.logger.info(f"📤 调用AI模型处理第{chunk_idx + 1}/{total_chunks}个文档片段")
+                # 调用AI模型处理单个批次
+                batch_start_time = time.time()
                 response = await self._call_ai_model(messages)
+                batch_time = time.time() - batch_start_time
                 
-                # 解析这个分块的结果
-                chunk_sections = self._parse_response(response.content, f"chunk_{chunk_idx}")
+                # 解析这个批次的AI响应结果
+                chunk_sections = self._parse_response(response.content, f"batch_{chunk_idx + 1}")
                 if chunk_sections:
+                    self.logger.info(f"✅ 第{chunk_idx + 1}批次完成：识别到{len(chunk_sections)}个章节 (耗时: {batch_time:.2f}s)")
                     all_sections.extend(chunk_sections)
+                else:
+                    self.logger.warning(f"⚠️ 第{chunk_idx + 1}批次未识别到有效章节")
             
-            # 合并相邻的相似章节（去重）
+            # 第二阶段：合并所有批次的章节 (16%-20%的进度)
+            if progress_callback:
+                await progress_callback(f"合并所有{total_chunks}个批次的章节...", 16)
+            
+            self.logger.info(f"🔄 开始合并{total_chunks}个批次的章节，当前共{len(all_sections)}个章节")
             merged_sections = self._merge_similar_sections(all_sections)
+            self.logger.info(f"✅ 章节合并完成：{len(all_sections)} -> {len(merged_sections)}个章节")
             
             processing_time = time.time() - start_time
             self.logger.info(f"📥 文档预处理完成，共处理{total_chunks}个片段，得到{len(merged_sections)}个章节 (耗时: {processing_time:.2f}s)")
@@ -261,62 +275,83 @@ class DocumentProcessor:
     
     def _split_document_intelligently(self, text: str) -> List[str]:
         """
-        智能分割文档，优先按章节分割，其次按段落分割
+        智能分割文档为批次，每批大小适合AI处理（约30-50K字符/批次）
+        确保每批次都能被AI完整处理和拆分章节
         
         Args:
             text: 原始文档文本
             
         Returns:
-            分割后的文本块列表
+            分割后的批次列表，每批次适合AI拆分章节处理
         """
-        if len(text) <= self.max_chunk_chars:
+        # 计算批次大小：使用上下文窗口的60%，为系统提示和输出预留空间
+        batch_chars = int(self.max_chunk_chars * 0.6)  # 约30万字符 * 0.6 = 18万字符/批次
+        min_batch_chars = 10000  # 最小批次10K字符
+        
+        self.logger.info(f"📐 批次分割参数：目标批次大小={batch_chars}字符，最小批次={min_batch_chars}字符")
+        
+        if len(text) <= batch_chars:
+            self.logger.info(f"📄 文档长度{len(text)}字符，单批次处理")
             return [text]
         
-        chunks = []
-        current_chunk = ""
+        batches = []
+        current_batch = ""
         
-        # 首先尝试按章节分割（标题模式：# 、## 、### 等）
+        # 第一步：按章节分割（标题模式：# 、## 、### 等）
         sections = re.split(r'\n(?=#{1,6}\s)', text)
+        self.logger.info(f"📖 文档初步按章节分割为{len(sections)}个部分")
         
-        self.logger.info(f"📄 文档按章节分割为 {len(sections)} 个部分")
-        
-        for section in sections:
-            # 如果单个章节就超过限制，需要进一步分割
-            if len(section) > self.max_chunk_chars:
-                # 保存当前累积的内容
-                if current_chunk:
-                    chunks.append(current_chunk.strip())
-                    current_chunk = ""
+        for section_idx, section in enumerate(sections):
+            section_length = len(section)
+            
+            # 如果当前批次加上这个章节会超过限制
+            if current_batch and len(current_batch + section) > batch_chars:
+                # 保存当前批次（如果足够大）
+                if len(current_batch) >= min_batch_chars:
+                    batches.append(current_batch.strip())
+                    self.logger.debug(f"📦 完成批次{len(batches)}：{len(current_batch)}字符")
+                    current_batch = section
+                else:
+                    # 当前批次太小，继续添加
+                    current_batch += "\n" + section
+            else:
+                # 添加到当前批次
+                current_batch += "\n" + section if current_batch else section
+            
+            # 如果单个章节就超过批次大小，需要按段落进一步分割
+            if section_length > batch_chars:
+                self.logger.warning(f"⚠️ 第{section_idx + 1}个章节过长({section_length}字符)，按段落分割")
                 
-                # 对超长章节按段落分割
+                # 保存之前的批次
+                if current_batch and current_batch != section:
+                    batches.append(current_batch.replace(section, "").strip())
+                
+                # 按段落分割超长章节
                 paragraphs = section.split('\n\n')
-                section_chunk = ""
+                paragraph_batch = ""
                 
                 for paragraph in paragraphs:
-                    if len(section_chunk + paragraph) > self.max_chunk_chars:
-                        if section_chunk:
-                            chunks.append(section_chunk.strip())
-                        section_chunk = paragraph + "\n\n"
+                    if len(paragraph_batch + paragraph) > batch_chars:
+                        if paragraph_batch and len(paragraph_batch) >= min_batch_chars:
+                            batches.append(paragraph_batch.strip())
+                            self.logger.debug(f"📦 完成段落批次{len(batches)}：{len(paragraph_batch)}字符")
+                        paragraph_batch = paragraph + "\n\n"
                     else:
-                        section_chunk += paragraph + "\n\n"
+                        paragraph_batch += paragraph + "\n\n"
                 
-                if section_chunk.strip():
-                    chunks.append(section_chunk.strip())
-            else:
-                # 检查加入当前章节后是否超过限制
-                if len(current_chunk + section) > self.max_chunk_chars:
-                    if current_chunk:
-                        chunks.append(current_chunk.strip())
-                    current_chunk = section
-                else:
-                    current_chunk += "\n" + section if current_chunk else section
+                current_batch = paragraph_batch.strip()
         
-        # 添加最后一个分块
-        if current_chunk.strip():
-            chunks.append(current_chunk.strip())
+        # 添加最后一个批次
+        if current_batch.strip() and len(current_batch) >= min_batch_chars:
+            batches.append(current_batch.strip())
         
-        self.logger.info(f"📊 文档最终分割为 {len(chunks)} 个处理单元，平均长度: {sum(len(c) for c in chunks) // len(chunks)} 字符")
-        return chunks
+        # 统计信息
+        total_chars = sum(len(batch) for batch in batches)
+        avg_chars = total_chars // len(batches) if batches else 0
+        
+        self.logger.info(f"📊 文档分割完成：{len(batches)}个批次，总计{total_chars}字符，平均{avg_chars}字符/批次")
+        
+        return batches
     
     def _parse_response(self, content: str, chunk_id: str) -> List[Dict]:
         """
@@ -393,10 +428,10 @@ class DocumentProcessor:
     
     def _merge_similar_sections(self, sections: List[Dict]) -> List[Dict]:
         """
-        合并相邻的相似章节，去除重复内容
+        智能合并跨批次的章节，处理分批处理可能导致的章节分割问题
         
         Args:
-            sections: 原始章节列表
+            sections: 来自多个批次的原始章节列表
             
         Returns:
             合并后的章节列表
@@ -404,22 +439,107 @@ class DocumentProcessor:
         if not sections:
             return sections
         
-        merged = [sections[0]]
+        self.logger.info(f"🔄 开始智能合并{len(sections)}个章节...")
+        merged = []
         
-        for current in sections[1:]:
-            last_merged = merged[-1]
+        for current in sections:
+            current_title = current.get('section_title', '').strip()
+            current_level = current.get('level', 1)
+            current_content = current.get('content', '').strip()
             
-            # 检查标题相似度
-            if (current.get('section_title', '').strip() == last_merged.get('section_title', '').strip() and
-                current.get('level', 1) == last_merged.get('level', 1)):
-                # 合并内容
-                last_merged['content'] = last_merged.get('content', '') + '\n\n' + current.get('content', '')
-                self.logger.debug(f"🔄 合并重复章节: {current.get('section_title', '未知')}")
-            else:
+            # 检查是否可以与最后一个章节合并
+            merged_with_existing = False
+            
+            if merged:
+                last_merged = merged[-1]
+                last_title = last_merged.get('section_title', '').strip()
+                last_level = last_merged.get('level', 1)
+                
+                # 合并条件：
+                # 1. 标题完全相同且层级相同（明确的重复章节）
+                # 2. 标题相似且层级相同（跨批次分割的同一章节）
+                # 3. 当前章节标题为通用标题且与上一章节层级连续
+                should_merge = False
+                merge_reason = ""
+                
+                if current_title == last_title and current_level == last_level:
+                    should_merge = True
+                    merge_reason = "标题和层级完全匹配"
+                elif self._is_similar_title(current_title, last_title) and current_level == last_level:
+                    should_merge = True
+                    merge_reason = "标题相似且层级相同"
+                elif self._is_generic_title(current_title) and len(current_content) < 500:
+                    should_merge = True
+                    merge_reason = "通用标题且内容较短"
+                
+                if should_merge:
+                    # 合并内容，避免重复
+                    existing_content = last_merged.get('content', '')
+                    if not self._has_content_overlap(existing_content, current_content):
+                        last_merged['content'] = existing_content + '\n\n' + current_content
+                        self.logger.debug(f"🔗 合并章节 '{current_title}' - {merge_reason}")
+                        merged_with_existing = True
+                    else:
+                        self.logger.debug(f"⚠️ 跳过重复内容章节 '{current_title}'")
+                        merged_with_existing = True
+            
+            # 如果没有合并，添加为新章节
+            if not merged_with_existing:
                 merged.append(current)
         
-        self.logger.info(f"📋 章节合并完成: {len(sections)} -> {len(merged)}")
-        return merged
+        # 后处理：检查章节大小，合并过小的章节
+        final_merged = self._consolidate_small_sections(merged)
+        
+        self.logger.info(f"✅ 章节合并完成: {len(sections)} -> {len(final_merged)}个章节")
+        return final_merged
+    
+    def _is_similar_title(self, title1: str, title2: str) -> bool:
+        """检查两个标题是否相似"""
+        if not title1 or not title2:
+            return False
+        
+        # 移除常见的数字、标点等，比较核心词汇
+        clean_title1 = re.sub(r'[0-9\.\s\-_]+', '', title1).lower()
+        clean_title2 = re.sub(r'[0-9\.\s\-_]+', '', title2).lower()
+        
+        # 如果清理后的标题相同或包含关系
+        return (clean_title1 == clean_title2 or 
+                clean_title1 in clean_title2 or 
+                clean_title2 in clean_title1)
+    
+    def _is_generic_title(self, title: str) -> bool:
+        """检查是否为通用标题"""
+        generic_titles = ['内容', '章节', '部分', '片段', '文档内容', '未命名']
+        return any(generic in title for generic in generic_titles)
+    
+    def _has_content_overlap(self, content1: str, content2: str) -> bool:
+        """检查两个内容是否有重复"""
+        if not content1 or not content2:
+            return False
+        
+        # 简单检查：如果一个内容是另一个的子集
+        return content2 in content1 or content1 in content2
+    
+    def _consolidate_small_sections(self, sections: List[Dict]) -> List[Dict]:
+        """合并过小的章节到相邻章节"""
+        if not sections:
+            return sections
+        
+        min_section_size = 100  # 最小章节大小
+        consolidated = []
+        
+        for current in sections:
+            content_length = len(current.get('content', ''))
+            
+            if content_length < min_section_size and consolidated:
+                # 将小章节合并到上一章节
+                last_section = consolidated[-1]
+                last_section['content'] += '\n\n' + current.get('content', '')
+                self.logger.debug(f"📎 合并小章节 '{current.get('section_title')}' 到 '{last_section.get('section_title')}'")
+            else:
+                consolidated.append(current)
+        
+        return consolidated
     
     async def _call_ai_model(self, messages):
         """

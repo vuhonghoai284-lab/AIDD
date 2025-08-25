@@ -150,10 +150,15 @@ class TaskProcessor:
                 result=preprocess_result
             )
             
-            # 第二步：基于预处理章节进行问题检测
+            # 第二步：基于预处理合并后的章节进行问题检测
             self.task_repo.update(task_id, progress=60)
             await manager.send_progress(task_id, 60, "问题检测")
-            await self._log(task_id, "INFO", f"开始检测{len(sections)}个章节的问题", "问题检测", 60)
+            
+            # 统计章节信息
+            total_chars = sum(len(section.get('content', '')) for section in sections)
+            avg_chars = total_chars // len(sections) if sections else 0
+            
+            await self._log(task_id, "INFO", f"开始检测{len(sections)}个合并章节的问题（总计{total_chars}字符，平均{avg_chars}字符/章节）", "问题检测", 60)
             
             # 直接调用问题检测器的detect_issues方法，传入章节列表
             issues = await issue_detector.detect_issues(
