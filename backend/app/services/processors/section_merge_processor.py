@@ -177,27 +177,23 @@ class SectionMergeProcessor(ITaskProcessor):
         current_length = len(current_section['content'])
         current_level = current_section.get('level', 1)
         next_level = next_section.get('level', 1)
-        current_title = current_section.get('section_title', '').strip()
-        next_title = next_section.get('section_title', '').strip()
         
         # === AI完整性标记优先规则 ===
         
         # 规则0: 基于AI完整性标记的合并决策
-        current_ai_status = current_section.get('ai_completeness_status', 'unknown')
-        next_ai_status = next_section.get('ai_completeness_status', 'unknown')
-        current_ai_confidence = current_section.get('ai_confidence', 0.0)
-        next_ai_confidence = next_section.get('ai_confidence', 0.0)
+        current_completeness = current_section.get('completeness_status', 'unknown')
+        next_completeness = next_section.get('completeness_status', 'unknown')
         
-        # 如果当前章节被AI标记为不完整，且置信度高
-        if current_ai_status == 'incomplete' and current_ai_confidence > 0.7:
+        # 如果当前章节被AI标记为不完整，应该与下一章节合并
+        if current_completeness == 'incomplete':
             if potential_length <= max_chars * 1.1:  # 允许轻微超出
-                self.logger.debug(f"🤖 AI驱动合并: 当前章节不完整 (置信度: {current_ai_confidence:.2f})")
+                self.logger.debug(f"🤖 AI驱动合并: 当前章节不完整")
                 return True
         
-        # 如果下一章节被AI标记为需要合并，且置信度高
-        if next_ai_status == 'need_merge' and next_ai_confidence > 0.7:
-            if potential_length <= max_chars * 1.1:
-                self.logger.debug(f"🤖 AI驱动合并: 下一章节需要合并 (置信度: {next_ai_confidence:.2f})")
+        # 如果下一章节被标记为不完整，也可能需要合并以形成完整内容
+        if next_completeness == 'incomplete' and next_content_length < min_chars * 2:
+            if potential_length <= max_chars:
+                self.logger.debug(f"🤖 AI驱动合并: 下一章节不完整且较短")
                 return True
         
         # === 传统强制合并规则 ===
@@ -225,20 +221,9 @@ class SectionMergeProcessor(ITaskProcessor):
             self.logger.debug(f"❌ 拒绝合并: 章节层级提升 ({next_level} < {current_level})")
             return False
         
-        # === 智能合并规则 ===
+        # === 基础合并规则 ===
         
-        # 规则5: 内容关联性检查
-        content_similarity = self._calculate_content_similarity(current_section, next_section)
-        if content_similarity > 0.3:  # 相似度阈值
-            self.logger.debug(f"🔗 智能合并: 内容相关性高 ({content_similarity:.2f})")
-            return True
-        
-        # 规则6: 章节完整性优化
-        if self._should_merge_for_completeness(current_section, next_section, max_chars):
-            self.logger.debug(f"🔗 智能合并: 提升章节完整性")
-            return True
-        
-        # 规则7: 同级章节的适度合并
+        # 规则5: 同级章节的适度合并（如果当前章节较短）
         if (preserve_structure and next_level >= current_level and 
             current_length < max_chars * 0.6):  # 当前章节未达60%时可以合并
             self.logger.debug(f"🔗 适度合并: 同级章节且当前较短")
@@ -433,99 +418,5 @@ class SectionMergeProcessor(ITaskProcessor):
                     return True
             except ValueError:
                 pass
-        
-        return False
-    
-    def _calculate_content_similarity(self, current_section: Dict[str, Any], next_section: Dict[str, Any]) -> float:
-        """
-        计算两个章节内容的相似度
-        
-        Args:
-            current_section: 当前章节
-            next_section: 下一个章节
-            
-        Returns:
-            相似度分数（0-1）
-        """
-        current_content = current_section.get('content', '')
-        next_content = next_section.get('content', '')
-        
-        if not current_content or not next_content:
-            return 0.0
-        
-        # 简单的关键词重叠度计算
-        current_words = set(current_content.lower().split())
-        next_words = set(next_content.lower().split())
-        
-        if not current_words or not next_words:
-            return 0.0
-        
-        # 计算交集比例
-        intersection = current_words.intersection(next_words)
-        union = current_words.union(next_words)
-        
-        similarity = len(intersection) / len(union) if union else 0.0
-        return min(similarity, 1.0)
-    
-    def _should_merge_for_completeness(self, current_section: Dict[str, Any], next_section: Dict[str, Any], max_chars: int) -> bool:
-        """
-        判断是否应该为了保持完整性而合并
-        
-        Args:
-            current_section: 当前章节
-            next_section: 下一个章节
-            max_chars: 最大字符限制
-            
-        Returns:
-            是否应该合并
-        """
-        current_content = current_section.get('content', '')
-        next_content = next_section.get('content', '')
-        current_length = len(current_content)
-        next_length = len(next_content)
-        
-        # 如果当前章节很短但下一章节也不长，可以合并以形成更有意义的检测单元
-        if current_length < max_chars * 0.3 and next_length < max_chars * 0.5:
-            return True
-        
-        # 如果合并后仍在合理范围内，且可以提升完整性
-        if current_length + next_length < max_chars * 0.8:
-            # 检查内容类型一致性
-            if self._has_similar_content_type(current_section, next_section):
-                return True
-        
-        return False
-    
-    def _has_similar_content_type(self, current_section: Dict[str, Any], next_section: Dict[str, Any]) -> bool:
-        """
-        检查两个章节是否有相似的内容类型
-        
-        Args:
-            current_section: 当前章节
-            next_section: 下一个章节
-            
-        Returns:
-            是否有相似内容类型
-        """
-        current_content = current_section.get('content', '')
-        next_content = next_section.get('content', '')
-        
-        # 检查是否都包含代码
-        current_has_code = '```' in current_content or '`' in current_content
-        next_has_code = '```' in next_content or '`' in next_content
-        
-        # 检查是否都包含列表
-        current_has_list = any(line.strip().startswith(('- ', '* ', '1. ')) for line in current_content.split('\n'))
-        next_has_list = any(line.strip().startswith(('- ', '* ', '1. ')) for line in next_content.split('\n'))
-        
-        # 检查是否都包含表格
-        current_has_table = '|' in current_content
-        next_has_table = '|' in next_content
-        
-        # 如果内容类型匹配，返回True
-        if (current_has_code and next_has_code) or \
-           (current_has_list and next_has_list) or \
-           (current_has_table and next_has_table):
-            return True
         
         return False
