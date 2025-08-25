@@ -7,6 +7,7 @@ export default defineConfig({
   server: {
     host: process.env.VITE_HOST || '0.0.0.0',  // 监听所有网络接口
     port: Number(process.env.VITE_PORT) || 3000,
+    strictPort: false, // 如果端口被占用，自动尝试下一个端口
     proxy: {
       '/api': {
         target: process.env.VITE_PROXY_TARGET || 'http://localhost:8080',

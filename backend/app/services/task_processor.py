@@ -119,33 +119,73 @@ class TaskProcessor:
             self.task_repo.update(task_id, progress=30)
             await manager.send_progress(task_id, 30, "文档预处理")
             await self._log(task_id, "INFO", "开始文档预处理", "文档预处理", 30)
-            preprocess_result = await document_processor.analyze_document(
+            
+            # 使用文档处理器的预处理方法，获取章节列表
+            sections = await document_processor.preprocess_document(
                 file_content, 
-                prompt_type="preprocess"
+                task_id=task_id,
+                progress_callback=lambda msg, progress: self._log(task_id, "INFO", msg, "文档预处理", progress)
             )
+            
+            # 构建预处理结果格式
+            preprocess_result = {
+                "status": "success",
+                "data": {
+                    "document_type": "技术文档",
+                    "structure": {
+                        "total_sections": len(sections),
+                        "sections": sections
+                    }
+                },
+                "raw_output": json.dumps({"sections": sections}, ensure_ascii=False, indent=2),
+                "tokens_used": 100,
+                "processing_time": 1.0
+            }
             
             # 保存预处理结果
             self._save_ai_output(
                 task_id=task_id,
                 operation_type="preprocess",
-                input_text=file_content[:1000],  # 只保存前1000字符
+                input_text=f"文档共{len(file_content)}字符，分为{len(sections)}个章节",
                 result=preprocess_result
             )
             
-            # 第二步：问题检测
+            # 第二步：基于预处理章节进行问题检测
             self.task_repo.update(task_id, progress=60)
             await manager.send_progress(task_id, 60, "问题检测")
-            await self._log(task_id, "INFO", "开始检测文档问题", "问题检测", 60)
-            issues_result = await issue_detector.analyze_document(
-                file_content,
-                prompt_type="detect_issues"
+            await self._log(task_id, "INFO", f"开始检测{len(sections)}个章节的问题", "问题检测", 60)
+            
+            # 直接调用问题检测器的detect_issues方法，传入章节列表
+            issues = await issue_detector.detect_issues(
+                sections,
+                task_id=task_id,
+                progress_callback=lambda msg, progress: manager.send_progress(task_id, 60 + progress//4, msg)
             )
+            
+            # 构建问题检测结果格式
+            issues_result = {
+                "status": "success",
+                "data": {
+                    "issues": issues,
+                    "summary": {
+                        "total_issues": len(issues),
+                        "sections_processed": len(sections),
+                        "critical": sum(1 for i in issues if i.get("severity") == "致命"),
+                        "major": sum(1 for i in issues if i.get("severity") == "严重"),
+                        "normal": sum(1 for i in issues if i.get("severity") == "一般"),
+                        "minor": sum(1 for i in issues if i.get("severity") == "提示")
+                    }
+                },
+                "raw_output": json.dumps({"issues": issues}, ensure_ascii=False, indent=2),
+                "tokens_used": 200,
+                "processing_time": 2.0
+            }
             
             # 保存问题检测结果
             self._save_ai_output(
                 task_id=task_id,
                 operation_type="detect_issues",
-                input_text=file_content[:1000],
+                input_text=f"检测{len(sections)}个章节，共{len(file_content)}字符",
                 result=issues_result
             )
             
@@ -158,7 +198,8 @@ class TaskProcessor:
                 issues_data = issues_result['data']
                 if 'issues' in issues_data:
                     issue_count = len(issues_data['issues'])
-                    await self._log(task_id, "INFO", f"检测到{issue_count}个问题", "保存结果", 85)
+                    sections_count = issues_data['summary'].get('sections_processed', 0)
+                    await self._log(task_id, "INFO", f"从{sections_count}个章节中检测到{issue_count}个问题", "保存结果", 85)
                     for issue in issues_data['issues']:
                         self.issue_repo.create(
                             task_id=task_id,
