@@ -160,27 +160,32 @@ class IssueDetector:
                 self.logger.debug(f"🔧 [{index + 1}] 加载系统提示模板")
                 system_prompt = prompt_loader.get_system_prompt('document_detect_issues')
                 
-                # 构建用户提示 - 动态计算章节内容长度限制
-                # 计算可用的上下文长度（预留给系统提示、格式说明等）
+                # 检查章节内容长度，但不截取 - 相信前置的分割和合并已经优化过
+                section_content_chars = len(section_content)
+                context_window = self.model_config.get('config', {}).get('context_window', 8000)
+                
+                # 计算理论上下文使用量（仅用于日志和警告）
                 system_prompt_length = len(system_prompt) if system_prompt else 0
                 format_instructions_length = len(self.issues_parser.get_format_instructions())
-                reserved_length = system_prompt_length + format_instructions_length + 500  # 额外预留500字符
+                reserved_length = system_prompt_length + format_instructions_length + 500
+                estimated_total_chars = reserved_length + section_content_chars
+                estimated_tokens = estimated_total_chars // 4  # 粗略估算
                 
-                # 可用于章节内容的字符数（基于模型的上下文窗口）
-                context_window = self.model_config.get('config', {}).get('context_window', 8000)
-                available_chars = max(8000, (context_window - reserved_length) * 3)
-                section_content_limited = section_content[:available_chars] if len(section_content) > available_chars else section_content
+                self.logger.debug(f"📏 [{index + 1}] 上下文使用 - 章节: {section_content_chars}字符, 预计总计: {estimated_tokens} tokens (窗口: {context_window})")
                 
-                self.logger.debug(f"📏 [{index + 1}] 上下文计算 - 窗口: {context_window}, 预留: {reserved_length}, 可用: {available_chars}")
+                # 如果内容很长，记录警告但不截取（相信前面的分割合并已经处理过）
+                if estimated_tokens > context_window * 0.9:  # 超过90%容量才警告
+                    self.logger.warning(f"⚠️ [{index + 1}] 章节 '{section_title}' 内容较长({section_content_chars}字符, ~{estimated_tokens} tokens)，可能接近模型上下文限制")
+                    self.logger.info(f"   💡 依赖前置的文档分割和章节合并优化，不在此步骤截取内容")
                 
-                if len(section_content) > available_chars:
-                    self.logger.info(f"⚠️ [{index + 1}] 章节 '{section_title}' 内容过长({len(section_content)}字符)，截取前{available_chars}字符进行检测")
+                # 使用完整的章节内容，不截取
+                section_content_full = section_content
                 
                 user_prompt = prompt_loader.get_user_prompt(
                     'document_detect_issues',
                     section_title=section_title,
                     format_instructions=self.issues_parser.get_format_instructions(),
-                    section_content=section_content_limited
+                    section_content=section_content_full
                 )
 
                 # 创建消息
@@ -207,7 +212,7 @@ class IssueDetector:
                         operation_type="detect_issues",
                         section_title=section_title,
                         section_index=index,
-                        input_text=section_content_limited[:1000],  # 保存前1000字符作为样本
+                        input_text=section_title + f" ({len(section_content)}字符)",  # 保存标题和长度信息
                         raw_output=response.content,
                         processing_time=processing_time,
                         status="success"
@@ -287,7 +292,7 @@ class IssueDetector:
                         operation_type="detect_issues",
                         section_title=section_title,
                         section_index=index,
-                        input_text=section_content[:1000],  # 保存前1000字符作为样本
+                        input_text=section_title + f" ({len(section_content)}字符)",  # 保存标题和长度信息
                         raw_output="",
                         status="failed",
                         error_message=str(e),

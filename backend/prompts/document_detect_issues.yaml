@@ -118,7 +118,7 @@ parameters:
   section_content:
     description: "需要检测的章节内容"
     required: true
-    max_length: 8000
+    # max_length: 移除长度限制，依赖前置的文档分割和章节合并优化
 
 # 版本信息
 version: "1.0"
