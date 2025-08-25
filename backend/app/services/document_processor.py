@@ -186,13 +186,21 @@ class DocumentProcessor:
                 else:
                     self.logger.warning(f"⚠️ 第{chunk_idx + 1}批次未识别到有效章节")
             
-            # 第二阶段：验证和清理章节 (16%-20%的进度)
+            # 第二阶段：大模型质量检查和优化 (16%-18%的进度)
             if progress_callback:
-                await progress_callback(f"验证{len(all_sections)}个章节...", 16)
+                await progress_callback(f"大模型评估{len(all_sections)}个章节的分割质量...", 16)
             
-            self.logger.info(f"🔍 开始验证{total_chunks}个批次得到的{len(all_sections)}个章节")
-            merged_sections = self.validate_sections(all_sections)
-            self.logger.info(f"✅ 章节验证完成：{len(all_sections)} -> {len(merged_sections)}个有效章节")
+            self.logger.info(f"🤖 开始大模型质量检查{total_chunks}个批次得到的{len(all_sections)}个章节")
+            optimized_sections = await self._ai_optimize_sections(all_sections, text)
+            self.logger.info(f"✅ AI优化完成：{len(all_sections)} -> {len(optimized_sections)}个优化章节")
+            
+            # 第三阶段：验证和清理章节 (18%-20%的进度)
+            if progress_callback:
+                await progress_callback(f"验证{len(optimized_sections)}个优化章节...", 18)
+            
+            self.logger.info(f"🔍 开始验证优化后的{len(optimized_sections)}个章节")
+            merged_sections = self.validate_sections(optimized_sections)
+            self.logger.info(f"✅ 章节验证完成：{len(optimized_sections)} -> {len(merged_sections)}个有效章节")
             
             processing_time = time.time() - start_time
             self.logger.info(f"📥 文档预处理完成，共处理{total_chunks}个片段，得到{len(merged_sections)}个章节 (耗时: {processing_time:.2f}s)")
@@ -456,7 +464,319 @@ class DocumentProcessor:
         
         return batches
     
+    async def _ai_optimize_sections(self, sections: List[Dict], original_text: str) -> List[Dict]:
+        """
+        使用大模型评估和优化章节分割质量
+        
+        Args:
+            sections: 初步识别的章节列表
+            original_text: 原始文档文本
+            
+        Returns:
+            优化后的章节列表
+        """
+        if not sections:
+            return sections
+        
+        try:
+            # 构建质量评估提示
+            quality_assessment = await self._assess_section_quality(sections, original_text)
+            
+            if quality_assessment.get('needs_optimization', False):
+                self.logger.info(f"🔄 大模型建议优化章节分割：{quality_assessment.get('reason', '未知原因')}")
+                
+                # 根据大模型建议进行优化
+                optimized_sections = await self._apply_ai_optimization(sections, quality_assessment)
+                
+                return optimized_sections
+            else:
+                self.logger.info(f"✅ 大模型确认章节分割质量良好")
+                return sections
+                
+        except Exception as e:
+            self.logger.error(f"❌ AI优化过程失败: {str(e)}，使用原始章节")
+            return sections
     
+    async def _assess_section_quality(self, sections: List[Dict], original_text: str) -> Dict:
+        """
+        让大模型评估章节分割质量
+        
+        Args:
+            sections: 章节列表
+            original_text: 原始文档文本
+            
+        Returns:
+            质量评估结果
+        """
+        # 构建章节摘要信息
+        section_summaries = []
+        for i, section in enumerate(sections):
+            title = section.get('section_title', f'章节{i+1}')
+            content_preview = section.get('content', '')[:200] + "..." if len(section.get('content', '')) > 200 else section.get('content', '')
+            content_length = len(section.get('content', ''))
+            level = section.get('level', 1)
+            
+            section_summaries.append(f"""
+章节 {i+1}: {title} (层级: {level}, 长度: {content_length}字符)
+内容预览: {content_preview}
+""")
+        
+        # 构建评估提示
+        system_prompt = """你是一个文档结构分析专家。请逐个评估以下章节的完整性和分割质量：
+
+## 主要检测点：
+1. **章节完整性检测**：章节内容是否在句子、段落或逻辑单元中间被切断
+2. **边界合理性**：章节开始和结束位置是否符合文档逻辑结构  
+3. **内容连续性**：是否有相关内容被不合理分离到不同章节
+4. **分割准确性**：章节边界是否准确识别了标题和内容的分界线
+
+## 完整性判断标准：
+- **完整(complete)**：章节有明确开头和结尾，内容逻辑完整
+- **不完整(incomplete)**：内容在句子/段落中间截断，或缺少开头/结尾
+- **需合并(need_merge)**：与相邻章节应该合并为一个逻辑单元
+- **需分割(need_split)**：包含了应该分开的多个逻辑单元
+
+请以JSON格式返回评估结果：
+{
+  "needs_optimization": true/false,
+  "overall_quality": "good/fair/poor",
+  "section_completeness": [
+    {
+      "section_index": 0,
+      "completeness_status": "complete/incomplete/need_merge/need_split", 
+      "confidence": 0.9,
+      "issues": ["具体问题描述"],
+      "content_boundary_analysis": "开头/结尾边界分析"
+    }
+  ],
+  "recommendations": {
+    "merge_pairs": [[索引1, 索引2]],
+    "split_suggestions": [{"section_index": 索引, "reason": "原因"}]
+  },
+  "reason": "主要问题总结"
+}"""
+        
+        user_prompt = f"""
+## 文档基本信息
+- 文档总长度: {len(original_text)}字符
+- 识别到的章节数量: {len(sections)}
+
+## 章节详细信息
+{''.join(section_summaries)}
+
+## 任务要求
+请逐个分析每个章节的完整性状态，重点检查：
+1. 每个章节的开头是否是自然的开始点（如标题、段落开头）
+2. 每个章节的结尾是否是自然的结束点（如段落结尾、完整句子）
+3. 章节内容是否构成一个完整的逻辑单元
+4. 是否有章节应该合并或分割
+
+请为每个章节提供明确的完整性标记和建议。
+"""
+        
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt)
+        ]
+        
+        response = await self._call_ai_model(messages)
+        
+        # 解析AI响应
+        return self._parse_quality_assessment(response.content)
+    
+    def _parse_quality_assessment(self, content: str) -> Dict:
+        """
+        解析质量评估响应
+        
+        Args:
+            content: AI响应内容
+            
+        Returns:
+            解析后的评估结果
+        """
+        try:
+            import json
+            import re
+            
+            # 查找JSON内容
+            json_match = re.search(r'\{.*\}', content, re.DOTALL)
+            if json_match:
+                json_str = json_match.group()
+                result = json.loads(json_str)
+                self.logger.debug(f"🔍 AI质量评估结果: {result}")
+                return result
+            else:
+                self.logger.warning("⚠️ AI响应中未找到JSON格式的评估结果")
+                return {'needs_optimization': False, 'overall_quality': 'fair'}
+                
+        except json.JSONDecodeError as e:
+            self.logger.error(f"❌ 质量评估JSON解析失败: {str(e)}")
+            return {'needs_optimization': False, 'overall_quality': 'fair'}
+        except Exception as e:
+            self.logger.error(f"❌ 质量评估解析完全失败: {str(e)}")
+            return {'needs_optimization': False, 'overall_quality': 'fair'}
+    
+    async def _apply_ai_optimization(self, sections: List[Dict], assessment: Dict) -> List[Dict]:
+        """
+        根据AI评估结果应用优化
+        
+        Args:
+            sections: 原始章节列表
+            assessment: AI评估结果
+            
+        Returns:
+            优化后的章节列表
+        """
+        optimized_sections = sections.copy()
+        
+        # 首先处理章节完整性标记
+        section_completeness = assessment.get('section_completeness', [])
+        if section_completeness:
+            self.logger.info(f"📋 处理{len(section_completeness)}个章节的完整性标记")
+            optimized_sections = self._apply_completeness_fixes(optimized_sections, section_completeness)
+        
+        # 然后应用其他建议
+        recommendations = assessment.get('recommendations', {})
+        
+        # 应用合并建议
+        merge_pairs = recommendations.get('merge_pairs', [])
+        if merge_pairs:
+            self.logger.info(f"📋 应用AI合并建议: {len(merge_pairs)}对章节")
+            optimized_sections = self._apply_merge_recommendations(optimized_sections, merge_pairs)
+        
+        return optimized_sections
+    
+    def _apply_completeness_fixes(self, sections: List[Dict], completeness_data: List[Dict]) -> List[Dict]:
+        """
+        根据大模型的完整性标记应用修复
+        
+        Args:
+            sections: 原始章节列表
+            completeness_data: 完整性检测结果
+            
+        Returns:
+            修复后的章节列表
+        """
+        # 为每个章节添加完整性标记
+        for completion_info in completeness_data:
+            section_idx = completion_info.get('section_index', -1)
+            if 0 <= section_idx < len(sections):
+                section = sections[section_idx]
+                
+                # 添加AI分析结果到章节信息中
+                section['ai_completeness_status'] = completion_info.get('completeness_status', 'unknown')
+                section['ai_confidence'] = completion_info.get('confidence', 0.0)
+                section['ai_issues'] = completion_info.get('issues', [])
+                section['ai_boundary_analysis'] = completion_info.get('content_boundary_analysis', '')
+                
+                # 记录日志
+                status = completion_info.get('completeness_status', 'unknown')
+                confidence = completion_info.get('confidence', 0.0)
+                issues = completion_info.get('issues', [])
+                
+                if status == 'incomplete':
+                    self.logger.warning(f"⚠️ 章节{section_idx} '{section.get('section_title', '')}' 标记为不完整 (置信度: {confidence:.2f})")
+                    if issues:
+                        self.logger.warning(f"   问题: {'; '.join(issues)}")
+                elif status == 'need_merge':
+                    self.logger.info(f"🔗 章节{section_idx} '{section.get('section_title', '')}' 建议合并 (置信度: {confidence:.2f})")
+                elif status == 'need_split':
+                    self.logger.info(f"✂️ 章节{section_idx} '{section.get('section_title', '')}' 建议分割 (置信度: {confidence:.2f})")
+                elif status == 'complete':
+                    self.logger.debug(f"✅ 章节{section_idx} '{section.get('section_title', '')}' 完整性良好 (置信度: {confidence:.2f})")
+                
+        self.logger.info(f"📊 完整性标记统计:")
+        status_counts = {}
+        for completion_info in completeness_data:
+            status = completion_info.get('completeness_status', 'unknown')
+            status_counts[status] = status_counts.get(status, 0) + 1
+        
+        for status, count in status_counts.items():
+            self.logger.info(f"   - {status}: {count}个章节")
+        
+        return sections
+    
+    def _apply_merge_recommendations(self, sections: List[Dict], merge_pairs: List[List[int]]) -> List[Dict]:
+        """
+        应用合并建议
+        
+        Args:
+            sections: 章节列表
+            merge_pairs: 需要合并的章节索引对
+            
+        Returns:
+            合并后的章节列表
+        """
+        merged_sections = []
+        merged_indices = set()
+        
+        # 按索引排序合并对，从后往前处理避免索引变化
+        merge_pairs.sort(key=lambda x: max(x), reverse=True)
+        
+        for pair in merge_pairs:
+            if len(pair) >= 2:
+                idx1, idx2 = pair[0], pair[1]
+                
+                # 确保索引有效且未被处理
+                if (0 <= idx1 < len(sections) and 0 <= idx2 < len(sections) and 
+                    idx1 not in merged_indices and idx2 not in merged_indices):
+                    
+                    # 合并内容
+                    section1 = sections[idx1]
+                    section2 = sections[idx2]
+                    
+                    merged_section = {
+                        'section_title': f"{section1.get('section_title', '')} (AI合并)",
+                        'content': section1.get('content', '') + '\n\n' + section2.get('content', ''),
+                        'level': min(section1.get('level', 1), section2.get('level', 1)),
+                        'merged_by_ai': True,
+                        'original_indices': [idx1, idx2]
+                    }
+                    
+                    # 标记为已合并
+                    merged_indices.update([idx1, idx2])
+                    
+                    self.logger.debug(f"🔗 AI建议合并章节 {idx1} 和 {idx2}")
+        
+        # 构建最终章节列表
+        for i, section in enumerate(sections):
+            if i not in merged_indices:
+                merged_sections.append(section)
+        
+        # 添加合并后的章节
+        for pair in merge_pairs:
+            if len(pair) >= 2:
+                idx1, idx2 = pair[0], pair[1]
+                if (0 <= idx1 < len(sections) and 0 <= idx2 < len(sections)):
+                    section1 = sections[idx1]
+                    section2 = sections[idx2]
+                    
+                    merged_section = {
+                        'section_title': f"{section1.get('section_title', '')} (AI合并)",
+                        'content': section1.get('content', '') + '\n\n' + section2.get('content', ''),
+                        'level': min(section1.get('level', 1), section2.get('level', 1)),
+                        'merged_by_ai': True,
+                        'original_indices': [idx1, idx2]
+                    }
+                    merged_sections.append(merged_section)
+        
+        return merged_sections
+    
+    async def _apply_boundary_adjustments(self, sections: List[Dict], adjustments: List[Dict]) -> List[Dict]:
+        """
+        应用边界调整建议
+        
+        Args:
+            sections: 章节列表
+            adjustments: 边界调整建议
+            
+        Returns:
+            调整后的章节列表
+        """
+        # 这里可以实现更复杂的边界调整逻辑
+        # 目前返回原始章节，避免过度复杂化
+        self.logger.info(f"📋 收到{len(adjustments)}项边界调整建议，暂时保持原有边界")
+        return sections
     
     async def _call_ai_model(self, messages):
         """

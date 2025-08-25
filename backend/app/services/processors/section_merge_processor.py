@@ -180,7 +180,27 @@ class SectionMergeProcessor(ITaskProcessor):
         current_title = current_section.get('section_title', '').strip()
         next_title = next_section.get('section_title', '').strip()
         
-        # === 强制合并规则 ===
+        # === AI完整性标记优先规则 ===
+        
+        # 规则0: 基于AI完整性标记的合并决策
+        current_ai_status = current_section.get('ai_completeness_status', 'unknown')
+        next_ai_status = next_section.get('ai_completeness_status', 'unknown')
+        current_ai_confidence = current_section.get('ai_confidence', 0.0)
+        next_ai_confidence = next_section.get('ai_confidence', 0.0)
+        
+        # 如果当前章节被AI标记为不完整，且置信度高
+        if current_ai_status == 'incomplete' and current_ai_confidence > 0.7:
+            if potential_length <= max_chars * 1.1:  # 允许轻微超出
+                self.logger.debug(f"🤖 AI驱动合并: 当前章节不完整 (置信度: {current_ai_confidence:.2f})")
+                return True
+        
+        # 如果下一章节被AI标记为需要合并，且置信度高
+        if next_ai_status == 'need_merge' and next_ai_confidence > 0.7:
+            if potential_length <= max_chars * 1.1:
+                self.logger.debug(f"🤖 AI驱动合并: 下一章节需要合并 (置信度: {next_ai_confidence:.2f})")
+                return True
+        
+        # === 传统强制合并规则 ===
         
         # 规则1: 极短章节必须合并（可能是分割导致的片段）
         if next_content_length < min_chars:
