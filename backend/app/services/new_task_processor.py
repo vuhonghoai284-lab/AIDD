@@ -3,6 +3,7 @@
 """
 import asyncio
 import json
+import logging
 import time
 from datetime import datetime
 from pathlib import Path
@@ -33,6 +34,10 @@ class NewTaskProcessor:
         self.model_repo = AIModelRepository(db)
         self.settings = get_settings()
         self.start_time = None  # 记录任务开始时间
+        
+        # 初始化日志
+        self.logger = logging.getLogger(f"new_task_processor.{id(self)}")
+        self.logger.setLevel(logging.INFO)
     
     async def process_task(self, task_id: int):
         """处理任务"""
