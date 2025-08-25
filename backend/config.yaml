@@ -105,8 +105,8 @@ task_processing:
   # 章节合并配置
   section_merge:
     enabled: true  # 是否启用章节合并
-    max_chars: 5000  # 合并后章节最大字符数
-    min_chars: 100  # 最小章节字符数（短于此数值的章节总是被合并）
+    max_chars: 15000  # 合并后章节最大字符数（约3000-4000 tokens，适合AI处理）
+    min_chars: 500   # 最小章节字符数（短于此数值的章节总是被合并）
     preserve_structure: true  # 是否保持章节层级结构
   
 # CORS配置
