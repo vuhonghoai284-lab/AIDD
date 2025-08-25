@@ -92,6 +92,10 @@ frontend/dist/
 backend/dist/
 backend/build/
 
+# Vite cache
+frontend/.vite/
+.vite/
+
 # Temporary files
 tmp/
 temp/
