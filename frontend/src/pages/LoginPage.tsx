@@ -80,12 +80,20 @@ const LoginPage: React.FC = () => {
       // 标记为已处理，防止重复执行
       setHasProcessedCode(true);
       
-      console.log('🔄 LoginPage检测到第三方登录回调，重定向到专用处理器');
+      console.log('🔄 LoginPage检测到第三方登录回调，立即显示登录状态');
       
-      // 立即重定向到CallbackHandler，让专用组件处理
-      const currentUrl = new URL(window.location.href);
-      const callbackUrl = `/third-login/callback${currentUrl.search}`;
-      window.location.replace(callbackUrl);
+      // 立即显示登录中状态，提升用户体验
+      setThirdPartyLoginState('processing');
+      setThirdPartyError('');
+      
+      // 稍微延迟重定向，让用户看到登录状态变化
+      setTimeout(() => {
+        console.log('🔄 重定向到专用回调处理器');
+        const currentUrl = new URL(window.location.href);
+        const callbackUrl = `/third-login/callback${currentUrl.search}`;
+        window.location.replace(callbackUrl);
+      }, 100); // 100ms延迟，足够显示状态但不影响体验
+      
       return;
     }
   }, [hasProcessedCode]);

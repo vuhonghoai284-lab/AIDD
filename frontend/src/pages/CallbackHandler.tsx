@@ -1,15 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { message } from 'antd';
+import { message, Spin, Card, Progress } from 'antd';
+import { LoadingOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import { loginWithThirdParty } from '../services/authService';
 
 /**
  * 第三方登录回调处理组件
- * 静默处理从第三方认证服务重定向回来的回调请求，不显示UI
+ * 优化版：显示登录进度，提供更好的用户体验
  */
 const CallbackHandler: React.FC = () => {
   const navigate = useNavigate();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [loginStatus, setLoginStatus] = useState<'processing' | 'success' | 'error'>('processing');
+  const [loginMessage, setLoginMessage] = useState('正在处理登录信息...');
+  const [progress, setProgress] = useState(10);
 
   useEffect(() => {
     // 防止React StrictMode导致的重复执行
@@ -85,14 +89,25 @@ const CallbackHandler: React.FC = () => {
         return;
       }
 
+      // 更新进度：获取授权码成功
+      setProgress(30);
+      setLoginMessage('正在验证授权码...');
+
       // 触发登录开始事件，让LoginPage显示进度
       window.dispatchEvent(new CustomEvent('thirdPartyLoginStart'));
 
       // 5. 使用授权码进行登录
+      setProgress(60);
+      setLoginMessage('正在登录系统...');
+      
       const result = await loginWithThirdParty(code);
 
       if (result.success) {
         // 6. 登录成功，保存用户信息
+        setProgress(85);
+        setLoginMessage('登录成功，正在初始化...');
+        setLoginStatus('success');
+        
         localStorage.setItem('user', JSON.stringify(result.user));
         localStorage.setItem('token', result.access_token || '');
         
@@ -124,6 +139,10 @@ const CallbackHandler: React.FC = () => {
           stateUpdateConfirmed = true;
           console.log('✅ 收到App组件状态更新确认，执行跳转');
           
+          // 更新进度到100%
+          setProgress(100);
+          setLoginMessage('跳转中...');
+          
           // 清除超时定时器
           if (navigationTimeout) {
             clearTimeout(navigationTimeout);
@@ -132,35 +151,55 @@ const CallbackHandler: React.FC = () => {
           // 移除事件监听器
           window.removeEventListener('userStateUpdated', handleStateUpdated as EventListener);
           
-          // 执行跳转
-          const preLoginLocation = sessionStorage.getItem('preLoginLocation');
-          sessionStorage.removeItem('preLoginLocation');
-          navigate(preLoginLocation || '/', { replace: true });
+          // 稍微延迟跳转，让用户看到完成状态
+          setTimeout(() => {
+            const preLoginLocation = sessionStorage.getItem('preLoginLocation');
+            sessionStorage.removeItem('preLoginLocation');
+            navigate(preLoginLocation || '/', { replace: true });
+          }, 200);
         };
         
         // 添加事件监听器
         window.addEventListener('userStateUpdated', handleStateUpdated as EventListener);
         
-        // 优化：减少超时时间，但保持足够的容错空间
+        // 进一步优化：减少超时时间，提升响应速度
         navigationTimeout = setTimeout(() => {
           if (!stateUpdateConfirmed) {
-            console.log('⚠️ 等待状态更新确认超时(1000ms)，强制跳转');
+            console.log('⚠️ 等待状态更新确认超时(300ms)，强制跳转');
+            setProgress(100);
+            setLoginMessage('跳转中...');
             window.removeEventListener('userStateUpdated', handleStateUpdated as EventListener);
-            navigate('/', { replace: true });
+            
+            // 稍微延迟跳转，让用户看到完成状态
+            setTimeout(() => {
+              navigate('/', { replace: true });
+            }, 100);
           }
-        }, 1000); // 1秒超时，平衡速度和可靠性
+        }, 300); // 300ms超时，更快的响应
 
       } else {
+        setLoginStatus('error');
+        setLoginMessage('登录失败');
+        setProgress(0);
+        
         releaseLock(code);
         // 触发登录失败事件，让LoginPage处理UI显示
         window.dispatchEvent(new CustomEvent('thirdPartyLoginError', { 
           detail: { error: result.message || '登录失败' } 
         }));
-        navigate('/login', { replace: true });
+        
+        // 显示错误状态1秒后跳转
+        setTimeout(() => {
+          navigate('/login', { replace: true });
+        }, 1500);
       }
 
     } catch (error) {
       console.error('第三方登录回调处理失败:', error);
+      
+      setLoginStatus('error');
+      setLoginMessage('登录过程中发生错误');
+      setProgress(0);
       
       // 发生异常时释放锁
       const urlParams = new URLSearchParams(window.location.search);
@@ -171,12 +210,94 @@ const CallbackHandler: React.FC = () => {
       window.dispatchEvent(new CustomEvent('thirdPartyLoginError', { 
         detail: { error: '登录过程中发生错误，请稍后重试' } 
       }));
-      navigate('/login', { replace: true });
+      
+      // 显示错误状态1.5秒后跳转
+      setTimeout(() => {
+        navigate('/login', { replace: true });
+      }, 1500);
     }
   };
 
-  // 静默处理，不显示任何UI，直接返回null
-  return null;
+  // 显示登录进度界面，提供更好的用户体验
+  return (
+    <div style={{ 
+      display: 'flex', 
+      justifyContent: 'center', 
+      alignItems: 'center', 
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      padding: '20px'
+    }}>
+      <Card 
+        style={{ 
+          width: '400px', 
+          textAlign: 'center',
+          borderRadius: '12px',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.1)'
+        }}
+        bordered={false}
+      >
+        <div style={{ padding: '20px' }}>
+          {/* 登录图标 */}
+          <div style={{ marginBottom: '20px' }}>
+            {loginStatus === 'success' ? (
+              <CheckCircleOutlined 
+                style={{ 
+                  fontSize: '48px', 
+                  color: '#52c41a',
+                  animation: loginStatus === 'success' ? 'fadeIn 0.5s ease-in' : 'none'
+                }} 
+              />
+            ) : loginStatus === 'error' ? (
+              <div style={{ 
+                fontSize: '48px', 
+                color: '#ff4d4f'
+              }}>
+                ❌
+              </div>
+            ) : (
+              <Spin 
+                indicator={<LoadingOutlined style={{ fontSize: '48px', color: '#1890ff' }} spin />} 
+              />
+            )}
+          </div>
+          
+          {/* 登录状态文字 */}
+          <div style={{ 
+            fontSize: '18px', 
+            fontWeight: '500',
+            color: loginStatus === 'error' ? '#ff4d4f' : loginStatus === 'success' ? '#52c41a' : '#1890ff',
+            marginBottom: '20px'
+          }}>
+            {loginMessage}
+          </div>
+          
+          {/* 进度条 */}
+          {loginStatus !== 'error' && (
+            <Progress 
+              percent={progress} 
+              status={loginStatus === 'success' ? 'success' : 'active'}
+              strokeColor={loginStatus === 'success' ? '#52c41a' : '#1890ff'}
+              trailColor="#f0f0f0"
+              showInfo={false}
+              style={{ marginBottom: '10px' }}
+            />
+          )}
+          
+          {/* 提示文字 */}
+          <div style={{ 
+            fontSize: '14px', 
+            color: '#666',
+            opacity: 0.8
+          }}>
+            {loginStatus === 'processing' && '请稍候，正在为您登录...'}
+            {loginStatus === 'success' && '登录成功！正在跳转到主页面...'}
+            {loginStatus === 'error' && '请检查网络连接后重试'}
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
 };
 
 export default CallbackHandler;

@@ -23,7 +23,7 @@ class TaskView(BaseView):
     
     def _setup_routes(self):
         """设置路由"""
-        self.router.add_api_route("/", self.create_task, methods=["POST"], response_model=TaskResponse)
+        self.router.add_api_route("/", self.create_task, methods=["POST"], response_model=TaskResponse, status_code=201)
         self.router.add_api_route("/", self.get_tasks, methods=["GET"], response_model=List[TaskResponse])
         self.router.add_api_route("/{task_id}", self.get_task_detail, methods=["GET"], response_model=TaskDetail)
         self.router.add_api_route("/{task_id}", self.delete_task, methods=["DELETE"])

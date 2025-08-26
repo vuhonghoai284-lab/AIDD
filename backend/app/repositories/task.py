@@ -144,6 +144,18 @@ class TaskRepository(ITaskRepository):
             
         return result
     
+    def get_by_id_with_relations(self, task_id: int) -> Optional[Task]:
+        """根据ID获取任务（使用JOIN预加载关联数据）"""
+        from sqlalchemy.orm import joinedload
+        return (self.db.query(Task)
+                .options(
+                    joinedload(Task.file_info),
+                    joinedload(Task.ai_model),
+                    joinedload(Task.user)
+                )
+                .filter(Task.id == task_id)
+                .first())
+    
     def update_status(self, task_id: int, status: str, progress: int = None) -> Task:
         """更新任务状态和进度"""
         update_data = {"status": status}
