@@ -104,21 +104,44 @@ export const taskAPI = {
     return response.data;
   },
 
+  // 检查报告下载权限
+  checkReportPermission: async (taskId: number) => {
+    const response = await api.get(`/tasks/${taskId}/report/check`);
+    return response.data;
+  },
+
   // 下载报告
   downloadReport: async (taskId: number) => {
-    const response = await api.get(`/tasks/${taskId}/report`, {
-      responseType: 'blob',
-    });
-    
-    // 创建下载链接
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `report_${taskId}.xlsx`);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
+    try {
+      const response = await api.get(`/tasks/${taskId}/report`, {
+        responseType: 'blob',
+      });
+      
+      // 从响应头获取文件名
+      const contentDisposition = response.headers['content-disposition'];
+      let filename = `report_${taskId}.xlsx`;
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+      
+      // 创建下载链接
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      return { success: true, filename };
+    } catch (error) {
+      // 抛出错误让调用方处理
+      throw error;
+    }
   },
 
   // 获取任务的AI输出记录

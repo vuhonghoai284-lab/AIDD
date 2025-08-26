@@ -45,6 +45,10 @@ const TaskDetailEnhanced: React.FC = () => {
   const [aiOutputs, setAiOutputs] = useState<AIOutput[]>([]);
   const [aiOutputsLoading, setAiOutputsLoading] = useState(false);
   
+  // 报告下载相关状态
+  const [downloadPermission, setDownloadPermission] = useState<any>(null);
+  const [downloadLoading, setDownloadLoading] = useState(false);
+  
   // 分页相关状态
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -62,6 +66,11 @@ const TaskDetailEnhanced: React.FC = () => {
     try {
       const data = await taskAPI.getTaskDetail(parseInt(id));
       setTaskDetail(data as EnhancedTaskDetail);
+      
+      // 如果任务完成，检查下载权限
+      if (data.task.status === 'completed') {
+        await checkDownloadPermission(parseInt(id));
+      }
     } catch (error) {
       message.error('加载任务详情失败');
     }
@@ -101,7 +110,12 @@ const TaskDetailEnhanced: React.FC = () => {
     try {
       await taskAPI.submitFeedback(issueId, feedbackType, comment);
       message.success('反馈已提交');
-      loadTaskDetail();
+      await loadTaskDetail();
+      
+      // 提交反馈后重新检查下载权限（可能影响下载权限）
+      if (id && taskDetail?.task.status === 'completed') {
+        await checkDownloadPermission(parseInt(id));
+      }
     } catch (error) {
       message.error('提交反馈失败');
     }
@@ -131,14 +145,65 @@ const TaskDetailEnhanced: React.FC = () => {
     setFeedbackLoading({ ...feedbackLoading, [issueId]: false });
   };
 
+  // 检查下载权限
+  const checkDownloadPermission = async (taskId: number) => {
+    try {
+      const permission = await taskAPI.checkReportPermission(taskId);
+      setDownloadPermission(permission);
+    } catch (error) {
+      console.error('检查下载权限失败:', error);
+      setDownloadPermission({ 
+        can_download: false, 
+        reason: '检查权限失败' 
+      });
+    }
+  };
+
   const handleDownloadReport = async () => {
     if (!taskDetail) return;
     
+    // 如果没有权限，显示详细提示
+    if (downloadPermission && !downloadPermission.can_download) {
+      if (downloadPermission.total_issues && downloadPermission.unprocessed_count) {
+        message.warning({
+          content: `请先处理完所有问题才能下载报告！还有 ${downloadPermission.unprocessed_count} 个问题需要处理（共 ${downloadPermission.total_issues} 个问题）`,
+          duration: 5,
+        });
+      } else {
+        message.warning({
+          content: downloadPermission.reason || '暂无下载权限',
+          duration: 4,
+        });
+      }
+      return;
+    }
+    
+    setDownloadLoading(true);
     try {
-      await taskAPI.downloadReport(taskDetail.task.id);
-      message.success('报告下载成功');
-    } catch (error) {
-      message.error('下载报告失败');
+      const result = await taskAPI.downloadReport(taskDetail.task.id);
+      message.success(`报告下载成功: ${result.filename}`);
+      
+      // 下载成功后重新检查权限状态
+      await checkDownloadPermission(taskDetail.task.id);
+    } catch (error: any) {
+      console.error('下载报告失败:', error);
+      
+      // 处理权限错误
+      if (error.response?.status === 403) {
+        const errorData = error.response.data;
+        if (errorData.total_issues && errorData.unprocessed_count) {
+          message.error({
+            content: `下载失败：还有 ${errorData.unprocessed_count} 个问题需要处理（共 ${errorData.total_issues} 个问题）`,
+            duration: 5,
+          });
+        } else {
+          message.error(errorData.detail || '下载权限不足');
+        }
+      } else {
+        message.error('下载报告失败，请稍后重试');
+      }
+    } finally {
+      setDownloadLoading(false);
     }
   };
 
@@ -317,9 +382,37 @@ const TaskDetailEnhanced: React.FC = () => {
         }
         extra={
           task.status === 'completed' && (
-            <Button type="primary" icon={<DownloadOutlined />} onClick={handleDownloadReport}>
-              下载报告
-            </Button>
+            <Space>
+              {/* 权限提示信息 */}
+              {downloadPermission && !downloadPermission.can_download && downloadPermission.total_issues && (
+                <Tooltip title={`还有 ${downloadPermission.unprocessed_count} 个问题需要处理`}>
+                  <Badge count={downloadPermission.unprocessed_count} offset={[10, 0]}>
+                    <InfoCircleOutlined style={{ color: '#faad14', fontSize: '16px' }} />
+                  </Badge>
+                </Tooltip>
+              )}
+              
+              {/* 下载按钮 */}
+              <Tooltip 
+                title={
+                  downloadPermission?.can_download 
+                    ? '点击下载Excel格式的质量检测报告' 
+                    : downloadPermission?.reason || '检查权限中...'
+                }
+              >
+                <Button 
+                  type={downloadPermission?.can_download ? "primary" : "default"}
+                  icon={<DownloadOutlined />} 
+                  onClick={handleDownloadReport}
+                  loading={downloadLoading}
+                  disabled={downloadPermission && !downloadPermission.can_download}
+                >
+                  {downloadLoading ? '生成中...' : 
+                   downloadPermission?.can_download ? '下载报告' : 
+                   downloadPermission ? '需处理问题' : '检查中...'}
+                </Button>
+              </Tooltip>
+            </Space>
           )
         }
       >

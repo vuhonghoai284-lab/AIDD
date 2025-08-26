@@ -2,12 +2,14 @@
 任务相关视图
 """
 from fastapi import APIRouter, Depends, UploadFile, File, Form, BackgroundTasks, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import Optional, List
 
 from app.core.database import get_db
 from app.models.user import User
 from app.services.task import TaskService
+from app.services.report_service import ReportService
 from app.dto.task import TaskResponse, TaskDetail
 from app.dto.issue import FeedbackRequest
 from app.views.base import BaseView
@@ -30,6 +32,7 @@ class TaskView(BaseView):
         self.router.add_api_route("/{task_id}", self.delete_task, methods=["DELETE"])
         self.router.add_api_route("/{task_id}/retry", self.retry_task, methods=["POST"])
         self.router.add_api_route("/{task_id}/report", self.download_report, methods=["GET"])
+        self.router.add_api_route("/{task_id}/report/check", self.check_report_permission, methods=["GET"])
         print("🛠️  TaskView 路由已设置：")
         for route in self.router.routes:
             print(f"   {route.methods} {route.path}")
@@ -149,18 +152,79 @@ class TaskView(BaseView):
         db: Session = Depends(get_db)
     ):
         """下载任务报告"""
-        from app.repositories.task import TaskRepository
-        task_repo = TaskRepository(db)
-        task = task_repo.get_by_id(task_id)
-        if not task:
-            raise HTTPException(404, "任务不存在")
+        print(f"📊 用户 {current_user.uid} 请求下载任务 {task_id} 的报告")
         
-        # 检查用户权限
-        self.check_task_access_permission(current_user, task.user_id)
+        # 创建报告服务
+        report_service = ReportService(db)
         
-        # TODO: 实现报告生成逻辑
-        return {"message": "报告生成功能待实现"}
+        # 检查下载权限
+        permission_check = report_service.check_download_permission(
+            task_id=task_id,
+            user_id=current_user.id,
+            is_admin=current_user.is_admin or current_user.is_system_admin
+        )
+        
+        if not permission_check["can_download"]:
+            print(f"❌ 下载被拒绝: {permission_check['reason']}")
+            # 返回详细的错误信息，包括统计数据
+            error_data = {
+                "detail": permission_check["reason"],
+                "can_download": False
+            }
+            
+            # 如果是问题未处理完的情况，返回详细统计
+            if "total_issues" in permission_check:
+                error_data.update({
+                    "total_issues": permission_check["total_issues"],
+                    "processed_issues": permission_check["processed_issues"],
+                    "unprocessed_count": permission_check["unprocessed_count"]
+                })
+            
+            raise HTTPException(403, error_data)
+        
+        print(f"✅ 权限检查通过: {permission_check['reason']}")
+        
+        try:
+            # 生成Excel报告
+            excel_data = report_service.generate_excel_report(task_id)
+            filename = report_service.get_report_filename(task_id)
+            
+            print(f"📄 报告生成成功: {filename}")
+            
+            # 返回文件流
+            return StreamingResponse(
+                io=excel_data,
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{filename}"'
+                }
+            )
+            
+        except Exception as e:
+            print(f"❌ 报告生成失败: {e}")
+            raise HTTPException(500, f"报告生成失败: {str(e)}")
     
+    def check_report_permission(
+        self,
+        task_id: int,
+        current_user: User = Depends(BaseView.get_current_user),
+        db: Session = Depends(get_db)
+    ):
+        """检查报告下载权限"""
+        print(f"🔍 检查用户 {current_user.uid} 对任务 {task_id} 的报告下载权限")
+        
+        # 创建报告服务
+        report_service = ReportService(db)
+        
+        # 检查下载权限
+        permission_check = report_service.check_download_permission(
+            task_id=task_id,
+            user_id=current_user.id,
+            is_admin=current_user.is_admin or current_user.is_system_admin
+        )
+        
+        print(f"📋 权限检查结果: {permission_check}")
+        return permission_check
 
 
 # 创建视图实例并导出router
