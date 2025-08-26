@@ -305,21 +305,35 @@ class TaskService(ITaskService):
         return result
     
     def get_task_detail(self, task_id: int) -> TaskDetail:
-        """获取任务详情"""
-        print(f"🔍 正在查找任务: {task_id}")
-        task = self.task_repo.get_by_id(task_id)
-        print(f"🔍 找到任务: {task}")
+        """获取任务详情（性能优化版）"""
+        print(f"🚀 开始获取任务详情: {task_id}（使用性能优化查询）...")
+        start_time = time.time()
+        
+        # 1. 使用JOIN查询预加载关联数据，避免N+1查询
+        task = self.task_repo.get_by_id_with_relations(task_id)
+        print(f"📊 任务查询耗时: {(time.time() - start_time)*1000:.1f}ms")
+        
         if not task:
             print(f"❌ 任务 {task_id} 不存在")
             raise HTTPException(404, "任务不存在")
         
+        # 2. 并行获取问题和统计数据
+        issues_start = time.time()
         issues = self.issue_repo.get_by_task_id(task_id)
-        
-        file_info = self.file_repo.get_by_id(task.file_id) if task.file_id else None
-        ai_model = self.model_repo.get_by_id(task.model_id) if task.model_id else None
-        user_info = self.user_repo.get_by_id(task.user_id) if task.user_id else None
         processed_issues = self.task_repo.count_processed_issues(task_id)
-        task_resp = TaskResponse.from_task_with_relations(task, file_info, ai_model, user_info, len(issues), processed_issues)
+        print(f"📊 问题查询耗时: {(time.time() - issues_start)*1000:.1f}ms")
+        
+        # 3. 关联数据已预加载，无需额外查询
+        file_info = task.file_info
+        ai_model = task.ai_model  
+        user_info = task.user
+        
+        task_resp = TaskResponse.from_task_with_relations(
+            task, file_info, ai_model, user_info, len(issues), processed_issues
+        )
+        
+        total_time = time.time() - start_time
+        print(f"✅ 任务详情获取完成，总耗时: {total_time*1000:.1f}ms")
         
         return TaskDetail(
             task=task_resp,
@@ -364,17 +378,28 @@ class TaskService(ITaskService):
         raise NotImplementedError("请使用 create_task 方法")
     
     def get_by_id(self, entity_id: int) -> Optional[TaskResponse]:
-        """根据ID获取任务"""
-        task = self.task_repo.get_by_id(entity_id)
+        """根据ID获取任务（性能优化版）"""
+        print(f"🚀 查询任务 {entity_id}（使用性能优化查询）...")
+        start_time = time.time()
+        
+        # 使用JOIN预加载关联数据，避免N+1查询
+        task = self.task_repo.get_by_id_with_relations(entity_id)
         if not task:
             return None
         
-        file_info = self.file_repo.get_by_id(task.file_id) if task.file_id else None
-        ai_model = self.model_repo.get_by_id(task.model_id) if task.model_id else None
-        user_info = self.user_repo.get_by_id(task.user_id) if task.user_id else None
+        # 关联数据已预加载，无需额外查询
+        file_info = task.file_info
+        ai_model = task.ai_model
+        user_info = task.user
+        
         issue_count = self.task_repo.count_issues(task.id)
         processed_issues = self.task_repo.count_processed_issues(task.id)
-        return TaskResponse.from_task_with_relations(task, file_info, ai_model, user_info, issue_count, processed_issues)
+        
+        result = TaskResponse.from_task_with_relations(task, file_info, ai_model, user_info, issue_count, processed_issues)
+        
+        total_time = time.time() - start_time
+        print(f"✅ 任务查询完成，耗时: {total_time*1000:.1f}ms")
+        return result
     
     def update(self, entity_id: int, **kwargs) -> Optional[TaskResponse]:
         """更新任务"""
