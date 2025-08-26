@@ -324,6 +324,7 @@ def mock_generate_report(self, task_id, user):
     # 增强的HTTP Mock系统
     async def mock_http_request_enhanced(*args, **kwargs):
         """更强的HTTP Mock，完全拦截外部请求"""
+        import time
         method = args[0] if args else kwargs.get('method', 'GET')
         url = str(args[1]) if len(args) > 1 else kwargs.get('url', '')
         
