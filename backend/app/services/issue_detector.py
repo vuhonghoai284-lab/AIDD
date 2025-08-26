@@ -231,19 +231,31 @@ class IssueDetector:
                     
                     # 保存成功结果到数据库
                     if self.db and task_id:
-                        ai_output = AIOutput(
-                            task_id=task_id,
-                            operation_type="detect_issues",
-                            section_title=section_title,
-                            section_index=index,
-                            input_text=section_title + f" ({len(section_content)}字符)",
-                            raw_output=json.dumps(result, ensure_ascii=False),
-                            parsed_output=result,
-                            processing_time=processing_time,
-                            status="success"
-                        )
-                        self.db.add(ai_output)
-                        self.db.commit()
+                        try:
+                            # 验证task_id是否有效，避免外键约束失败
+                            from app.models.task import Task
+                            task_exists = self.db.query(Task.id).filter(Task.id == task_id).first()
+                            
+                            if task_exists:
+                                ai_output = AIOutput(
+                                    task_id=task_id,
+                                    operation_type="detect_issues",
+                                    section_title=section_title,
+                                    section_index=index,
+                                    input_text=section_title + f" ({len(section_content)}字符)",
+                                    raw_output=json.dumps(result, ensure_ascii=False),
+                                    parsed_output=result,
+                                    processing_time=processing_time,
+                                    status="success"
+                                )
+                                self.db.add(ai_output)
+                                self.db.commit()
+                            else:
+                                self.logger.warning(f"⚠️ task_id {task_id} 不存在，跳过AI输出记录保存")
+                        except Exception as db_error:
+                            self.logger.error(f"❌ 保存AI输出成功记录时发生错误: {db_error}")
+                            # 回滚以避免影响主事务
+                            self.db.rollback()
                     
                     # 为每个问题添加章节信息
                     for issue in issues:
@@ -261,19 +273,31 @@ class IssueDetector:
                     
                     # 保存失败结果到数据库
                     if self.db and task_id:
-                        ai_output = AIOutput(
-                            task_id=task_id,
-                            operation_type="detect_issues",
-                            section_title=section_title,
-                            section_index=index,
-                            input_text=section_title + f" ({len(section_content)}字符)",
-                            raw_output="",
-                            processing_time=processing_time,
-                            status="failed_with_retry",
-                            error_message=str(e)
-                        )
-                        self.db.add(ai_output)
-                        self.db.commit()
+                        try:
+                            # 验证task_id是否有效，避免外键约束失败
+                            from app.models.task import Task
+                            task_exists = self.db.query(Task.id).filter(Task.id == task_id).first()
+                            
+                            if task_exists:
+                                ai_output = AIOutput(
+                                    task_id=task_id,
+                                    operation_type="detect_issues",
+                                    section_title=section_title,
+                                    section_index=index,
+                                    input_text=section_title + f" ({len(section_content)}字符)",
+                                    raw_output="",
+                                    processing_time=processing_time,
+                                    status="failed_with_retry",
+                                    error_message=str(e)
+                                )
+                                self.db.add(ai_output)
+                                self.db.commit()
+                            else:
+                                self.logger.warning(f"⚠️ task_id {task_id} 不存在，跳过AI输出记录保存")
+                        except Exception as db_error:
+                            self.logger.error(f"❌ 保存AI输出失败记录时发生错误: {db_error}")
+                            # 回滚以避免影响主事务
+                            self.db.rollback()
                     
                     return []
                     
@@ -286,19 +310,31 @@ class IssueDetector:
                 
                 # 保存错误信息到数据库
                 if self.db and task_id:
-                    ai_output = AIOutput(
-                        task_id=task_id,
-                        operation_type="detect_issues",
-                        section_title=section_title,
-                        section_index=index,
-                        input_text=section_title + f" ({len(section_content)}字符)",  # 保存标题和长度信息
-                        raw_output="",
-                        status="failed",
-                        error_message=str(e),
-                        processing_time=processing_time
-                    )
-                    self.db.add(ai_output)
-                    self.db.commit()
+                    try:
+                        # 验证task_id是否有效，避免外键约束失败
+                        from app.models.task import Task
+                        task_exists = self.db.query(Task.id).filter(Task.id == task_id).first()
+                        
+                        if task_exists:
+                            ai_output = AIOutput(
+                                task_id=task_id,
+                                operation_type="detect_issues",
+                                section_title=section_title,
+                                section_index=index,
+                                input_text=section_title + f" ({len(section_content)}字符)",  # 保存标题和长度信息
+                                raw_output="",
+                                status="failed",
+                                error_message=str(e),
+                                processing_time=processing_time
+                            )
+                            self.db.add(ai_output)
+                            self.db.commit()
+                        else:
+                            self.logger.warning(f"⚠️ task_id {task_id} 不存在，跳过AI输出记录保存")
+                    except Exception as db_error:
+                        self.logger.error(f"❌ 保存AI输出错误记录时发生错误: {db_error}")
+                        # 回滚以避免影响主事务
+                        self.db.rollback()
                 
                 return []
         

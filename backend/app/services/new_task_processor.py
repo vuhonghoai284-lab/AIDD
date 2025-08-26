@@ -293,17 +293,26 @@ class NewTaskProcessor:
         # 保存到数据库
         if db:
             try:
-                log = TaskLog(
-                    task_id=task_id,
-                    level=level,
-                    message=str(message).strip(),
-                    stage=stage,
-                    progress=progress
-                )
-                db.add(log)
-                db.commit()
+                # 验证task_id是否有效，避免外键约束失败
+                from app.models.task import Task
+                task_exists = db.query(Task.id).filter(Task.id == task_id).first()
+                
+                if task_exists:
+                    log = TaskLog(
+                        task_id=task_id,
+                        level=level,
+                        message=str(message).strip(),
+                        stage=stage,
+                        progress=progress
+                    )
+                    db.add(log)
+                    db.commit()
+                else:
+                    self.logger.warning(f"⚠️ task_id {task_id} 不存在，跳过任务日志保存")
             except Exception as e:
                 self.logger.error(f"保存日志到数据库时失败: {e}")
+                # 回滚以避免影响主事务
+                db.rollback()
         
         # 实时推送
         try:

@@ -68,6 +68,14 @@ def safe_insert_ai_output(
     from datetime import datetime
     
     try:
+        # 验证task_id是否有效，避免外键约束失败
+        from app.models.task import Task
+        task_exists = db.query(Task.id).filter(Task.id == task_id).first()
+        
+        if not task_exists:
+            logger.warning(f"⚠️ task_id {task_id} 不存在，跳过AI输出记录保存")
+            return False
+        
         # 检查输入文本长度
         if len(input_text) > max_text_length:
             logger.warning(f"输入文本过长 ({len(input_text)} 字符)，截断至 {max_text_length} 字符")

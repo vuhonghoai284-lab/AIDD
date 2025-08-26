@@ -15,6 +15,14 @@ class IssueRepository:
     
     def create(self, **kwargs) -> Issue:
         """创建问题"""
+        # 验证task_id是否有效（如果提供）
+        task_id = kwargs.get('task_id')
+        if task_id:
+            from app.models.task import Task
+            task_exists = self.db.query(Task.id).filter(Task.id == task_id).first()
+            if not task_exists:
+                raise ValueError(f"task_id {task_id} 不存在，无法创建问题记录")
+        
         issue = Issue(**kwargs)
         self.db.add(issue)
         self.db.commit()
@@ -23,6 +31,17 @@ class IssueRepository:
     
     def bulk_create(self, issues_data: List[dict]) -> List[Issue]:
         """批量创建问题"""
+        # 验证所有task_id是否有效
+        task_ids = {data.get('task_id') for data in issues_data if data.get('task_id')}
+        if task_ids:
+            from app.models.task import Task
+            existing_task_ids = set(
+                tid for tid, in self.db.query(Task.id).filter(Task.id.in_(task_ids)).all()
+            )
+            invalid_task_ids = task_ids - existing_task_ids
+            if invalid_task_ids:
+                raise ValueError(f"task_id {invalid_task_ids} 不存在，无法批量创建问题记录")
+        
         issues = [Issue(**data) for data in issues_data]
         self.db.add_all(issues)
         self.db.commit()
