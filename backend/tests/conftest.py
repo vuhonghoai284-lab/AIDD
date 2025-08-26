@@ -264,7 +264,10 @@ def mock_third_party_auth():
                 elif auth_code == "user_c_auth_code":
                     access_token = "mock_access_token_user_c"
                 else:
-                    access_token = "mock_access_token_default"
+                    # 为压力测试生成唯一的access token
+                    import hashlib
+                    token_hash = hashlib.md5(str(auth_code).encode()).hexdigest()[:16]
+                    access_token = f"mock_access_token_{token_hash}"
                 
                 return {
                     "access_token": access_token,
@@ -317,14 +320,29 @@ def mock_third_party_auth():
                         "avatar_url": "https://avatars.test.com/u/67890"
                     }
                 else:
-                    # 默认测试用户 - 使用Gitee格式
-                    return {
-                        "id": 999999,
-                        "login": "test_third_party_user",
-                        "name": "第三方测试用户",
-                        "email": "third_party@test.com",
-                        "avatar_url": "https://avatars.test.com/u/999999"
-                    }
+                    # 为压力测试和其他测试动态生成用户信息
+                    import hashlib
+                    # 从access_token中提取唯一标识
+                    if access_token and "mock_access_token_" in access_token:
+                        token_suffix = access_token.replace("mock_access_token_", "")
+                        # 生成一个一致的用户ID
+                        user_id = int(hashlib.md5(token_suffix.encode()).hexdigest()[:8], 16) % 1000000 + 100000
+                        return {
+                            "id": user_id,
+                            "login": f"test_user_{token_suffix[:8]}",
+                            "name": f"测试用户_{token_suffix[:8]}",
+                            "email": f"test_{token_suffix[:8]}@test.com",
+                            "avatar_url": f"https://avatars.test.com/u/{user_id}"
+                        }
+                    else:
+                        # 默认用户
+                        return {
+                            "id": 999999,
+                            "login": "test_third_party_user",
+                            "name": "第三方测试用户",
+                            "email": "third_party@test.com",
+                            "avatar_url": "https://avatars.test.com/u/999999"
+                        }
             
             def raise_for_status(self):
                 pass

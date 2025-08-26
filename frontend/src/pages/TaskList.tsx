@@ -28,10 +28,13 @@ const TaskList: React.FC = () => {
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [isBackgroundRefreshing, setIsBackgroundRefreshing] = useState(false);
   const navigate = useNavigate();
 
-  const loadTasks = async () => {
-    setLoading(true);
+  const loadTasks = async (showLoading: boolean = true) => {
+    if (showLoading) {
+      setLoading(true);
+    }
     try {
       const data = await taskAPI.getTasks();
       setTasks(data);
@@ -39,15 +42,49 @@ const TaskList: React.FC = () => {
     } catch (error) {
       message.error('加载任务列表失败');
     }
-    setLoading(false);
+    if (showLoading) {
+      setLoading(false);
+    }
+  };
+
+  // 后台静默刷新函数
+  const backgroundRefresh = async () => {
+    setIsBackgroundRefreshing(true);
+    try {
+      const data = await taskAPI.getTasks();
+      setTasks(data);
+      filterTasks(data, searchText, statusFilter);
+    } catch (error) {
+      // 后台刷新失败时不显示错误信息，避免干扰用户
+      console.warn('后台刷新失败:', error);
+    } finally {
+      setTimeout(() => setIsBackgroundRefreshing(false), 1000); // 显示1秒指示器
+    }
   };
 
   useEffect(() => {
     loadTasks();
-    // 每5秒刷新一次，获取进度更新（减少频率）
-    const interval = setInterval(loadTasks, 5000);
-    return () => clearInterval(interval);
-  }, []);
+    
+    // 智能刷新频率：如果有正在处理的任务，每3秒刷新；否则每10秒刷新
+    const getRefreshInterval = () => {
+      const hasProcessingTasks = tasks.some(task => task.status === 'processing');
+      return hasProcessingTasks ? 3000 : 10000;
+    };
+    
+    const scheduleNextRefresh = () => {
+      setTimeout(() => {
+        backgroundRefresh();
+        scheduleNextRefresh(); // 递归调度下次刷新
+      }, getRefreshInterval());
+    };
+    
+    scheduleNextRefresh();
+    
+    // 清理函数
+    return () => {
+      // 由于使用setTimeout而不是setInterval，没有可清理的interval
+    };
+  }, [tasks.length]); // 依赖tasks.length，当任务数量变化时重新设置刷新逻辑
 
   useEffect(() => {
     filterTasks(tasks, searchText, statusFilter);
@@ -76,7 +113,7 @@ const TaskList: React.FC = () => {
     try {
       await taskAPI.deleteTask(taskId);
       message.success('任务已删除');
-      loadTasks();
+      backgroundRefresh(); // 删除后静默刷新
     } catch (error) {
       message.error('删除任务失败');
     }
@@ -95,7 +132,7 @@ const TaskList: React.FC = () => {
       }
       message.success(`成功删除 ${selectedRowKeys.length} 个任务`);
       setSelectedRowKeys([]);
-      loadTasks();
+      backgroundRefresh(); // 批量删除后静默刷新
     } catch (error) {
       message.error('批量删除失败');
     }
@@ -105,7 +142,7 @@ const TaskList: React.FC = () => {
     try {
       await taskAPI.retryTask(taskId);
       message.success('任务已重新启动');
-      loadTasks();
+      backgroundRefresh(); // 重试后静默刷新
     } catch (error) {
       message.error('重试失败');
     }
@@ -727,6 +764,19 @@ const TaskList: React.FC = () => {
             </Select>
           </div>
           <div className="task-controls-right">
+            {/* 后台刷新指示器 */}
+            {isBackgroundRefreshing && (
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                marginRight: '8px',
+                fontSize: '12px',
+                color: '#1890ff'
+              }}>
+                <SyncOutlined spin style={{ marginRight: '4px' }} />
+                更新中...
+              </div>
+            )}
             <Segmented
               className="view-mode-segmented"
               options={[
@@ -739,7 +789,7 @@ const TaskList: React.FC = () => {
             <Button
               className="action-button"
               icon={<ReloadOutlined />}
-              onClick={loadTasks}
+              onClick={() => loadTasks(true)} // 手动刷新显示loading
               loading={loading}
             >
               刷新

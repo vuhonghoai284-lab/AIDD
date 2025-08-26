@@ -29,19 +29,42 @@ class TestConcurrentTaskExecution:
         
         # 创建10个测试用户用于并发测试
         for i in range(10):
-            # 通过API创建用户并获取token
-            auth_data = {"code": f"concurrent_user_{i}_auth_code"}
-            response = client.post("/api/auth/thirdparty/login", json=auth_data)
-            
-            if response.status_code == 200:
-                result = response.json()
-                self.concurrent_users.append({
-                    "user_id": result["user"]["id"],
-                    "token": result["access_token"],
-                    "headers": {"Authorization": f"Bearer {result['access_token']}"}
-                })
+            try:
+                # 步骤1: 先通过code兑换access_token
+                code_data = {"code": f"concurrent_user_{i}_auth_code"}
+                token_response = client.post("/api/auth/thirdparty/exchange-token", json=code_data)
+                
+                if token_response.status_code != 200:
+                    print(f"用户{i} Token兑换失败: {token_response.status_code} {token_response.text}")
+                    continue
+                
+                token_data = token_response.json()
+                access_token = token_data["access_token"]
+                
+                # 步骤2: 使用access_token登录
+                login_data = {"access_token": access_token}
+                login_response = client.post("/api/auth/thirdparty/login", json=login_data)
+                
+                if login_response.status_code == 200:
+                    result = login_response.json()
+                    self.concurrent_users.append({
+                        "user_id": result["user"]["id"],
+                        "token": result["access_token"],
+                        "headers": {"Authorization": f"Bearer {result['access_token']}"}
+                    })
+                else:
+                    print(f"用户{i} 登录失败: {login_response.status_code} {login_response.text}")
+                    
+            except Exception as e:
+                print(f"创建用户{i}时出错: {e}")
+                continue
         
-        assert len(self.concurrent_users) >= 5, "至少需要5个用户进行并发测试"
+        print(f"成功创建 {len(self.concurrent_users)} 个并发测试用户")
+        assert len(self.concurrent_users) >= 5, f"至少需要5个用户进行并发测试，只创建了{len(self.concurrent_users)}个"
+        
+        # 验证用户创建是否正确
+        for i, user in enumerate(self.concurrent_users[:3]):
+            print(f"用户{i}: ID={user['user_id']}, Token前10位={user['token'][:10]}...")
         
         yield
         
@@ -101,7 +124,7 @@ class TestConcurrentTaskExecution:
                 response = client.post(
                     "/api/tasks/",
                     files={"file": (filename, content, content_type)},
-                    data={"description": f"并发测试任务 - 用户{user_info['user_id']}"},
+                    data={"title": f"并发测试任务 - 用户{user_info['user_id']}"},
                     headers=user_info["headers"]
                 )
                 
@@ -113,7 +136,8 @@ class TestConcurrentTaskExecution:
                     "response_time": end_time - start_time,
                     "success": response.status_code == 201,
                     "task_id": response.json().get("id") if response.status_code == 201 else None,
-                    "error": response.text if response.status_code != 201 else None
+                    "error": response.text if response.status_code != 201 else None,
+                    "response_json": response.json() if response.status_code == 201 else None
                 }
                 
             except Exception as e:
@@ -162,6 +186,16 @@ class TestConcurrentTaskExecution:
         print(f"   最大响应时间: {max_response_time:.2f}秒")
         print(f"   最小响应时间: {min_response_time:.2f}秒")
         print(f"   成功率: {len(successful_tasks)/len(results)*100:.1f}%")
+        
+        # 显示前3个失败的详细信息
+        if failed_tasks:
+            print(f"\n❌ 前3个失败任务的详细错误:")
+            for i, task in enumerate(failed_tasks[:3]):
+                print(f"   失败 {i+1}: 用户{task['user_id']}, 状态码{task['status_code']}")
+                if task.get('error'):
+                    error_preview = task['error'][:200] if len(task['error']) > 200 else task['error']
+                    print(f"   错误信息: {error_preview}")
+                print("   ---")
         
         # 断言：至少80%的任务创建成功
         assert len(successful_tasks) >= len(self.concurrent_users) * 0.8, \
