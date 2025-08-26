@@ -86,7 +86,7 @@ task_processing:
     system_max_concurrent_tasks: 100  # 系统同时处理的最大任务数
     
     # 用户级并发限制（可通过数据库动态调整）
-    default_user_max_concurrent_tasks: 10  # 普通用户默认并发限制
+    default_user_max_concurrent_tasks: 5  # 普通用户默认并发限制
     admin_max_concurrent_tasks: 50  # 管理员用户默认并发限制
     vip_max_concurrent_tasks: 20  # VIP用户并发限制（预留扩展）
     
