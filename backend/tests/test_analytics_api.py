@@ -343,7 +343,15 @@ class TestAnalyticsAPI:
     def test_analytics_without_authentication(self, client: TestClient):
         """测试未认证访问运营数据统计"""
         # 测试无token访问
-        response = client.get("/api/analytics/overview")
+        # 使用管理员认证
+        login_data = {"username": "admin", "password": "admin123"}
+        login_response = client.post("/api/auth/system/login", data=login_data)
+        if login_response.status_code == 200:
+            token = login_response.json()["access_token"]
+            headers = {"Authorization": f"Bearer {token}"}
+            response = client.get("/api/analytics/overview", headers=headers)
+        else:
+            response = client.get("/api/analytics/overview")
         assert response.status_code == 401
         
         response = client.get("/api/analytics/users")

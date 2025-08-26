@@ -274,9 +274,20 @@ class TaskView(BaseView):
             import urllib.parse
             encoded_filename = urllib.parse.quote(file_info.original_name, safe='')
             
-            # 设置响应头，使用RFC 5987标准的filename*参数来支持UTF-8编码
+            # 设置响应头，同时支持RFC 5987和传统filename格式以确保兼容性
+            # 为传统浏览器提供ASCII fallback文件名，保持正确的文件扩展名
+            original_ext = os.path.splitext(file_info.original_name)[1] or '.pdf'  # 获取原文件扩展名
+            ascii_filename = file_info.original_name.encode('ascii', 'ignore').decode('ascii')
+            if not ascii_filename or ascii_filename != file_info.original_name:
+                # 使用任务标题作为fallback，如果标题也有非ASCII字符则使用task_id
+                task_title = task.title.encode('ascii', 'ignore').decode('ascii') if task.title else ""
+                if task_title and len(task_title.strip()) > 0:
+                    ascii_filename = f"{task_title.strip()}{original_ext}"
+                else:
+                    ascii_filename = f"task_{task_id}_file{original_ext}"
+            
             headers = {
-                "Content-Disposition": f'attachment; filename*=UTF-8\'\'{encoded_filename}',
+                "Content-Disposition": f'attachment; filename="{ascii_filename}"; filename*=UTF-8\'\'{encoded_filename}',
                 "Content-Length": str(file_info.file_size),
                 "Content-Type": file_info.mime_type or "application/octet-stream"
             }

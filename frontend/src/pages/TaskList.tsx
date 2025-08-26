@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { usePageVisibility } from '../hooks/usePageVisibility';
 import { 
   Card, Table, Button, Tag, Progress, Space, message, Popconfirm, 
   Badge, Tooltip, Dropdown, Menu, Input, Select, Row, Col, Statistic,
@@ -34,6 +35,9 @@ const TaskList: React.FC = () => {
   const [lastRefreshTime, setLastRefreshTime] = useState(0);
   const [isRequestPending, setIsRequestPending] = useState(false); // 防止并发请求
   const navigate = useNavigate();
+  
+  // 页面可见性检测，用于优化后台API调用
+  const isPageVisible = usePageVisibility();
 
   const loadTasks = useCallback(async (showLoading: boolean = true, forceRefresh: boolean = false) => {
     const now = Date.now();
@@ -136,13 +140,22 @@ const TaskList: React.FC = () => {
   }, []); // 只在组件挂载时加载一次
 
   useEffect(() => {
-    // 智能刷新：根据任务状态动态调整刷新频率
+    // 智能刷新：根据任务状态动态调整刷新频率，且仅在页面可见时运行
     const hasProcessingTasks = tasks.some(task => 
       task.status === 'processing' || task.status === 'pending'
     );
     const interval = hasProcessingTasks ? 5000 : 15000; // 增加刷新间隔
     
+    // 仅在页面可见时启动定时器
+    if (!isPageVisible) {
+      return;
+    }
+    
     const timer = setInterval(() => {
+      // 双重检查页面可见性
+      if (document.hidden) {
+        return;
+      }
       backgroundRefresh();
     }, interval);
     
@@ -150,7 +163,7 @@ const TaskList: React.FC = () => {
     return () => {
       clearInterval(timer);
     };
-  }, [backgroundRefresh, tasks.filter(t => t.status === 'processing' || t.status === 'pending').length]); // 优化依赖，只关注处理中任务数量
+  }, [backgroundRefresh, tasks.filter(t => t.status === 'processing' || t.status === 'pending').length, isPageVisible]); // 添加页面可见性依赖
 
   // 使用 useMemo 优化过滤逻辑，避免不必要的重新计算
   const filteredTasks = useMemo(() => {
@@ -564,30 +577,40 @@ const TaskList: React.FC = () => {
       key: 'action',
       width: '15%',
       render: (_: any, record: Task) => {
-        const menu = (
-          <Menu>
-            <Menu.Item key="view" icon={<EyeOutlined />} onClick={() => navigate(`/task/${record.id}`)}>
-              查看详情
-            </Menu.Item>
-            <Menu.Item key="download-file" icon={<FileTextOutlined />} onClick={() => handleDownloadFile(record.id)}>
-              下载原文件
-            </Menu.Item>
-            {record.status === 'completed' && (
-              <Menu.Item key="download" icon={<DownloadOutlined />} onClick={() => handleDownloadReport(record.id)}>
-                下载报告
-              </Menu.Item>
-            )}
-            {record.status === 'failed' && (
-              <Menu.Item key="retry" icon={<ReloadOutlined />} onClick={() => handleRetry(record.id)}>
-                重试任务
-              </Menu.Item>
-            )}
-            <Menu.Divider />
-            <Menu.Item key="delete" icon={<DeleteOutlined />} danger onClick={() => handleDelete(record.id)}>
-              删除任务
-            </Menu.Item>
-          </Menu>
-        );
+        const menuItems = [
+          {
+            key: 'view',
+            icon: <EyeOutlined />,
+            label: '查看详情',
+            onClick: () => navigate(`/task/${record.id}`)
+          },
+          {
+            key: 'download-file',
+            icon: <FileTextOutlined />,
+            label: '下载原文件',
+            onClick: () => handleDownloadFile(record.id)
+          },
+          ...(record.status === 'completed' ? [{
+            key: 'download',
+            icon: <DownloadOutlined />,
+            label: '下载报告',
+            onClick: () => handleDownloadReport(record.id)
+          }] : []),
+          ...(record.status === 'failed' ? [{
+            key: 'retry',
+            icon: <ReloadOutlined />,
+            label: '重试任务',
+            onClick: () => handleRetry(record.id)
+          }] : []),
+          { type: 'divider' },
+          {
+            key: 'delete',
+            icon: <DeleteOutlined />,
+            label: '删除任务',
+            danger: true,
+            onClick: () => handleDelete(record.id)
+          }
+        ];
 
         return (
           <Space size="small">
@@ -607,7 +630,7 @@ const TaskList: React.FC = () => {
                 onClick={() => handleDownloadFile(record.id)}
               />
             </Tooltip>
-            <Dropdown overlay={menu} trigger={['click']}>
+            <Dropdown menu={{ items: menuItems }} trigger={['click']}>
               <Button size="small">
                 更多 <FilterOutlined />
               </Button>

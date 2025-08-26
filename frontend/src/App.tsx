@@ -33,8 +33,6 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; user: User | null }>
     return <Navigate to="/login" replace />;
   }
   
-  console.log('✅ ProtectedRoute: 用户已认证，允许访问');
-  console.log('   使用的用户信息来源:', user ? 'React状态' : 'localStorage');
   return <>{children}</>;
 };
 
@@ -172,27 +170,18 @@ const AppContent: React.FC = () => {
   // 监听登录事件（来自LoginPage和CallbackHandler的自定义事件）
   const handleUserLoginEvent = useCallback((event: CustomEvent) => {
     const { user: loggedInUser, token } = event.detail;
-    console.log('🚀 收到登录事件，立即更新用户状态:', loggedInUser.display_name);
     
     // 确保localStorage中的数据是最新的
     localStorage.setItem('user', JSON.stringify(loggedInUser));
     localStorage.setItem('token', token);
     
     // 使用flushSync强制同步更新React状态，避免异步延迟
-    console.log('⚡ 使用flushSync强制同步状态更新...');
     flushSync(() => {
       setUser(loggedInUser);
     });
     
-    console.log('✅ 用户状态同步更新完成，应用现在显示为已登录状态');
-    console.log('   📊 当前状态:', {
-      reactUser: loggedInUser.display_name,
-      localStorage: !!localStorage.getItem('user'),
-      token: !!localStorage.getItem('token')
-    });
     
     // 状态已同步更新，立即发送确认信号
-    console.log('📤 立即发送状态更新确认事件...');
     window.dispatchEvent(new CustomEvent('userStateUpdated', {
       detail: { 
         success: true, 
@@ -234,7 +223,6 @@ const AppContent: React.FC = () => {
           // 但当前用户状态为空，需要更新
           try {
             const storedUser = JSON.parse(userString);
-            console.log('🔄 检测到用户登录状态，立即更新应用状态:', storedUser.display_name);
             setUser(storedUser);
           } catch (error) {
             console.warn('解析localStorage中的用户数据失败:', error);
@@ -242,7 +230,6 @@ const AppContent: React.FC = () => {
               // 尝试从API获取用户信息
               const currentUser = await getCurrentUser();
               if (currentUser) {
-                console.log('🔄 从API获取用户信息成功:', currentUser.display_name);
                 setUser(currentUser);
               }
             } catch (e) {
@@ -255,11 +242,9 @@ const AppContent: React.FC = () => {
         }
       } else if (!token && user) {
         // 没有token但用户状态存在，需要登出
-        console.log('🔄 检测到用户登出，清除应用状态');
         setUser(null);
       } else if (token && !userString) {
         // 有token但没有用户数据，可能是数据不完整
-        console.warn('⚠️ 检测到不完整的登录状态（有token但无用户数据），清除状态');
         localStorage.removeItem('token');
       }
     };

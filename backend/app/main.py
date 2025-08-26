@@ -37,6 +37,7 @@ def create_app() -> FastAPI:
         allow_credentials=False,  # 当allow_origins为["*"]时，必须设置为False
         allow_methods=["*"],  # 允许所有HTTP方法
         allow_headers=["*"],  # 允许所有请求头
+        expose_headers=["Content-Disposition", "Content-Type", "Content-Length"],  # 暴露文件下载相关的响应头
     )
     
     return app
