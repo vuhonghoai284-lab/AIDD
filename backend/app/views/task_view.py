@@ -24,6 +24,7 @@ class TaskView(BaseView):
     def _setup_routes(self):
         """设置路由"""
         self.router.add_api_route("/", self.create_task, methods=["POST"], response_model=TaskResponse, status_code=201)
+        self.router.add_api_route("/batch", self.batch_create_tasks, methods=["POST"], response_model=List[TaskResponse], status_code=201)
         self.router.add_api_route("/", self.get_tasks, methods=["GET"], response_model=List[TaskResponse])
         self.router.add_api_route("/{task_id}", self.get_task_detail, methods=["GET"], response_model=TaskDetail)
         self.router.add_api_route("/{task_id}", self.delete_task, methods=["DELETE"])
@@ -45,6 +46,31 @@ class TaskView(BaseView):
         """创建任务"""
         service = TaskService(db)
         return await service.create_task(file, title, model_index, user_id=current_user.id)
+    
+    async def batch_create_tasks(
+        self,
+        background_tasks: BackgroundTasks,
+        files: List[UploadFile] = File(...),
+        model_index: Optional[int] = Form(None),
+        current_user: User = Depends(BaseView.get_current_user),
+        db: Session = Depends(get_db)
+    ) -> List[TaskResponse]:
+        """批量创建任务"""
+        print(f"🚀 批量创建任务请求: {len(files)} 个文件, model_index={model_index}, user={current_user.uid}")
+        
+        service = TaskService(db)
+        
+        # 准备文件数据
+        files_data = []
+        for file in files:
+            files_data.append({
+                'file': file,
+                'title': None,  # 使用文件名作为标题
+                'model_index': model_index
+            })
+        
+        # 使用服务层的批量创建方法
+        return await service.batch_create_tasks(files_data, user_id=current_user.id)
     
     def get_tasks(
         self,

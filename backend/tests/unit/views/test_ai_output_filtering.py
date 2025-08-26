@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models import User, Task, AIOutput, FileInfo, AIModel
 from app.repositories.ai_output import AIOutputRepository
-from tests.conftest import test_db_session, client, admin_user_token
+# fixtures从conftest.py自动导入
 
 
 class TestAIOutputFiltering:

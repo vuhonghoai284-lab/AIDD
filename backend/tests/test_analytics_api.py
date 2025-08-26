@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 
 from app.models import User, Task, FileInfo, AIOutput, Issue, AIModel
-from tests.conftest import test_db_session, client, admin_user_token
+# fixtures从conftest.py自动导入
 
 
 class TestAnalyticsAPI:

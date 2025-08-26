@@ -82,33 +82,94 @@ const TaskCreate: React.FC = () => {
     }
     
     setCreating(true);
-    const tasks = [...uploadedFiles];
     
-    for (let i = 0; i < tasks.length; i++) {
-      if (tasks[i].status === 'pending') {
-        tasks[i].status = 'uploading';
-        setUploadedFiles([...tasks]);
-        
-        try {
-          const task = await taskAPI.createTask(tasks[i].file, undefined, selectedModel);
-          tasks[i].status = 'success';
-          tasks[i].taskId = task.id;
-          setUploadedFiles([...tasks]);
-          message.success(`${tasks[i].file.name} 创建任务成功`);
-        } catch (error: any) {
-          tasks[i].status = 'error';
-          tasks[i].error = error.response?.data?.detail || '创建任务失败';
-          setUploadedFiles([...tasks]);
-          message.error(`${tasks[i].file.name} 创建任务失败: ${tasks[i].error}`);
-        }
-      }
+    // 判断是否使用批量API：文件数量超过3个时使用批量API，否则使用前端并发
+    const useBatchAPI = pendingFiles.length > 3;
+    
+    if (useBatchAPI) {
+      // 使用后端批量API（推荐方式）
+      await handleBatchCreateTasks(pendingFiles);
+    } else {
+      // 使用前端并发创建（适用于少量文件）
+      await handleConcurrentCreateTasks(pendingFiles);
     }
     
     setCreating(false);
+  };
+
+  const handleBatchCreateTasks = async (pendingFiles: UploadedFile[]) => {
+    try {
+      // 更新所有文件状态为创建中
+      const tasks = [...uploadedFiles];
+      pendingFiles.forEach((_, index) => {
+        const taskIndex = tasks.findIndex(t => t.file === pendingFiles[index].file);
+        if (taskIndex !== -1) {
+          tasks[taskIndex].status = 'uploading';
+        }
+      });
+      setUploadedFiles([...tasks]);
+      
+      message.info(`正在批量创建 ${pendingFiles.length} 个任务...`);
+      
+      // 调用批量创建API
+      const createdTasks = await taskAPI.batchCreateTasks(
+        pendingFiles.map(f => f.file), 
+        selectedModel
+      );
+      
+      // 更新成功的任务
+      const updatedTasks = [...tasks];
+      createdTasks.forEach(task => {
+        const taskIndex = updatedTasks.findIndex(t => t.file.name === task.file_name);
+        if (taskIndex !== -1) {
+          updatedTasks[taskIndex].status = 'success';
+          updatedTasks[taskIndex].taskId = task.id;
+        }
+      });
+      setUploadedFiles(updatedTasks);
+      
+      message.success(`批量创建成功！共创建 ${createdTasks.length} 个任务`);
+      
+    } catch (error: any) {
+      // 批量创建失败时，降级到前端并发创建
+      message.warning('批量创建失败，正在使用逐个创建...');
+      await handleConcurrentCreateTasks(pendingFiles);
+    }
+  };
+
+  const handleConcurrentCreateTasks = async (pendingFiles: UploadedFile[]) => {
+    const tasks = [...uploadedFiles];
     
-    const successCount = tasks.filter(t => t.status === 'success').length;
+    // 并发创建任务（不是串行）
+    const createPromises = pendingFiles.map(async (pendingFile) => {
+      const taskIndex = tasks.findIndex(t => t.file === pendingFile.file);
+      if (taskIndex === -1) return;
+      
+      tasks[taskIndex].status = 'uploading';
+      setUploadedFiles([...tasks]);
+      
+      try {
+        const task = await taskAPI.createTask(pendingFile.file, undefined, selectedModel);
+        tasks[taskIndex].status = 'success';
+        tasks[taskIndex].taskId = task.id;
+        setUploadedFiles([...tasks]);
+        message.success(`${pendingFile.file.name} 创建任务成功`);
+        return { success: true, fileName: pendingFile.file.name };
+      } catch (error: any) {
+        tasks[taskIndex].status = 'error';
+        tasks[taskIndex].error = error.response?.data?.detail || '创建任务失败';
+        setUploadedFiles([...tasks]);
+        message.error(`${pendingFile.file.name} 创建任务失败: ${tasks[taskIndex].error}`);
+        return { success: false, fileName: pendingFile.file.name };
+      }
+    });
+    
+    // 等待所有任务完成
+    const results = await Promise.all(createPromises);
+    const successCount = results.filter(r => r?.success).length;
+    
     if (successCount > 0) {
-      message.success(`成功创建 ${successCount} 个任务`);
+      message.success(`并发创建完成！成功创建 ${successCount} 个任务`);
     }
   };
 
@@ -197,6 +258,9 @@ const TaskCreate: React.FC = () => {
           <div>
             <h3>上传文档文件</h3>
             <p>支持的文件格式：PDF、Word (.docx)、Markdown (.md)，最大文件大小：10MB</p>
+            <p style={{ color: '#52c41a', fontSize: '12px', marginTop: '4px' }}>
+              💡 批量选择超过3个文件时将自动使用高性能批量创建模式
+            </p>
             <Dragger {...uploadProps} disabled={creating}>
               <p className="ant-upload-drag-icon">
                 {creating ? <LoadingOutlined /> : <InboxOutlined />}
@@ -271,7 +335,10 @@ const TaskCreate: React.FC = () => {
                   loading={creating}
                   disabled={creating}
                 >
-                  创建任务 ({uploadedFiles.filter(f => f.status === 'pending').length})
+                  {uploadedFiles.filter(f => f.status === 'pending').length > 3 
+                    ? `批量创建任务 (${uploadedFiles.filter(f => f.status === 'pending').length})` 
+                    : `并发创建任务 (${uploadedFiles.filter(f => f.status === 'pending').length})`
+                  }
                 </Button>
               )}
               {uploadedFiles.filter(f => f.status === 'success').length > 0 && (

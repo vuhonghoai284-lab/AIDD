@@ -55,6 +55,28 @@ export const taskAPI = {
     return response.data;
   },
 
+  // 批量创建任务
+  batchCreateTasks: async (files: File[], modelIndex?: number) => {
+    const formData = new FormData();
+    
+    // 添加所有文件
+    files.forEach(file => {
+      formData.append('files', file);
+    });
+    
+    // 添加模型索引
+    if (modelIndex !== undefined) {
+      formData.append('model_index', modelIndex.toString());
+    }
+    
+    const response = await api.post<Task[]>('/tasks/batch', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
   // 获取任务列表
   getTasks: async () => {
     const response = await api.get<Task[]>('/tasks/');

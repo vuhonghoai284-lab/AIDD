@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models import User
-from tests.conftest import test_db_session, client, admin_user_token
+# fixtures从conftest.py自动导入
 
 
 class TestLoginPageUI:
