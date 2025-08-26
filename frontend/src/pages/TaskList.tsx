@@ -17,6 +17,9 @@ import { taskAPI } from '../api';
 import { Task } from '../types';
 import './TaskList.css';
 
+// 全局请求去重机制
+let pendingTaskRequest: Promise<Task[]> | null = null;
+
 const { Text } = Typography;
 const { Option } = Select;
 
@@ -29,65 +32,99 @@ const TaskList: React.FC = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [isBackgroundRefreshing, setIsBackgroundRefreshing] = useState(false);
   const [lastRefreshTime, setLastRefreshTime] = useState(0);
+  const [isRequestPending, setIsRequestPending] = useState(false); // 防止并发请求
   const navigate = useNavigate();
 
   const loadTasks = useCallback(async (showLoading: boolean = true, forceRefresh: boolean = false) => {
     const now = Date.now();
+    
+    // 防止并发请求
+    if (isRequestPending) {
+      return;
+    }
     
     // 防止频繁刷新，但允许强制刷新
     if (!forceRefresh && now - lastRefreshTime < 1000) {
       return;
     }
     
+    setIsRequestPending(true);
     if (showLoading) {
       setLoading(true);
     }
+    
     try {
-      const data = await taskAPI.getTasks();
+      // 使用全局请求去重
+      if (!pendingTaskRequest) {
+        pendingTaskRequest = taskAPI.getTasks();
+      }
+      
+      const data = await pendingTaskRequest;
       setTasks(data);
       setLastRefreshTime(now);
     } catch (error) {
       message.error('加载任务列表失败');
+    } finally {
+      pendingTaskRequest = null; // 清除请求状态
+      setIsRequestPending(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
-    if (showLoading) {
-      setLoading(false);
-    }
-  }, [lastRefreshTime]);
+  }, []); // 移除lastRefreshTime依赖，避免循环
 
   // 后台静默刷新函数
   const backgroundRefresh = useCallback(async () => {
-    const now = Date.now();
-    
-    // 防止频繁刷新
-    if (now - lastRefreshTime < 800) {
+    // 防止并发请求
+    if (isRequestPending) {
       return;
     }
     
+    const now = Date.now();
+    // 防止频繁刷新
+    if (now - lastRefreshTime < 2000) { // 增加到2秒间隔
+      return;
+    }
+    
+    setIsRequestPending(true);
     setIsBackgroundRefreshing(true);
+    
     try {
-      const data = await taskAPI.getTasks();
+      // 使用全局请求去重
+      if (!pendingTaskRequest) {
+        pendingTaskRequest = taskAPI.getTasks();
+      }
+      
+      const data = await pendingTaskRequest;
       setTasks(data);
       setLastRefreshTime(now);
     } catch (error) {
       // 后台刷新失败时不显示错误信息，避免干扰用户
-      // 减少console输出频率，只在开发环境输出
       if (process.env.NODE_ENV === 'development') {
         console.warn('后台刷新失败:', error);
       }
     } finally {
-      setTimeout(() => setIsBackgroundRefreshing(false), 1000); // 显示1秒指示器
+      pendingTaskRequest = null; // 清除请求状态
+      setIsRequestPending(false);
+      setTimeout(() => setIsBackgroundRefreshing(false), 1000);
     }
-  }, [lastRefreshTime]);
+  }, []); // 移除依赖，避免循环
 
   useEffect(() => {
     // 立即加载任务，并在页面可见时刷新
     loadTasks(true, true);
     
     // 监听页面可见性变化，在页面重新可见时刷新数据
+    let visibilityTimeout: NodeJS.Timeout | null = null;
     const handleVisibilityChange = () => {
       if (!document.hidden) {
-        // 页面变为可见时立即刷新
-        loadTasks(false, true);
+        // 防止频繁触发，延迟刷新
+        if (visibilityTimeout) {
+          clearTimeout(visibilityTimeout);
+        }
+        visibilityTimeout = setTimeout(() => {
+          loadTasks(false, true);
+        }, 1000); // 延迟1秒刷新
       }
     };
     
@@ -103,7 +140,7 @@ const TaskList: React.FC = () => {
     const hasProcessingTasks = tasks.some(task => 
       task.status === 'processing' || task.status === 'pending'
     );
-    const interval = hasProcessingTasks ? 3000 : 10000;
+    const interval = hasProcessingTasks ? 5000 : 15000; // 增加刷新间隔
     
     const timer = setInterval(() => {
       backgroundRefresh();
@@ -113,7 +150,7 @@ const TaskList: React.FC = () => {
     return () => {
       clearInterval(timer);
     };
-  }, [tasks.map(t => t.status).join(',')]); // 只有任务状态变化时才重新设置定时器
+  }, [backgroundRefresh, tasks.filter(t => t.status === 'processing' || t.status === 'pending').length]); // 优化依赖，只关注处理中任务数量
 
   // 使用 useMemo 优化过滤逻辑，避免不必要的重新计算
   const filteredTasks = useMemo(() => {
@@ -140,7 +177,8 @@ const TaskList: React.FC = () => {
     try {
       await taskAPI.deleteTask(taskId);
       message.success('任务已删除');
-      backgroundRefresh(); // 删除后静默刷新
+      // 延迟刷新，避免立即请求
+      setTimeout(() => backgroundRefresh(), 500);
     } catch (error) {
       message.error('删除任务失败');
     }
@@ -159,7 +197,8 @@ const TaskList: React.FC = () => {
       }
       message.success(`成功删除 ${selectedRowKeys.length} 个任务`);
       setSelectedRowKeys([]);
-      backgroundRefresh(); // 批量删除后静默刷新
+      // 延迟刷新，避免立即请求
+      setTimeout(() => backgroundRefresh(), 1000);
     } catch (error) {
       message.error('批量删除失败');
     }
@@ -169,7 +208,8 @@ const TaskList: React.FC = () => {
     try {
       await taskAPI.retryTask(taskId);
       message.success('任务已重新启动');
-      backgroundRefresh(); // 重试后静默刷新
+      // 延迟刷新，避免立即请求
+      setTimeout(() => backgroundRefresh(), 500);
     } catch (error) {
       message.error('重试失败');
     }
