@@ -178,18 +178,28 @@ export const taskAPI = {
         responseType: 'blob',
       });
       
-      // 从响应头获取文件名
+      // 从响应头获取文件名，支持UTF-8编码的文件名
       const contentDisposition = response.headers['content-disposition'];
       let filename = `task_${taskId}_file`;
       if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
-        if (filenameMatch) {
-          filename = filenameMatch[1];
+        // 优先尝试解析 filename*=UTF-8''encoded_name 格式（RFC 5987）
+        const utf8FilenameMatch = contentDisposition.match(/filename\*=UTF-8''([^;,\n]*)/);
+        if (utf8FilenameMatch) {
+          filename = decodeURIComponent(utf8FilenameMatch[1]);
+        } else {
+          // 降级处理普通的 filename="name" 格式
+          const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
+          if (filenameMatch) {
+            filename = filenameMatch[1];
+          }
         }
       }
       
-      // 创建下载链接
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      // 获取响应的MIME类型
+      const contentType = response.headers['content-type'] || 'application/octet-stream';
+      
+      // 创建下载链接，保持原始MIME类型
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: contentType }));
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', filename);

@@ -270,9 +270,13 @@ class TaskView(BaseView):
                 with open(file_path, mode="rb") as file_like:
                     yield from file_like
             
-            # 设置响应头
+            # 处理文件名编码，支持中文文件名
+            import urllib.parse
+            encoded_filename = urllib.parse.quote(file_info.original_name, safe='')
+            
+            # 设置响应头，使用RFC 5987标准的filename*参数来支持UTF-8编码
             headers = {
-                "Content-Disposition": f'attachment; filename="{file_info.original_name}"',
+                "Content-Disposition": f'attachment; filename*=UTF-8\'\'{encoded_filename}',
                 "Content-Length": str(file_info.file_size),
                 "Content-Type": file_info.mime_type or "application/octet-stream"
             }
