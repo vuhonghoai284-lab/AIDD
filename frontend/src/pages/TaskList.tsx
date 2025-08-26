@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Card, Table, Button, Tag, Progress, Space, message, Popconfirm, 
   Badge, Tooltip, Dropdown, Menu, Input, Select, Row, Col, Statistic,
@@ -22,7 +22,6 @@ const { Option } = Select;
 
 const TaskList: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [filteredTasks, setFilteredTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [searchText, setSearchText] = useState('');
@@ -31,85 +30,78 @@ const TaskList: React.FC = () => {
   const [isBackgroundRefreshing, setIsBackgroundRefreshing] = useState(false);
   const navigate = useNavigate();
 
-  const loadTasks = async (showLoading: boolean = true) => {
+  const loadTasks = useCallback(async (showLoading: boolean = true) => {
     if (showLoading) {
       setLoading(true);
     }
     try {
       const data = await taskAPI.getTasks();
       setTasks(data);
-      filterTasks(data, searchText, statusFilter);
     } catch (error) {
       message.error('加载任务列表失败');
     }
     if (showLoading) {
       setLoading(false);
     }
-  };
+  }, []);
 
   // 后台静默刷新函数
-  const backgroundRefresh = async () => {
+  const backgroundRefresh = useCallback(async () => {
     setIsBackgroundRefreshing(true);
     try {
       const data = await taskAPI.getTasks();
       setTasks(data);
-      filterTasks(data, searchText, statusFilter);
     } catch (error) {
       // 后台刷新失败时不显示错误信息，避免干扰用户
       console.warn('后台刷新失败:', error);
     } finally {
       setTimeout(() => setIsBackgroundRefreshing(false), 1000); // 显示1秒指示器
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadTasks();
-    
-    // 智能刷新频率：如果有正在处理的任务，每3秒刷新；否则每10秒刷新
-    const getRefreshInterval = () => {
-      const hasProcessingTasks = tasks.some(task => task.status === 'processing');
-      return hasProcessingTasks ? 3000 : 10000;
-    };
-    
-    const scheduleNextRefresh = () => {
-      setTimeout(() => {
-        backgroundRefresh();
-        scheduleNextRefresh(); // 递归调度下次刷新
-      }, getRefreshInterval());
-    };
-    
-    scheduleNextRefresh();
-    
-    // 清理函数
-    return () => {
-      // 由于使用setTimeout而不是setInterval，没有可清理的interval
-    };
-  }, [tasks.length]); // 依赖tasks.length，当任务数量变化时重新设置刷新逻辑
+  }, []); // 只在组件挂载时加载一次
 
   useEffect(() => {
-    filterTasks(tasks, searchText, statusFilter);
-  }, [tasks, searchText, statusFilter]);
+    // 智能刷新：根据任务状态动态调整刷新频率
+    const hasProcessingTasks = tasks.some(task => 
+      task.status === 'processing' || task.status === 'pending'
+    );
+    const interval = hasProcessingTasks ? 3000 : 10000;
+    
+    const timer = setInterval(() => {
+      backgroundRefresh();
+    }, interval);
+    
+    // 清理定时器
+    return () => {
+      clearInterval(timer);
+    };
+  }, [tasks.map(t => t.status).join(',')]); // 只有任务状态变化时才重新设置定时器
 
-  const filterTasks = (taskList: Task[], search: string, status: string) => {
-    let filtered = [...taskList];
+  // 使用 useMemo 优化过滤逻辑，避免不必要的重新计算
+  const filteredTasks = useMemo(() => {
+    let filtered = [...tasks];
     
     // 搜索过滤
-    if (search) {
+    if (searchText) {
+      const searchLower = searchText.toLowerCase();
       filtered = filtered.filter(task => 
-        task.title?.toLowerCase().includes(search.toLowerCase()) ||
-        task.file_name.toLowerCase().includes(search.toLowerCase())
+        task.title?.toLowerCase().includes(searchLower) ||
+        task.file_name.toLowerCase().includes(searchLower)
       );
     }
     
     // 状态过滤
-    if (status !== 'all') {
-      filtered = filtered.filter(task => task.status === status);
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(task => task.status === statusFilter);
     }
     
-    setFilteredTasks(filtered);
-  };
+    return filtered;
+  }, [tasks, searchText, statusFilter]);
 
-  const handleDelete = async (taskId: number) => {
+  const handleDelete = useCallback(async (taskId: number) => {
     try {
       await taskAPI.deleteTask(taskId);
       message.success('任务已删除');
@@ -117,9 +109,9 @@ const TaskList: React.FC = () => {
     } catch (error) {
       message.error('删除任务失败');
     }
-  };
+  }, [backgroundRefresh]);
 
-  const handleBatchDelete = async () => {
+  const handleBatchDelete = useCallback(async () => {
     if (selectedRowKeys.length === 0) {
       message.warning('请选择要删除的任务');
       return;
@@ -136,9 +128,9 @@ const TaskList: React.FC = () => {
     } catch (error) {
       message.error('批量删除失败');
     }
-  };
+  }, [selectedRowKeys, backgroundRefresh]);
 
-  const handleRetry = async (taskId: number) => {
+  const handleRetry = useCallback(async (taskId: number) => {
     try {
       await taskAPI.retryTask(taskId);
       message.success('任务已重新启动');
@@ -146,16 +138,16 @@ const TaskList: React.FC = () => {
     } catch (error) {
       message.error('重试失败');
     }
-  };
+  }, [backgroundRefresh]);
 
-  const handleDownloadReport = async (taskId: number) => {
+  const handleDownloadReport = useCallback(async (taskId: number) => {
     try {
       await taskAPI.downloadReport(taskId);
       message.success('报告下载成功');
     } catch (error) {
       message.error('下载报告失败');
     }
-  };
+  }, []);
 
   const getStatusTag = (status: string) => {
     const statusMap: { [key: string]: { color: string; text: string; icon: React.ReactNode } } = {
@@ -197,14 +189,16 @@ const TaskList: React.FC = () => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  // 计算统计数据
-  const statistics = {
-    total: tasks.length,
-    pending: tasks.filter(t => t.status === 'pending').length,
-    processing: tasks.filter(t => t.status === 'processing').length,
-    completed: tasks.filter(t => t.status === 'completed').length,
-    failed: tasks.filter(t => t.status === 'failed').length,
-  };
+  // 使用 useMemo 优化统计数据计算，避免每次渲染时重新计算
+  const statistics = useMemo(() => {
+    return {
+      total: tasks.length,
+      pending: tasks.filter(t => t.status === 'pending').length,
+      processing: tasks.filter(t => t.status === 'processing').length,
+      completed: tasks.filter(t => t.status === 'completed').length,
+      failed: tasks.filter(t => t.status === 'failed').length,
+    };
+  }, [tasks]);
 
   const formatTime = (seconds?: number) => {
     if (!seconds) return '-';
@@ -214,7 +208,7 @@ const TaskList: React.FC = () => {
     return `${minutes}分${secs}秒`;
   };
 
-  const calculateActualProcessingTime = (record: Task) => {
+  const calculateActualProcessingTime = useCallback((record: Task) => {
     // 计算基于时间戳的实际耗时（作为基准）
     let actualTimeFromTimestamps = null;
     if (record.status === 'completed' && record.completed_at && record.created_at) {
@@ -250,7 +244,7 @@ const TaskList: React.FC = () => {
     }
     
     return null;
-  };
+  }, []);
 
   const formatChars = (chars?: number) => {
     if (!chars) return '-';

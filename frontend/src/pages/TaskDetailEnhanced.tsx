@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Card, Button, Tag, Progress, Space, message, Spin, Empty, 
   Input, Radio, Tabs, Typography, Pagination, Collapse, Badge,
@@ -49,6 +49,10 @@ const TaskDetailEnhanced: React.FC = () => {
   const [downloadPermission, setDownloadPermission] = useState<any>(null);
   const [downloadLoading, setDownloadLoading] = useState(false);
   
+  // 使用 useRef 来存储定时器和状态，避免依赖问题
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const taskStatusRef = useRef<string | undefined>(undefined);
+  
   // 分页相关状态
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -60,12 +64,15 @@ const TaskDetailEnhanced: React.FC = () => {
   const [aiOutputFilter, setAiOutputFilter] = useState<string>('all');
   const [aiStatusFilter, setAiStatusFilter] = useState<string>('all');
 
-  const loadTaskDetail = async () => {
+  const loadTaskDetail = useCallback(async () => {
     if (!id) return;
     
     try {
       const data = await taskAPI.getTaskDetail(parseInt(id));
       setTaskDetail(data as EnhancedTaskDetail);
+      
+      // 更新状态引用
+      taskStatusRef.current = data.task.status;
       
       // 如果任务完成，检查下载权限
       if (data.task.status === 'completed') {
@@ -75,9 +82,9 @@ const TaskDetailEnhanced: React.FC = () => {
       message.error('加载任务详情失败');
     }
     setLoading(false);
-  };
+  }, [id]);
 
-  const loadAIOutputs = async () => {
+  const loadAIOutputs = useCallback(async () => {
     if (!id) return;
     
     setAiOutputsLoading(true);
@@ -90,23 +97,52 @@ const TaskDetailEnhanced: React.FC = () => {
     } finally {
       setAiOutputsLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     loadTaskDetail();
-    loadAIOutputs(); // 加载AI输出
-    // 如果任务还在处理中，定期刷新
-    const interval = setInterval(() => {
-      if (taskDetail?.task.status === 'processing' || taskDetail?.task.status === 'pending') {
-        loadTaskDetail();
-        loadAIOutputs(); // 刷新AI输出
-      }
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [id, taskDetail?.task.status]);
+    loadAIOutputs();
+  }, [loadTaskDetail, loadAIOutputs]); // 只在初始加载时执行
 
-  const handleFeedback = async (issueId: number, feedbackType: 'accept' | 'reject', comment?: string) => {
-    setFeedbackLoading({ ...feedbackLoading, [issueId]: true });
+  // 独立的定时器 useEffect，完全避免依赖循环
+  useEffect(() => {
+    // 清理之前的定时器
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    
+    // 检查是否需要定时刷新
+    const currentStatus = taskStatusRef.current;
+    const needsRefresh = currentStatus === 'processing' || currentStatus === 'pending';
+    
+    if (needsRefresh) {
+      intervalRef.current = setInterval(() => {
+        // 直接检查最新状态，避免闭包陷阱
+        const latestStatus = taskStatusRef.current;
+        if (latestStatus === 'processing' || latestStatus === 'pending') {
+          loadTaskDetail();
+          loadAIOutputs();
+        } else {
+          // 如果状态已经不需要刷新，清理定时器
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+          }
+        }
+      }, 3000);
+    }
+    
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [taskDetail?.task.status]); // 移除函数依赖，只依赖状态变化
+
+  const handleFeedback = useCallback(async (issueId: number, feedbackType: 'accept' | 'reject', comment?: string) => {
+    setFeedbackLoading(prev => ({ ...prev, [issueId]: true }));
     try {
       await taskAPI.submitFeedback(issueId, feedbackType, comment);
       message.success('反馈已提交');
@@ -119,11 +155,11 @@ const TaskDetailEnhanced: React.FC = () => {
     } catch (error) {
       message.error('提交反馈失败');
     }
-    setFeedbackLoading({ ...feedbackLoading, [issueId]: false });
-  };
+    setFeedbackLoading(prev => ({ ...prev, [issueId]: false }));
+  }, [id, taskDetail?.task.status, loadTaskDetail, checkDownloadPermission]);
 
-  const handleQuickFeedback = async (issueId: number, feedbackType: 'accept' | 'reject' | null, comment?: string) => {
-    setFeedbackLoading({ ...feedbackLoading, [issueId]: true });
+  const handleQuickFeedback = useCallback(async (issueId: number, feedbackType: 'accept' | 'reject' | null, comment?: string) => {
+    setFeedbackLoading(prev => ({ ...prev, [issueId]: true }));
     
     try {
       if (feedbackType === null) {
@@ -137,16 +173,16 @@ const TaskDetailEnhanced: React.FC = () => {
           1.5
         );
       }
-      loadTaskDetail();
+      await loadTaskDetail();
     } catch (error) {
       message.error('操作失败');
     }
     
-    setFeedbackLoading({ ...feedbackLoading, [issueId]: false });
-  };
+    setFeedbackLoading(prev => ({ ...prev, [issueId]: false }));
+  }, [loadTaskDetail]);
 
   // 检查下载权限
-  const checkDownloadPermission = async (taskId: number) => {
+  const checkDownloadPermission = useCallback(async (taskId: number) => {
     try {
       const permission = await taskAPI.checkReportPermission(taskId);
       setDownloadPermission(permission);
@@ -157,9 +193,9 @@ const TaskDetailEnhanced: React.FC = () => {
         reason: '检查权限失败' 
       });
     }
-  };
+  }, []);
 
-  const handleDownloadReport = async () => {
+  const handleDownloadReport = useCallback(async () => {
     if (!taskDetail) return;
     
     // 如果没有权限，显示详细提示
@@ -205,7 +241,7 @@ const TaskDetailEnhanced: React.FC = () => {
     } finally {
       setDownloadLoading(false);
     }
-  };
+  }, [taskDetail, downloadPermission, checkDownloadPermission]);
 
   const getStatusTag = (status: string) => {
     const statusMap: { [key: string]: { color: string; text: string } } = {
@@ -284,17 +320,19 @@ const TaskDetailEnhanced: React.FC = () => {
     );
   };
 
-  const toggleIssueExpanded = (issueId: number) => {
-    const newExpanded = new Set(expandedIssues);
-    if (newExpanded.has(issueId)) {
-      newExpanded.delete(issueId);
-    } else {
-      newExpanded.add(issueId);
-    }
-    setExpandedIssues(newExpanded);
-  };
+  const toggleIssueExpanded = useCallback((issueId: number) => {
+    setExpandedIssues(prev => {
+      const newExpanded = new Set(prev);
+      if (newExpanded.has(issueId)) {
+        newExpanded.delete(issueId);
+      } else {
+        newExpanded.add(issueId);
+      }
+      return newExpanded;
+    });
+  }, []);
 
-  const toggleSection = (issueId: number, section: string) => {
+  const toggleSection = useCallback((issueId: number, section: string) => {
     setExpandedSections(prev => {
       const current = prev[issueId] || new Set();
       const newSet = new Set(current);
@@ -305,17 +343,19 @@ const TaskDetailEnhanced: React.FC = () => {
       }
       return { ...prev, [issueId]: newSet };
     });
-  };
+  }, []);
 
-  const toggleComment = (issueId: number) => {
-    const newExpanded = new Set(expandedComments);
-    if (newExpanded.has(issueId)) {
-      newExpanded.delete(issueId);
-    } else {
-      newExpanded.add(issueId);
-    }
-    setExpandedComments(newExpanded);
-  };
+  const toggleComment = useCallback((issueId: number) => {
+    setExpandedComments(prev => {
+      const newExpanded = new Set(prev);
+      if (newExpanded.has(issueId)) {
+        newExpanded.delete(issueId);
+      } else {
+        newExpanded.add(issueId);
+      }
+      return newExpanded;
+    });
+  }, []);
 
   if (loading) {
     return (
