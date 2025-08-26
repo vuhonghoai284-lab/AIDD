@@ -18,8 +18,7 @@ import { taskAPI } from '../api';
 import { Task } from '../types';
 import './TaskList.css';
 
-// 全局请求去重机制
-let pendingTaskRequest: Promise<Task[]> | null = null;
+// 移除全局请求去重机制，改为组件级别的并发控制
 
 const { Text } = Typography;
 const { Option } = Select;
@@ -44,11 +43,13 @@ const TaskList: React.FC = () => {
     
     // 防止并发请求
     if (isRequestPending) {
+      console.log('请求正在进行中，跳过此次请求');
       return;
     }
     
     // 防止频繁刷新，但允许强制刷新
-    if (!forceRefresh && now - lastRefreshTime < 1000) {
+    if (!forceRefresh && now - lastRefreshTime < 2000) {
+      console.log('请求过于频繁，跳过此次请求');
       return;
     }
     
@@ -58,18 +59,15 @@ const TaskList: React.FC = () => {
     }
     
     try {
-      // 使用全局请求去重
-      if (!pendingTaskRequest) {
-        pendingTaskRequest = taskAPI.getTasks();
-      }
-      
-      const data = await pendingTaskRequest;
+      // 每次都创建新的请求，避免全局去重机制导致的问题
+      const data = await taskAPI.getTasks();
       setTasks(data);
       setLastRefreshTime(now);
+      console.log(`任务列表加载成功，获取到 ${data.length} 个任务`);
     } catch (error) {
+      console.error('加载任务列表失败:', error);
       message.error('加载任务列表失败');
     } finally {
-      pendingTaskRequest = null; // 清除请求状态
       setIsRequestPending(false);
       if (showLoading) {
         setLoading(false);
@@ -81,12 +79,14 @@ const TaskList: React.FC = () => {
   const backgroundRefresh = useCallback(async () => {
     // 防止并发请求
     if (isRequestPending) {
+      console.log('后台刷新：请求正在进行中，跳过');
       return;
     }
     
     const now = Date.now();
     // 防止频繁刷新
-    if (now - lastRefreshTime < 2000) { // 增加到2秒间隔
+    if (now - lastRefreshTime < 3000) { // 增加到3秒间隔
+      console.log('后台刷新：请求过于频繁，跳过');
       return;
     }
     
@@ -94,41 +94,36 @@ const TaskList: React.FC = () => {
     setIsBackgroundRefreshing(true);
     
     try {
-      // 使用全局请求去重
-      if (!pendingTaskRequest) {
-        pendingTaskRequest = taskAPI.getTasks();
-      }
-      
-      const data = await pendingTaskRequest;
+      // 直接创建请求，避免全局去重机制
+      const data = await taskAPI.getTasks();
       setTasks(data);
       setLastRefreshTime(now);
+      console.log(`后台刷新成功，获取到 ${data.length} 个任务`);
     } catch (error) {
       // 后台刷新失败时不显示错误信息，避免干扰用户
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('后台刷新失败:', error);
-      }
+      console.warn('后台刷新失败:', error);
     } finally {
-      pendingTaskRequest = null; // 清除请求状态
       setIsRequestPending(false);
       setTimeout(() => setIsBackgroundRefreshing(false), 1000);
     }
   }, []); // 移除依赖，避免循环
 
   useEffect(() => {
-    // 立即加载任务，并在页面可见时刷新
+    // 立即加载任务
     loadTasks(true, true);
     
     // 监听页面可见性变化，在页面重新可见时刷新数据
     let visibilityTimeout: NodeJS.Timeout | null = null;
     const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        // 防止频繁触发，延迟刷新
+      if (!document.hidden && !isRequestPending) {
+        // 清除之前的延迟定时器
         if (visibilityTimeout) {
           clearTimeout(visibilityTimeout);
         }
+        // 延迟刷新，避免频繁触发
         visibilityTimeout = setTimeout(() => {
           loadTasks(false, true);
-        }, 1000); // 延迟1秒刷新
+        }, 2000); // 增加延迟到2秒
       }
     };
     
@@ -136,34 +131,46 @@ const TaskList: React.FC = () => {
     
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (visibilityTimeout) {
+        clearTimeout(visibilityTimeout);
+      }
     };
   }, []); // 只在组件挂载时加载一次
 
+  // 使用 useMemo 来计算处理中的任务数量，避免每次渲染时重新计算
+  const processingTaskCount = useMemo(() => {
+    return tasks.filter(t => t.status === 'processing' || t.status === 'pending').length;
+  }, [tasks]);
+
   useEffect(() => {
     // 智能刷新：根据任务状态动态调整刷新频率，且仅在页面可见时运行
-    const hasProcessingTasks = tasks.some(task => 
-      task.status === 'processing' || task.status === 'pending'
-    );
-    const interval = hasProcessingTasks ? 5000 : 15000; // 增加刷新间隔
+    const hasProcessingTasks = processingTaskCount > 0;
+    const interval = hasProcessingTasks ? 8000 : 20000; // 进一步增加刷新间隔，降低请求频率
+    
+    console.log(`任务列表定时器设置: 处理中任务${processingTaskCount}个, 刷新间隔${interval}ms, 页面可见:${isPageVisible}`);
     
     // 仅在页面可见时启动定时器
     if (!isPageVisible) {
+      console.log('页面不可见，跳过定时器设置');
       return;
     }
     
     const timer = setInterval(() => {
-      // 双重检查页面可见性
-      if (document.hidden) {
+      // 双重检查页面可见性和请求状态
+      if (document.hidden || isRequestPending) {
+        console.log(`定时器跳过刷新: 页面隐藏=${document.hidden}, 请求进行中=${isRequestPending}`);
         return;
       }
+      console.log('定时器触发后台刷新');
       backgroundRefresh();
     }, interval);
     
     // 清理定时器
     return () => {
+      console.log('清理定时器');
       clearInterval(timer);
     };
-  }, [backgroundRefresh, tasks.filter(t => t.status === 'processing' || t.status === 'pending').length, isPageVisible]); // 添加页面可见性依赖
+  }, [backgroundRefresh, processingTaskCount, isPageVisible]); // 使用计算后的值作为依赖
 
   // 使用 useMemo 优化过滤逻辑，避免不必要的重新计算
   const filteredTasks = useMemo(() => {
@@ -907,7 +914,10 @@ const TaskList: React.FC = () => {
             <Button
               className="action-button"
               icon={<ReloadOutlined />}
-              onClick={() => loadTasks(true, true)} // 手动刷新显示loading，强制刷新
+              onClick={() => {
+                console.log('手动刷新按钮被点击');
+                loadTasks(true, true); // 手动刷新显示loading，强制刷新
+              }}
               loading={loading}
             >
               刷新
