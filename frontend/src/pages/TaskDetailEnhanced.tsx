@@ -90,19 +90,37 @@ const TaskDetailEnhanced: React.FC = () => {
     
     setAiOutputsLoading(true);
     try {
-      const outputs = await taskAPI.getTaskAIOutputs(parseInt(id));
+      // 添加超时处理，防止请求挂起
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('AI输出加载超时')), 10000)
+      );
+      
+      const outputsPromise = taskAPI.getTaskAIOutputs(parseInt(id));
+      const outputs = await Promise.race([outputsPromise, timeoutPromise]) as AIOutput[];
+      
       setAiOutputs(outputs);
-    } catch (error) {
-      message.error('加载AI输出失败');
-      console.error(error);
+    } catch (error: any) {
+      // AI输出加载失败不影响主页面显示
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('AI输出加载失败:', error);
+      }
+      // 只在非超时情况下显示错误信息
+      if (!error.message?.includes('超时')) {
+        message.warning('AI输出加载失败，但不影响任务详情查看');
+      }
     } finally {
       setAiOutputsLoading(false);
     }
   }, [id]);
 
   useEffect(() => {
-    loadTaskDetail();
-    loadAIOutputs();
+    // 先加载任务详情，成功后再加载AI输出
+    loadTaskDetail().then(() => {
+      // AI输出加载不影响主页面显示，异步加载
+      setTimeout(() => {
+        loadAIOutputs();
+      }, 100);
+    });
   }, [loadTaskDetail, loadAIOutputs]); // 只在初始加载时执行
 
   // 独立的定时器 useEffect，完全避免依赖循环
@@ -123,7 +141,8 @@ const TaskDetailEnhanced: React.FC = () => {
         const latestStatus = taskStatusRef.current;
         if (latestStatus === 'processing' || latestStatus === 'pending') {
           loadTaskDetail();
-          loadAIOutputs();
+          // AI输出加载不影响主页面，异步加载
+          setTimeout(() => loadAIOutputs(), 500);
         } else {
           // 如果状态已经不需要刷新，清理定时器
           if (intervalRef.current) {
@@ -140,7 +159,7 @@ const TaskDetailEnhanced: React.FC = () => {
         intervalRef.current = null;
       }
     };
-  }, [taskDetail?.task.status]); // 移除函数依赖，只依赖状态变化
+  }, [taskDetail?.task.status, loadTaskDetail, loadAIOutputs]); // 修复依赖数组
 
   const handleFeedback = useCallback(async (issueId: number, feedbackType: 'accept' | 'reject', comment?: string) => {
     setFeedbackLoading(prev => ({ ...prev, [issueId]: true }));
