@@ -80,6 +80,7 @@ const TaskDetailEnhanced: React.FC = () => {
       }
     } catch (error) {
       message.error('加载任务详情失败');
+      console.error(error);
     }
     setLoading(false);
   }, [id]);
@@ -156,7 +157,7 @@ const TaskDetailEnhanced: React.FC = () => {
       message.error('提交反馈失败');
     }
     setFeedbackLoading(prev => ({ ...prev, [issueId]: false }));
-  }, [id, taskDetail?.task.status, loadTaskDetail, checkDownloadPermission]);
+  }, [id, taskDetail?.task.status, loadTaskDetail]);
 
   const handleQuickFeedback = useCallback(async (issueId: number, feedbackType: 'accept' | 'reject' | null, comment?: string) => {
     setFeedbackLoading(prev => ({ ...prev, [issueId]: true }));
@@ -181,19 +182,21 @@ const TaskDetailEnhanced: React.FC = () => {
     setFeedbackLoading(prev => ({ ...prev, [issueId]: false }));
   }, [loadTaskDetail]);
 
-  // 检查下载权限
-  const checkDownloadPermission = useCallback(async (taskId: number) => {
+  // 检查下载权限 - 内联函数避免依赖问题
+  const checkDownloadPermission = async (taskId: number) => {
     try {
       const permission = await taskAPI.checkReportPermission(taskId);
       setDownloadPermission(permission);
     } catch (error) {
-      console.error('检查下载权限失败:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('检查下载权限失败:', error);
+      }
       setDownloadPermission({ 
         can_download: false, 
         reason: '检查权限失败' 
       });
     }
-  }, []);
+  };
 
   const handleDownloadReport = useCallback(async () => {
     if (!taskDetail) return;
@@ -222,7 +225,9 @@ const TaskDetailEnhanced: React.FC = () => {
       // 下载成功后重新检查权限状态
       await checkDownloadPermission(taskDetail.task.id);
     } catch (error: any) {
-      console.error('下载报告失败:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('下载报告失败:', error);
+      }
       
       // 处理权限错误
       if (error.response?.status === 403) {
@@ -241,7 +246,7 @@ const TaskDetailEnhanced: React.FC = () => {
     } finally {
       setDownloadLoading(false);
     }
-  }, [taskDetail, downloadPermission, checkDownloadPermission]);
+  }, [taskDetail, downloadPermission]);
 
   const getStatusTag = (status: string) => {
     const statusMap: { [key: string]: { color: string; text: string } } = {

@@ -28,39 +28,74 @@ const TaskList: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [isBackgroundRefreshing, setIsBackgroundRefreshing] = useState(false);
+  const [lastRefreshTime, setLastRefreshTime] = useState(0);
   const navigate = useNavigate();
 
-  const loadTasks = useCallback(async (showLoading: boolean = true) => {
+  const loadTasks = useCallback(async (showLoading: boolean = true, forceRefresh: boolean = false) => {
+    const now = Date.now();
+    
+    // 防止频繁刷新，但允许强制刷新
+    if (!forceRefresh && now - lastRefreshTime < 1000) {
+      return;
+    }
+    
     if (showLoading) {
       setLoading(true);
     }
     try {
       const data = await taskAPI.getTasks();
       setTasks(data);
+      setLastRefreshTime(now);
     } catch (error) {
       message.error('加载任务列表失败');
     }
     if (showLoading) {
       setLoading(false);
     }
-  }, []);
+  }, [lastRefreshTime]);
 
   // 后台静默刷新函数
   const backgroundRefresh = useCallback(async () => {
+    const now = Date.now();
+    
+    // 防止频繁刷新
+    if (now - lastRefreshTime < 800) {
+      return;
+    }
+    
     setIsBackgroundRefreshing(true);
     try {
       const data = await taskAPI.getTasks();
       setTasks(data);
+      setLastRefreshTime(now);
     } catch (error) {
       // 后台刷新失败时不显示错误信息，避免干扰用户
-      console.warn('后台刷新失败:', error);
+      // 减少console输出频率，只在开发环境输出
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('后台刷新失败:', error);
+      }
     } finally {
       setTimeout(() => setIsBackgroundRefreshing(false), 1000); // 显示1秒指示器
     }
-  }, []);
+  }, [lastRefreshTime]);
 
   useEffect(() => {
-    loadTasks();
+    // 立即加载任务，并在页面可见时刷新
+    loadTasks(true, true);
+    
+    // 监听页面可见性变化，在页面重新可见时刷新数据
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        // 页面变为可见时立即刷新
+        loadTasks(false, true);
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []); // 只在组件挂载时加载一次
 
   useEffect(() => {
@@ -783,7 +818,7 @@ const TaskList: React.FC = () => {
             <Button
               className="action-button"
               icon={<ReloadOutlined />}
-              onClick={() => loadTasks(true)} // 手动刷新显示loading
+              onClick={() => loadTasks(true, true)} // 手动刷新显示loading，强制刷新
               loading={loading}
             >
               刷新

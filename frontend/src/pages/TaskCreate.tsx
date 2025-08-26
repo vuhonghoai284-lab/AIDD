@@ -13,6 +13,7 @@ interface UploadedFile {
   status: 'pending' | 'uploading' | 'success' | 'error';
   taskId?: number;
   error?: string;
+  progress?: number;
 }
 
 interface ModelInfo {
@@ -26,6 +27,7 @@ interface ModelInfo {
 const TaskCreate: React.FC = () => {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [creating, setCreating] = useState(false);
+  const [creationProgress, setCreationProgress] = useState({ current: 0, total: 0 });
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [selectedModel, setSelectedModel] = useState<number>(0);
   const navigate = useNavigate();
@@ -83,28 +85,35 @@ const TaskCreate: React.FC = () => {
     
     setCreating(true);
     
-    // 判断是否使用批量API：文件数量超过3个时使用批量API，否则使用前端并发
-    const useBatchAPI = pendingFiles.length > 3;
-    
-    if (useBatchAPI) {
-      // 使用后端批量API（推荐方式）
-      await handleBatchCreateTasks(pendingFiles);
-    } else {
-      // 使用前端并发创建（适用于少量文件）
-      await handleConcurrentCreateTasks(pendingFiles);
+    try {
+      // 判断是否使用批量API：文件数量超过3个时使用批量API，否则使用前端并发
+      const useBatchAPI = pendingFiles.length > 3;
+      
+      if (useBatchAPI) {
+        // 使用后端批量API（推荐方式）
+        await handleBatchCreateTasks(pendingFiles);
+      } else {
+        // 使用前端并发创建（适用于少量文件）
+        await handleConcurrentCreateTasks(pendingFiles);
+      }
+    } finally {
+      setCreating(false);
+      setCreationProgress({ current: 0, total: 0 });
     }
-    
-    setCreating(false);
   };
 
   const handleBatchCreateTasks = async (pendingFiles: UploadedFile[]) => {
     try {
+      // 初始化进度
+      setCreationProgress({ current: 0, total: pendingFiles.length });
+      
       // 更新所有文件状态为创建中
       const tasks = [...uploadedFiles];
       pendingFiles.forEach((_, index) => {
         const taskIndex = tasks.findIndex(t => t.file === pendingFiles[index].file);
         if (taskIndex !== -1) {
           tasks[taskIndex].status = 'uploading';
+          tasks[taskIndex].progress = 0;
         }
       });
       setUploadedFiles([...tasks]);
@@ -119,16 +128,34 @@ const TaskCreate: React.FC = () => {
       
       // 更新成功的任务
       const updatedTasks = [...tasks];
-      createdTasks.forEach(task => {
+      createdTasks.forEach((task, index) => {
         const taskIndex = updatedTasks.findIndex(t => t.file.name === task.file_name);
         if (taskIndex !== -1) {
           updatedTasks[taskIndex].status = 'success';
           updatedTasks[taskIndex].taskId = task.id;
+          updatedTasks[taskIndex].progress = 100;
         }
+        // 更新进度
+        setCreationProgress({ current: index + 1, total: pendingFiles.length });
       });
       setUploadedFiles(updatedTasks);
       
-      message.success(`批量创建成功！共创建 ${createdTasks.length} 个任务`);
+      message.success({
+        content: (
+          <div>
+            <div>🎉 批量创建成功！共创建 {createdTasks.length} 个任务</div>
+            <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+              正在跳转到任务列表，您可以在那里查看处理进度...
+            </div>
+          </div>
+        ),
+        duration: 2
+      });
+      
+      // 延迟跳转，给后端一些时间处理任务
+      setTimeout(() => {
+        navigate('/');
+      }, 1500);
       
     } catch (error: any) {
       // 批量创建失败时，降级到前端并发创建
@@ -139,6 +166,10 @@ const TaskCreate: React.FC = () => {
 
   const handleConcurrentCreateTasks = async (pendingFiles: UploadedFile[]) => {
     const tasks = [...uploadedFiles];
+    let completedCount = 0;
+    
+    // 初始化进度
+    setCreationProgress({ current: 0, total: pendingFiles.length });
     
     // 并发创建任务（不是串行）
     const createPromises = pendingFiles.map(async (pendingFile) => {
@@ -146,19 +177,30 @@ const TaskCreate: React.FC = () => {
       if (taskIndex === -1) return;
       
       tasks[taskIndex].status = 'uploading';
+      tasks[taskIndex].progress = 0;
       setUploadedFiles([...tasks]);
       
       try {
         const task = await taskAPI.createTask(pendingFile.file, undefined, selectedModel);
         tasks[taskIndex].status = 'success';
         tasks[taskIndex].taskId = task.id;
+        tasks[taskIndex].progress = 100;
+        
+        completedCount++;
+        setCreationProgress({ current: completedCount, total: pendingFiles.length });
         setUploadedFiles([...tasks]);
+        
         message.success(`${pendingFile.file.name} 创建任务成功`);
         return { success: true, fileName: pendingFile.file.name };
       } catch (error: any) {
         tasks[taskIndex].status = 'error';
         tasks[taskIndex].error = error.response?.data?.detail || '创建任务失败';
+        tasks[taskIndex].progress = 0;
+        
+        completedCount++;
+        setCreationProgress({ current: completedCount, total: pendingFiles.length });
         setUploadedFiles([...tasks]);
+        
         message.error(`${pendingFile.file.name} 创建任务失败: ${tasks[taskIndex].error}`);
         return { success: false, fileName: pendingFile.file.name };
       }
@@ -169,7 +211,22 @@ const TaskCreate: React.FC = () => {
     const successCount = results.filter(r => r?.success).length;
     
     if (successCount > 0) {
-      message.success(`并发创建完成！成功创建 ${successCount} 个任务`);
+      message.success({
+        content: (
+          <div>
+            <div>🚀 并发创建完成！成功创建 {successCount} 个任务</div>
+            <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+              正在跳转到任务列表，您可以在那里查看处理进度...
+            </div>
+          </div>
+        ),
+        duration: 2
+      });
+      
+      // 延迟跳转，给后端一些时间处理任务
+      setTimeout(() => {
+        navigate('/');
+      }, 1500);
     }
   };
 
@@ -284,36 +341,51 @@ const TaskCreate: React.FC = () => {
                   style={{ marginBottom: 8 }}
                   bodyStyle={{ padding: '12px 16px' }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <strong>{item.file.name}</strong>
-                      <span style={{ marginLeft: 8, color: '#666' }}>
-                        ({formatFileSize(item.file.size)})
-                      </span>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <strong>{item.file.name}</strong>
+                        <span style={{ marginLeft: 8, color: '#666' }}>
+                          ({formatFileSize(item.file.size)})
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {getStatusTag(item.status)}
+                        {item.status === 'pending' && (
+                          <Button 
+                            size="small" 
+                            type="text"
+                            danger
+                            onClick={() => handleRemoveFile(index)}
+                            disabled={creating}
+                          >
+                            移除
+                          </Button>
+                        )}
+                        {item.status === 'success' && item.taskId && (
+                          <Button 
+                            size="small" 
+                            type="link"
+                            onClick={() => navigate(`/task/${item.taskId}`)}
+                          >
+                            查看详情
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {getStatusTag(item.status)}
-                      {item.status === 'pending' && (
-                        <Button 
+                    {item.status === 'uploading' && (
+                      <div style={{ marginTop: 8 }}>
+                        <Progress 
+                          percent={item.progress || 0} 
                           size="small" 
-                          type="text"
-                          danger
-                          onClick={() => handleRemoveFile(index)}
-                          disabled={creating}
-                        >
-                          移除
-                        </Button>
-                      )}
-                      {item.status === 'success' && item.taskId && (
-                        <Button 
-                          size="small" 
-                          type="link"
-                          onClick={() => navigate(`/task/${item.taskId}`)}
-                        >
-                          查看详情
-                        </Button>
-                      )}
-                    </div>
+                          status="active"
+                          format={(percent) => `${percent}%`}
+                        />
+                        <span style={{ fontSize: 12, color: '#666', marginTop: 4, display: 'block' }}>
+                          正在创建任务中...
+                        </span>
+                      </div>
+                    )}
                   </div>
                   {item.error && (
                     <div style={{ color: '#ff4d4f', marginTop: 4 }}>
@@ -322,6 +394,38 @@ const TaskCreate: React.FC = () => {
                   )}
                 </Card>
               ))}
+            </div>
+          )}
+
+          {/* 创建进度显示 */}
+          {creating && creationProgress.total > 0 && (
+            <div>
+              <h3>创建进度</h3>
+              <Card>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ marginBottom: 16 }}>
+                    <Progress
+                      type="circle"
+                      percent={Math.round((creationProgress.current / creationProgress.total) * 100)}
+                      status={creationProgress.current === creationProgress.total ? 'success' : 'active'}
+                      format={(percent) => `${creationProgress.current}/${creationProgress.total}`}
+                    />
+                  </div>
+                  <div style={{ fontSize: 16, fontWeight: 500, marginBottom: 8 }}>
+                    正在创建任务... ({creationProgress.current}/{creationProgress.total})
+                  </div>
+                  <div style={{ color: '#666' }}>
+                    {creationProgress.current === creationProgress.total 
+                      ? '🎉 创建完成，准备跳转到任务列表...' 
+                      : '⚙️ 请稍候，正在上传并处理您的文件...'}
+                  </div>
+                  {creationProgress.current < creationProgress.total && (
+                    <div style={{ color: '#999', fontSize: 12, marginTop: 8 }}>
+                      📝 提示：文件较大或网络较慢时可能需要稍长时间
+                    </div>
+                  )}
+                </div>
+              </Card>
             </div>
           )}
 
@@ -341,7 +445,7 @@ const TaskCreate: React.FC = () => {
                   }
                 </Button>
               )}
-              {uploadedFiles.filter(f => f.status === 'success').length > 0 && (
+              {uploadedFiles.filter(f => f.status === 'success').length > 0 && !creating && (
                 <Button 
                   size="large" 
                   onClick={() => navigate('/')}

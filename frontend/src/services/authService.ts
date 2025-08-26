@@ -84,7 +84,7 @@ export const loginWithThirdPartyToken = async (accessToken: string): Promise<Log
 export const loginWithThirdParty = async (code: string): Promise<LoginResult> => {
   try {
     // 第一步：使用授权码兑换Access Token
-    console.log('🔄 步骤1: 兑换第三方Access Token');
+    // console.log('🔄 步骤1: 兑换第三方Access Token');
     const tokenResult = await exchangeThirdPartyToken(code);
     
     if (!tokenResult.success || !tokenResult.token) {
@@ -94,14 +94,14 @@ export const loginWithThirdParty = async (code: string): Promise<LoginResult> =>
       };
     }
     
-    console.log('✅ Token兑换成功，开始用户登录');
+    // console.log('✅ Token兑换成功，开始用户登录');
     
     // 第二步：使用Access Token进行用户登录
-    console.log('🔄 步骤2: 使用Token进行用户登录');
+    // console.log('🔄 步骤2: 使用Token进行用户登录');
     const loginResult = await loginWithThirdPartyToken(tokenResult.token.access_token);
     
     if (loginResult.success) {
-      console.log('✅ 第三方登录完成');
+      // console.log('✅ 第三方登录完成');
     }
     
     return loginResult;
@@ -117,7 +117,7 @@ export const loginWithThirdParty = async (code: string): Promise<LoginResult> =>
 // 兼容旧版本的登录方法（使用legacy接口）
 export const loginWithThirdPartyLegacy = async (code: string): Promise<LoginResult> => {
   try {
-    console.log('🔄 使用Legacy接口登录（兼容模式）');
+    // console.log('🔄 使用Legacy接口登录（兼容模式）');
     const response = await api.post('/auth/thirdparty/login-legacy', { code });
     return {
       success: true,
