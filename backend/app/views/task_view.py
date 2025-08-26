@@ -33,6 +33,7 @@ class TaskView(BaseView):
         self.router.add_api_route("/{task_id}/retry", self.retry_task, methods=["POST"])
         self.router.add_api_route("/{task_id}/report", self.download_report, methods=["GET"])
         self.router.add_api_route("/{task_id}/report/check", self.check_report_permission, methods=["GET"])
+        self.router.add_api_route("/{task_id}/file", self.download_task_file, methods=["GET"])
         print("🛠️  TaskView 路由已设置：")
         for route in self.router.routes:
             print(f"   {route.methods} {route.path}")
@@ -225,6 +226,70 @@ class TaskView(BaseView):
         
         print(f"📋 权限检查结果: {permission_check}")
         return permission_check
+    
+    def download_task_file(
+        self,
+        task_id: int,
+        current_user: User = Depends(BaseView.get_current_user),
+        db: Session = Depends(get_db)
+    ):
+        """下载任务对应的原文件"""
+        print(f"📁 用户 {current_user.uid} 请求下载任务 {task_id} 的原文件")
+        
+        try:
+            # 创建任务服务
+            task_service = TaskService(db)
+            
+            # 获取任务详情
+            from app.repositories.task import TaskRepository
+            task_repo = TaskRepository(db)
+            task = task_repo.get_by_id(task_id)
+            if not task:
+                raise HTTPException(404, "任务不存在")
+            
+            # 检查用户权限
+            self.check_task_access_permission(current_user, task.user_id)
+            
+            # 获取文件信息
+            if not task.file_info:
+                raise HTTPException(404, "任务关联的文件不存在")
+                
+            file_info = task.file_info
+            file_path = file_info.file_path
+            
+            # 检查文件是否存在
+            import os
+            if not os.path.exists(file_path):
+                print(f"❌ 文件不存在: {file_path}")
+                raise HTTPException(404, "文件不存在或已被删除")
+            
+            print(f"✅ 找到文件: {file_path}, 大小: {file_info.file_size} bytes")
+            
+            # 创建文件流响应
+            def iterfile():
+                with open(file_path, mode="rb") as file_like:
+                    yield from file_like
+            
+            # 设置响应头
+            headers = {
+                "Content-Disposition": f'attachment; filename="{file_info.original_name}"',
+                "Content-Length": str(file_info.file_size),
+                "Content-Type": file_info.mime_type or "application/octet-stream"
+            }
+            
+            print(f"📤 开始下载文件: {file_info.original_name}")
+            
+            return StreamingResponse(
+                iterfile(), 
+                media_type=file_info.mime_type or "application/octet-stream",
+                headers=headers
+            )
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"❌ 文件下载失败: {e}")
+            raise HTTPException(500, f"文件下载失败: {str(e)}")
 
 
 # 创建视图实例并导出router

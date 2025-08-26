@@ -224,6 +224,22 @@ const TaskList: React.FC = () => {
     }
   }, []);
 
+  const handleDownloadFile = useCallback(async (taskId: number) => {
+    try {
+      const result = await taskAPI.downloadTaskFile(taskId);
+      message.success(`原文件下载成功: ${result.filename}`);
+    } catch (error: any) {
+      console.error('下载文件失败:', error);
+      if (error.response?.status === 404) {
+        message.error('文件不存在或已被删除');
+      } else if (error.response?.status === 403) {
+        message.error('没有下载权限');
+      } else {
+        message.error('下载文件失败');
+      }
+    }
+  }, []);
+
   const getStatusTag = (status: string) => {
     const statusMap: { [key: string]: { color: string; text: string; icon: React.ReactNode } } = {
       pending: { color: 'default', text: '等待中', icon: <ClockCircleOutlined /> },
@@ -553,6 +569,9 @@ const TaskList: React.FC = () => {
             <Menu.Item key="view" icon={<EyeOutlined />} onClick={() => navigate(`/task/${record.id}`)}>
               查看详情
             </Menu.Item>
+            <Menu.Item key="download-file" icon={<FileTextOutlined />} onClick={() => handleDownloadFile(record.id)}>
+              下载原文件
+            </Menu.Item>
             {record.status === 'completed' && (
               <Menu.Item key="download" icon={<DownloadOutlined />} onClick={() => handleDownloadReport(record.id)}>
                 下载报告
@@ -581,6 +600,13 @@ const TaskList: React.FC = () => {
             >
               查看
             </Button>
+            <Tooltip title="下载原文件">
+              <Button
+                size="small"
+                icon={<FileTextOutlined />}
+                onClick={() => handleDownloadFile(record.id)}
+              />
+            </Tooltip>
             <Dropdown overlay={menu} trigger={['click']}>
               <Button size="small">
                 更多 <FilterOutlined />
