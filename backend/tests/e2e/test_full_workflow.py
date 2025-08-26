@@ -43,7 +43,7 @@ class TestCompleteDocumentTestingWorkflow:
         }
         
         task_response = client.post("/api/tasks", files=files, data=task_data, headers=headers)
-        assert task_response.status_code == 200
+        assert task_response.status_code == 201
         task = task_response.json()
         task_id = task["id"]
         
@@ -128,7 +128,7 @@ class TestThirdPartyUserWorkflow:
         }
         
         task_response = client.post("/api/tasks", files=files, data=task_data, headers=headers)
-        assert task_response.status_code == 200
+        assert task_response.status_code == 201
         task = task_response.json()
         task_id = task["id"]
         
@@ -178,7 +178,7 @@ class TestPermissionIsolationWorkflow:
         files = {"file": (filename, io.BytesIO(content), content_type)}
         
         task_a_response = client.post("/api/tasks", files=files, data={"title": "用户A的任务"}, headers=user_a_headers)
-        assert task_a_response.status_code == 200
+        assert task_a_response.status_code == 201
         task_a_id = task_a_response.json()["id"]
         
         # 用户B尝试访问用户A的任务（管理员可以访问）
@@ -268,7 +268,7 @@ class TestConcurrentTaskProcessing:
         # 确认任务结果正确性
         for task_id in task_ids:
             detail_response = client.get(f"/api/tasks/{task_id}", headers=headers)
-            assert detail_response.status_code == 200
+            assert detail_response.status_code == 201
             
             detail = detail_response.json()
             assert "task" in detail
@@ -292,7 +292,7 @@ class TestWebSocketRealTimeUpdates:
         files = {"file": (filename, io.BytesIO(content), content_type)}
         
         task_response = client.post("/api/tasks", files=files, data={"title": "WebSocket测试任务"}, headers=headers)
-        assert task_response.status_code == 200
+        assert task_response.status_code == 201
         task_id = task_response.json()["id"]
         
         # 注意：在实际测试中，WebSocket测试可能需要额外的配置

@@ -123,43 +123,15 @@ const TaskDetailEnhanced: React.FC = () => {
     });
   }, [loadTaskDetail, loadAIOutputs]); // 只在初始加载时执行
 
-  // 独立的定时器 useEffect，完全避免依赖循环
+  // 清理定时器 useEffect - 仅在组件卸载时清理
   useEffect(() => {
-    // 清理之前的定时器
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-    
-    // 检查是否需要定时刷新
-    const currentStatus = taskStatusRef.current;
-    const needsRefresh = currentStatus === 'processing' || currentStatus === 'pending';
-    
-    if (needsRefresh) {
-      intervalRef.current = setInterval(() => {
-        // 直接检查最新状态，避免闭包陷阱
-        const latestStatus = taskStatusRef.current;
-        if (latestStatus === 'processing' || latestStatus === 'pending') {
-          loadTaskDetail();
-          // AI输出加载不影响主页面，异步加载
-          setTimeout(() => loadAIOutputs(), 500);
-        } else {
-          // 如果状态已经不需要刷新，清理定时器
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-          }
-        }
-      }, 3000);
-    }
-    
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
     };
-  }, [taskDetail?.task.status, loadTaskDetail, loadAIOutputs]); // 修复依赖数组
+  }, []); // 空依赖数组，仅在组件卸载时执行
 
   const handleFeedback = useCallback(async (issueId: number, feedbackType: 'accept' | 'reject', comment?: string) => {
     setFeedbackLoading(prev => ({ ...prev, [issueId]: true }));
@@ -1059,45 +1031,60 @@ const TaskDetailEnhanced: React.FC = () => {
               <>
                 {/* AI输出筛选器 */}
                 <Card className="filter-card" size="small" style={{ marginBottom: 16 }}>
-                  <Space size={16} wrap>
-                    <Space size={8}>
-                      <Text strong>操作类型:</Text>
-                      <Radio.Group 
-                        value={aiOutputFilter} 
-                        onChange={(e) => setAiOutputFilter(e.target.value)}
+                  <Row justify="space-between" align="middle">
+                    <Col>
+                      <Space size={16} wrap>
+                        <Space size={8}>
+                          <Text strong>操作类型:</Text>
+                          <Radio.Group 
+                            value={aiOutputFilter} 
+                            onChange={(e) => setAiOutputFilter(e.target.value)}
+                            size="small"
+                          >
+                            <Radio.Button value="all">
+                              全部 ({aiOutputs.length})
+                            </Radio.Button>
+                            <Radio.Button value="preprocess">
+                              <Tag color="blue">预处理 ({aiOutputs.filter(o => o.operation_type === 'preprocess').length})</Tag>
+                            </Radio.Button>
+                            <Radio.Button value="detect_issues">
+                              <Tag color="orange">问题检测 ({aiOutputs.filter(o => o.operation_type === 'detect_issues').length})</Tag>
+                            </Radio.Button>
+                          </Radio.Group>
+                        </Space>
+                        <Divider type="vertical" />
+                        <Space size={8}>
+                          <Text strong>执行状态:</Text>
+                          <Radio.Group 
+                            value={aiStatusFilter}
+                            onChange={(e) => setAiStatusFilter(e.target.value)}
+                            size="small"
+                          >
+                            <Radio.Button value="all">
+                              全部
+                            </Radio.Button>
+                            <Radio.Button value="success">
+                              <Tag color="green">成功 ({aiOutputs.filter(o => o.status === 'success').length})</Tag>
+                            </Radio.Button>
+                            <Radio.Button value="failed">
+                              <Tag color="red">失败 ({aiOutputs.filter(o => o.status !== 'success').length})</Tag>
+                            </Radio.Button>
+                          </Radio.Group>
+                        </Space>
+                      </Space>
+                    </Col>
+                    <Col>
+                      <Button
+                        type="primary"
                         size="small"
+                        icon={<SwapOutlined />}
+                        loading={aiOutputsLoading}
+                        onClick={loadAIOutputs}
                       >
-                        <Radio.Button value="all">
-                          全部 ({aiOutputs.length})
-                        </Radio.Button>
-                        <Radio.Button value="preprocess">
-                          <Tag color="blue">预处理 ({aiOutputs.filter(o => o.operation_type === 'preprocess').length})</Tag>
-                        </Radio.Button>
-                        <Radio.Button value="detect_issues">
-                          <Tag color="orange">问题检测 ({aiOutputs.filter(o => o.operation_type === 'detect_issues').length})</Tag>
-                        </Radio.Button>
-                      </Radio.Group>
-                    </Space>
-                    <Divider type="vertical" />
-                    <Space size={8}>
-                      <Text strong>执行状态:</Text>
-                      <Radio.Group 
-                        value={aiStatusFilter}
-                        onChange={(e) => setAiStatusFilter(e.target.value)}
-                        size="small"
-                      >
-                        <Radio.Button value="all">
-                          全部
-                        </Radio.Button>
-                        <Radio.Button value="success">
-                          <Tag color="green">成功 ({aiOutputs.filter(o => o.status === 'success').length})</Tag>
-                        </Radio.Button>
-                        <Radio.Button value="failed">
-                          <Tag color="red">失败 ({aiOutputs.filter(o => o.status !== 'success').length})</Tag>
-                        </Radio.Button>
-                      </Radio.Group>
-                    </Space>
-                  </Space>
+                        手动刷新
+                      </Button>
+                    </Col>
+                  </Row>
                 </Card>
 
                 <div className="ai-outputs-container">
@@ -1166,7 +1153,19 @@ const TaskDetailEnhanced: React.FC = () => {
                           fontSize: 12,
                           lineHeight: '1.6'
                         }}>
-                          {formatInputText(output.input_text)}
+                          {formatInputText(output.input_text.substring(0, 1000))}
+                          {output.input_text.length > 1000 && (
+                            <div style={{ 
+                              marginTop: 8, 
+                              padding: 4, 
+                              background: '#e6f7ff', 
+                              borderRadius: 4,
+                              fontSize: 11,
+                              color: '#1890ff'
+                            }}>
+                              ... (显示前1000个字符，总长度: {output.input_text.length})
+                            </div>
+                          )}
                         </div>
                       </Panel>
 

@@ -18,7 +18,7 @@ class TestTaskCRUDAPI:
         data = {"title": "测试任务", "ai_ai_model_index": "0"}
         
         response = client.post("/api/tasks/", files=files, data=data, headers=auth_headers)
-        assert response.status_code == 200
+        assert response.status_code == 201
         
         task = response.json()
         assert "id" in task
@@ -74,7 +74,7 @@ class TestTaskCRUDAPI:
     def test_get_tasks_list(self, client: TestClient, auth_headers):
         """测试获取任务列表 - TASK-002"""
         response = client.get("/api/tasks/", headers=auth_headers)
-        assert response.status_code == 200
+        assert response.status_code == 201
         
         tasks = response.json()
         assert isinstance(tasks, list)
@@ -157,7 +157,7 @@ class TestTaskBusinessAPI:
         
         # 重试任务
         response = client.post(f"/api/tasks/{task_id}/retry", headers=auth_headers)
-        assert response.status_code == 200
+        assert response.status_code == 201
         
         result = response.json()
         assert "message" in result
@@ -179,7 +179,7 @@ class TestTaskBusinessAPI:
         
         # 下载报告
         response = client.get(f"/api/tasks/{task_id}/report", headers=auth_headers)
-        assert response.status_code == 200
+        assert response.status_code == 201
         
         result = response.json()
         assert "message" in result
@@ -205,7 +205,7 @@ class TestTaskFileHandling:
         for filename, content, content_type in supported_files:
             files = {"file": (filename, io.BytesIO(content), content_type)}
             response = client.post("/api/tasks/", files=files, data={"ai_model_index": "0"}, headers=auth_headers)
-            assert response.status_code == 200, f"Failed for file type: {filename}"
+            assert response.status_code == 201, f"Failed for file type: {filename}"
             
             task = response.json()
             assert task["file_name"] == filename
@@ -217,13 +217,13 @@ class TestTaskFileHandling:
         
         # 创建第一个任务
         response1 = client.post("/api/tasks/", files=files, headers=auth_headers)
-        assert response1.status_code == 200
+        assert response1.status_code == 201
         task1 = response1.json()
         
         # 创建相同文件的第二个任务
         files = {"file": (filename, io.BytesIO(content), content_type)}
         response2 = client.post("/api/tasks/", files=files, headers=auth_headers)
-        assert response2.status_code == 200
+        assert response2.status_code == 201
         task2 = response2.json()
         
         # 两个任务应该都成功创建
@@ -243,7 +243,7 @@ class TestTaskFileHandling:
             files = {"file": (filename, io.BytesIO(content), "text/markdown")}
             
             response = client.post("/api/tasks/", files=files, data={"ai_model_index": "0"}, headers=auth_headers)
-            assert response.status_code == 200, f"Failed for filename: {filename}"
+            assert response.status_code == 201, f"Failed for filename: {filename}"
             
             task = response.json()
             assert task["file_name"] == filename
@@ -260,14 +260,14 @@ class TestTaskPermissions:
         files = {"file": (filename, io.BytesIO(content), content_type)}
         
         response = client.post("/api/tasks/", files=files, data={"title": "普通用户任务", "ai_model_index": "0"}, headers=normal_headers)
-        assert response.status_code == 200
+        assert response.status_code == 201
         user_task_id = response.json()["id"]
         
         # 管理员创建任务
         admin_headers = {"Authorization": f"Bearer {admin_user_token['token']}"}
         files = {"file": (filename, io.BytesIO(content), content_type)}
         response = client.post("/api/tasks/", files=files, data={"title": "管理员任务", "ai_model_index": "0"}, headers=admin_headers)
-        assert response.status_code == 200
+        assert response.status_code == 201
         admin_task_id = response.json()["id"]
         
         # 普通用户获取任务列表，只能看到自己的任务
@@ -303,7 +303,7 @@ class TestTaskPerformance:
         response = client.post("/api/tasks/", files=files, data={"ai_model_index": "0"}, headers=auth_headers)
         end_time = time.time()
         
-        assert response.status_code == 200
+        assert response.status_code == 201
         response_time = (end_time - start_time) * 1000
         assert response_time < 2000, f"Create task too slow: {response_time}ms"
     

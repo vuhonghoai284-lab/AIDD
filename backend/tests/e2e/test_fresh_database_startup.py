@@ -124,7 +124,7 @@ class TestFreshDatabaseStartup:
         data = {"title": "首个测试任务", "ai_model_index": 0}
         
         response = self.client.post("/api/tasks", files=files, data=data, headers=auth_headers)
-        assert response.status_code == 200
+        assert response.status_code == 201  # 创建资源返回201
         task = response.json()
         assert task["title"] == "首个测试任务"
         assert task["status"] == "pending"
