@@ -21,13 +21,13 @@ class Task(Base):
     processing_time = Column(Float)
     error_message = Column(Text)
     
-    # 外键关联
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    file_id = Column(Integer, ForeignKey("file_infos.id"), nullable=False)
-    model_id = Column(Integer, ForeignKey("ai_models.id"), nullable=False)
+    # 外键关联（添加索引以优化查询性能）
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    file_id = Column(Integer, ForeignKey("file_infos.id"), nullable=False, index=True)
+    model_id = Column(Integer, ForeignKey("ai_models.id"), nullable=False, index=True)
     
-    # 时间戳
-    created_at = Column(DateTime, default=datetime.utcnow)
+    # 时间戳（添加索引以优化排序查询）
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
     completed_at = Column(DateTime)
     
     # 关系定义

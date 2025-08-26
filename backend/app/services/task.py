@@ -3,6 +3,7 @@
 """
 import os
 import hashlib
+import time
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from fastapi import UploadFile, HTTPException
@@ -141,17 +142,43 @@ class TaskService(ITaskService):
         return TaskResponse.from_task_with_relations(task, file_info, ai_model, user_info, issue_count, processed_issues)
     
     def get_all_tasks(self) -> List[TaskResponse]:
-        """获取所有任务"""
-        tasks = self.task_repo.get_all()
+        """获取所有任务（性能优化版）"""
+        print("🚀 开始获取任务列表（使用性能优化查询）...")
+        start_time = time.time()
+        
+        # 1. 使用JOIN预加载关联数据，避免N+1查询
+        tasks = self.task_repo.get_all_with_relations()
+        print(f"📊 查询到 {len(tasks)} 个任务，耗时: {(time.time() - start_time)*1000:.1f}ms")
+        
+        if not tasks:
+            return []
+        
+        # 2. 批量统计问题数量，避免逐个查询
+        batch_start = time.time()
+        task_ids = [task.id for task in tasks]
+        issue_stats = self.task_repo.batch_count_issues(task_ids)
+        print(f"📊 批量统计问题数量，耗时: {(time.time() - batch_start)*1000:.1f}ms")
+        
+        # 3. 构建响应对象
         result = []
         for task in tasks:
-            file_info = self.file_repo.get_by_id(task.file_id) if task.file_id else None
-            ai_model = self.model_repo.get_by_id(task.model_id) if task.model_id else None
-            user_info = self.user_repo.get_by_id(task.user_id) if task.user_id else None
-            issue_count = self.task_repo.count_issues(task.id)
-            processed_issues = self.task_repo.count_processed_issues(task.id)
-            task_resp = TaskResponse.from_task_with_relations(task, file_info, ai_model, user_info, issue_count, processed_issues)
+            # 关联数据已预加载，无需额外查询
+            file_info = task.file_info
+            ai_model = task.ai_model  
+            user_info = task.user
+            
+            # 从批量统计结果中获取问题数量
+            stats = issue_stats.get(task.id, {"issue_count": 0, "processed_issues": 0})
+            issue_count = stats["issue_count"]
+            processed_issues = stats["processed_issues"]
+            
+            task_resp = TaskResponse.from_task_with_relations(
+                task, file_info, ai_model, user_info, issue_count, processed_issues
+            )
             result.append(task_resp)
+        
+        total_time = time.time() - start_time
+        print(f"✅ 任务列表获取完成，总耗时: {total_time*1000:.1f}ms")
         return result
     
     def get_all(self) -> List[TaskResponse]:
@@ -159,17 +186,43 @@ class TaskService(ITaskService):
         return self.get_all_tasks()
     
     def get_user_tasks(self, user_id: int) -> List[TaskResponse]:
-        """获取指定用户的任务"""
-        tasks = self.task_repo.get_by_user_id(user_id)
+        """获取指定用户的任务（性能优化版）"""
+        print(f"🚀 开始获取用户 {user_id} 的任务列表（使用性能优化查询）...")
+        start_time = time.time()
+        
+        # 1. 使用JOIN预加载关联数据，避免N+1查询
+        tasks = self.task_repo.get_by_user_id_with_relations(user_id)
+        print(f"📊 查询到用户 {user_id} 的 {len(tasks)} 个任务，耗时: {(time.time() - start_time)*1000:.1f}ms")
+        
+        if not tasks:
+            return []
+        
+        # 2. 批量统计问题数量，避免逐个查询
+        batch_start = time.time()
+        task_ids = [task.id for task in tasks]
+        issue_stats = self.task_repo.batch_count_issues(task_ids)
+        print(f"📊 批量统计问题数量，耗时: {(time.time() - batch_start)*1000:.1f}ms")
+        
+        # 3. 构建响应对象
         result = []
         for task in tasks:
-            file_info = self.file_repo.get_by_id(task.file_id) if task.file_id else None
-            ai_model = self.model_repo.get_by_id(task.model_id) if task.model_id else None
-            user_info = self.user_repo.get_by_id(task.user_id) if task.user_id else None
-            issue_count = self.task_repo.count_issues(task.id)
-            processed_issues = self.task_repo.count_processed_issues(task.id)
-            task_resp = TaskResponse.from_task_with_relations(task, file_info, ai_model, user_info, issue_count, processed_issues)
+            # 关联数据已预加载，无需额外查询
+            file_info = task.file_info
+            ai_model = task.ai_model
+            user_info = task.user
+            
+            # 从批量统计结果中获取问题数量
+            stats = issue_stats.get(task.id, {"issue_count": 0, "processed_issues": 0})
+            issue_count = stats["issue_count"]
+            processed_issues = stats["processed_issues"]
+            
+            task_resp = TaskResponse.from_task_with_relations(
+                task, file_info, ai_model, user_info, issue_count, processed_issues
+            )
             result.append(task_resp)
+        
+        total_time = time.time() - start_time
+        print(f"✅ 用户任务列表获取完成，总耗时: {total_time*1000:.1f}ms")
         return result
     
     def get_task_detail(self, task_id: int) -> TaskDetail:
@@ -191,7 +244,7 @@ class TaskService(ITaskService):
         
         return TaskDetail(
             task=task_resp,
-            issues=[IssueResponse.from_orm(issue) for issue in issues]
+            issues=[IssueResponse.model_validate(issue) for issue in issues]
         )
     
     def delete(self, entity_id: int) -> bool:

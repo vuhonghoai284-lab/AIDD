@@ -35,9 +35,34 @@ class TaskRepository(ITaskRepository):
         """获取所有任务"""
         return self.db.query(Task).order_by(Task.created_at.desc()).all()
     
+    def get_all_with_relations(self) -> List[Task]:
+        """获取所有任务（使用JOIN预加载关联数据）"""
+        from sqlalchemy.orm import joinedload
+        return (self.db.query(Task)
+                .options(
+                    joinedload(Task.file_info),
+                    joinedload(Task.ai_model), 
+                    joinedload(Task.user)
+                )
+                .order_by(Task.created_at.desc())
+                .all())
+    
     def get_by_user_id(self, user_id: int) -> List[Task]:
         """根据用户ID获取任务"""
         return self.db.query(Task).filter(Task.user_id == user_id).order_by(Task.created_at.desc()).all()
+        
+    def get_by_user_id_with_relations(self, user_id: int) -> List[Task]:
+        """根据用户ID获取任务（使用JOIN预加载关联数据）"""
+        from sqlalchemy.orm import joinedload
+        return (self.db.query(Task)
+                .options(
+                    joinedload(Task.file_info),
+                    joinedload(Task.ai_model),
+                    joinedload(Task.user)
+                )
+                .filter(Task.user_id == user_id)
+                .order_by(Task.created_at.desc())
+                .all())
     
     def update(self, task_id: int, **kwargs) -> Optional[Task]:
         """更新任务"""
@@ -87,6 +112,37 @@ class TaskRepository(ITaskRepository):
             Issue.task_id == task_id,
             Issue.feedback_type.isnot(None)
         ).count()
+        
+    def batch_count_issues(self, task_ids: List[int]) -> dict:
+        """批量统计任务的问题数量"""
+        from sqlalchemy import func
+        if not task_ids:
+            return {}
+        
+        # 批量查询所有问题数量
+        issue_counts = (self.db.query(Issue.task_id, func.count(Issue.id))
+                       .filter(Issue.task_id.in_(task_ids))
+                       .group_by(Issue.task_id)
+                       .all())
+        
+        # 批量查询已处理问题数量  
+        processed_counts = (self.db.query(Issue.task_id, func.count(Issue.id))
+                           .filter(Issue.task_id.in_(task_ids), Issue.feedback_type.isnot(None))
+                           .group_by(Issue.task_id)
+                           .all())
+        
+        # 构建结果字典
+        result = {}
+        for task_id in task_ids:
+            result[task_id] = {"issue_count": 0, "processed_issues": 0}
+        
+        for task_id, count in issue_counts:
+            result[task_id]["issue_count"] = count
+            
+        for task_id, count in processed_counts:
+            result[task_id]["processed_issues"] = count
+            
+        return result
     
     def update_status(self, task_id: int, status: str, progress: int = None) -> Task:
         """更新任务状态和进度"""

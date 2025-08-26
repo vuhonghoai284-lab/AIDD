@@ -12,7 +12,7 @@ class Issue(Base):
     __tablename__ = "issues"
     
     id = Column(Integer, primary_key=True, index=True)
-    task_id = Column(Integer, ForeignKey("tasks.id"), nullable=False)
+    task_id = Column(Integer, ForeignKey("tasks.id"), nullable=False, index=True)  # 添加索引优化JOIN查询
     issue_type = Column(String(100), nullable=False)
     description = Column(Text, nullable=False)
     location = Column(String(500))
@@ -23,7 +23,7 @@ class Issue(Base):
     user_impact = Column(Text)
     reasoning = Column(Text)
     context = Column(Text)
-    feedback_type = Column(String(50))  # accept, reject
+    feedback_type = Column(String(50), index=True)  # 添加索引优化已处理问题统计
     feedback_comment = Column(Text)
     satisfaction_rating = Column(Float)  # 满意度评分 1-5星
     created_at = Column(String(50))
