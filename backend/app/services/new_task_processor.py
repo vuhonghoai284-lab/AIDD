@@ -9,7 +9,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 
+from app.core.database import SessionLocal
 from app.repositories.task import TaskRepository
 from app.repositories.issue import IssueRepository
 from app.repositories.ai_output import AIOutputRepository
@@ -23,48 +25,63 @@ from app.services.ai_service_providers.service_provider_factory import ai_servic
 
 
 class NewTaskProcessor:
-    """新任务处理器 - 使用责任链模式"""
+    """新任务处理器 - 使用责任链模式，支持并发异步处理"""
     
-    def __init__(self, db: Session):
-        self.db = db
-        self.task_repo = TaskRepository(db)
-        self.issue_repo = IssueRepository(db)
-        self.ai_output_repo = AIOutputRepository(db)
-        self.file_repo = FileInfoRepository(db)
-        self.model_repo = AIModelRepository(db)
+    def __init__(self, db: Session = None):
+        # 不直接使用传入的db会话，而是在处理时创建新的会话
+        self._external_db = db  # 保留引用，但不直接使用
         self.settings = get_settings()
         self.start_time = None  # 记录任务开始时间
         
         # 初始化日志
         self.logger = logging.getLogger(f"new_task_processor.{id(self)}")
         self.logger.setLevel(logging.INFO)
+        
+    def _create_db_session(self) -> Session:
+        """为每个任务处理创建独立的数据库会话"""
+        return SessionLocal()
+        
+    def _initialize_repositories(self, db: Session):
+        """使用给定的数据库会话初始化所有仓库"""
+        return {
+            'task_repo': TaskRepository(db),
+            'issue_repo': IssueRepository(db),
+            'ai_output_repo': AIOutputRepository(db),
+            'file_repo': FileInfoRepository(db),
+            'model_repo': AIModelRepository(db)
+        }
     
     async def process_task(self, task_id: int):
-        """处理任务"""
+        """处理任务（使用独立的数据库会话）"""
+        db = None
         try:
+            # 为此任务创建独立的数据库会话
+            db = self._create_db_session()
+            repos = self._initialize_repositories(db)
+            
             # 记录任务开始时间（使用UTC时间戳）
             self.start_time = time.time()
             
             # 记录开始日志
-            await self._log(task_id, "INFO", "开始处理任务", "初始化", 0)
+            await self._log(task_id, "INFO", "开始处理任务", "初始化", 0, db)
             
             # 获取任务信息
-            task = self.task_repo.get(task_id)
+            task = repos['task_repo'].get(task_id)
             if not task:
                 raise ValueError(f"任务不存在: {task_id}")
             
             # 更新状态为处理中
-            self.task_repo.update(task_id, status="processing", progress=10)
+            repos['task_repo'].update(task_id, status="processing", progress=10)
             await manager.send_status(task_id, "processing")
             
             # 准备处理上下文
-            context = await self._prepare_context(task_id, task)
+            context = await self._prepare_context(task_id, task, repos['file_repo'], db)
             
             # 获取任务关联的AI模型并找到对应的索引
             task_model_index = self.settings.default_model_index  # 默认值
             if task.model_id:
                 # 根据model_id查找模型配置
-                ai_model = self.model_repo.get_by_id(task.model_id)
+                ai_model = repos['model_repo'].get_by_id(task.model_id)
                 if ai_model:
                     # 在settings的模型列表中查找对应的索引
                     for index, model_config in enumerate(self.settings.ai_models):
@@ -91,7 +108,7 @@ class NewTaskProcessor:
             ai_service_provider = ai_service_provider_factory.create_provider(
                 settings=self.settings,
                 model_index=task_model_index,
-                db_session=self.db
+                db_session=db
             )
             
             # 创建处理链
@@ -99,15 +116,15 @@ class NewTaskProcessor:
             
             # 执行处理链
             provider_info = ai_service_provider.get_provider_info()
-            await self._log(task_id, "INFO", f"使用AI服务: {ai_service_provider.get_provider_name()}", "初始化", 10)
-            await self._log(task_id, "INFO", f"模型配置: {provider_info.get('model', 'unknown')} @ {provider_info.get('provider', 'unknown')}", "初始化", 12)
+            await self._log(task_id, "INFO", f"使用AI服务: {ai_service_provider.get_provider_name()}", "初始化", 10, db)
+            await self._log(task_id, "INFO", f"模型配置: {provider_info.get('model', 'unknown')} @ {provider_info.get('provider', 'unknown')}", "初始化", 12, db)
             
             async def progress_callback(message: str, progress: int):
                 """进度回调函数"""
                 # 记录日志并推送消息
-                await self._log(task_id, "INFO", message, "处理中", progress)
+                await self._log(task_id, "INFO", message, "处理中", progress, db)
                 # 更新任务进度
-                self.task_repo.update(task_id, progress=progress)
+                repos['task_repo'].update(task_id, progress=progress)
                 # 发送进度状态更新（不重复发送消息）
                 await manager.send_status(task_id, "processing")
             
@@ -120,12 +137,12 @@ class NewTaskProcessor:
                 raise ValueError(f"任务处理失败: {result.error}")
             
             # 保存处理结果
-            await self._save_processing_results(task_id, context, result)
+            await self._save_processing_results(task_id, context, result, repos, db)
             
             # 完成任务
             # 使用任务实际开始时间计算耗时，避免时区转换问题
             processing_time = time.time() - self.start_time if self.start_time else 0
-            self.task_repo.update(
+            repos['task_repo'].update(
                 task_id, 
                 status="completed",
                 progress=100,
@@ -134,20 +151,42 @@ class NewTaskProcessor:
             )
             await manager.send_progress(task_id, 100, "完成")
             await manager.send_status(task_id, "completed")
-            await self._log(task_id, "INFO", f"任务处理完成，耗时{processing_time:.2f}秒", "完成", 100)
+            await self._log(task_id, "INFO", f"任务处理完成，耗时{processing_time:.2f}秒", "完成", 100, db)
             
         except Exception as e:
             # 记录错误
-            await self._log(task_id, "ERROR", f"任务处理失败: {str(e)}", "错误", 0)
+            if db:
+                try:
+                    await self._log(task_id, "ERROR", f"任务处理失败: {str(e)}", "错误", 0, db)
+                    # 如果repos已初始化，使用它们更新任务状态
+                    if 'repos' in locals():
+                        repos['task_repo'].update(
+                            task_id, 
+                            status="failed", 
+                            error_message=str(e)
+                        )
+                    else:
+                        # 否则创建临时仓库
+                        temp_repo = TaskRepository(db)
+                        temp_repo.update(
+                            task_id, 
+                            status="failed", 
+                            error_message=str(e)
+                        )
+                except Exception as log_error:
+                    self.logger.error(f"记录错误日志时失败: {log_error}")
+                    
             await manager.send_status(task_id, "failed")
-            self.task_repo.update(
-                task_id, 
-                status="failed", 
-                error_message=str(e)
-            )
             raise
+        finally:
+            # 确保数据库会话被正确关闭
+            if db:
+                try:
+                    db.close()
+                except Exception as close_error:
+                    self.logger.error(f"关闭数据库会话时出错: {close_error}")
     
-    async def _prepare_context(self, task_id: int, task) -> Dict[str, Any]:
+    async def _prepare_context(self, task_id: int, task, file_repo, db: Session) -> Dict[str, Any]:
         """准备处理上下文"""
         context = {
             'task_id': task_id
@@ -156,25 +195,26 @@ class NewTaskProcessor:
         # 获取文件信息
         file_info = None
         if task.file_id:
-            file_info = self.file_repo.get_by_id(task.file_id)
+            file_info = file_repo.get_by_id(task.file_id)
         
         if file_info:
             context['file_path'] = file_info.file_path
             context['file_name'] = file_info.original_name
-            await self._log(task_id, "INFO", f"正在处理文档: {file_info.original_name}", "文档解析", 10)
+            await self._log(task_id, "INFO", f"正在处理文档: {file_info.original_name}", "文档解析", 10, db)
         else:
             context['file_name'] = "测试文档"
-            await self._log(task_id, "INFO", "使用测试模式文档", "文档解析", 10)
+            await self._log(task_id, "INFO", "使用测试模式文档", "文档解析", 10, db)
         
         return context
     
-    async def _save_processing_results(self, task_id: int, context: Dict[str, Any], result):
+    async def _save_processing_results(self, task_id: int, context: Dict[str, Any], result, repos, db: Session):
         """保存处理结果"""
-        await self._log(task_id, "INFO", "正在保存处理结果", "保存结果", 85)
+        await self._log(task_id, "INFO", "正在保存处理结果", "保存结果", 85, db)
         
         # 保存文件解析结果（非AI步骤，保存处理记录）
         if 'file_parsing_result' in context:
             self._save_ai_output(
+                repos['ai_output_repo'],
                 task_id=task_id,
                 operation_type="file_parsing",
                 input_text=str(context.get('file_path', 'test')),
@@ -190,6 +230,7 @@ class NewTaskProcessor:
             original_count = len(context.get('document_processing_result', []))
             merged_count = len(context['section_merge_result'])
             self._save_ai_output(
+                repos['ai_output_repo'],
                 task_id=task_id,
                 operation_type="section_merge",
                 input_text=f"原始章节数: {original_count}",
@@ -211,10 +252,10 @@ class NewTaskProcessor:
             
             # 保存问题到数据库
             issue_count = len(issues) if issues else 0
-            await self._log(task_id, "INFO", f"检测到{issue_count}个问题", "保存结果", 90)
+            await self._log(task_id, "INFO", f"检测到{issue_count}个问题", "保存结果", 90, db)
             
             for issue in (issues or []):
-                self.issue_repo.create(
+                repos['issue_repo'].create(
                     task_id=task_id,
                     issue_type=issue.get('issue_type', '未知'),
                     description=issue.get('description', ''),
@@ -228,10 +269,10 @@ class NewTaskProcessor:
                     context=issue.get('context')
                 )
     
-    def _save_ai_output(self, task_id: int, operation_type: str, 
+    def _save_ai_output(self, ai_output_repo, task_id: int, operation_type: str, 
                        input_text: str, result: Dict[str, Any]):
         """保存AI输出结果"""
-        self.ai_output_repo.create(
+        ai_output_repo.create(
             task_id=task_id,
             operation_type=operation_type,
             input_text=input_text,
@@ -243,22 +284,29 @@ class NewTaskProcessor:
             processing_time=result.get('processing_time')
         )
     
-    async def _log(self, task_id: int, level: str, message: str, stage: str = None, progress: int = None):
+    async def _log(self, task_id: int, level: str, message: str, stage: str = None, progress: int = None, db: Session = None):
         """记录日志并实时推送"""
         # 过滤空消息，避免产生无用的日志记录
         if not message or not str(message).strip():
             return
             
         # 保存到数据库
-        log = TaskLog(
-            task_id=task_id,
-            level=level,
-            message=str(message).strip(),
-            stage=stage,
-            progress=progress
-        )
-        self.db.add(log)
-        self.db.commit()
+        if db:
+            try:
+                log = TaskLog(
+                    task_id=task_id,
+                    level=level,
+                    message=str(message).strip(),
+                    stage=stage,
+                    progress=progress
+                )
+                db.add(log)
+                db.commit()
+            except Exception as e:
+                self.logger.error(f"保存日志到数据库时失败: {e}")
         
         # 实时推送
-        await manager.send_log(task_id, level, message, stage, progress)
+        try:
+            await manager.send_log(task_id, level, message, stage, progress)
+        except Exception as e:
+            self.logger.error(f"推送日志消息时失败: {e}")

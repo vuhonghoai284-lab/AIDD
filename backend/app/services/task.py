@@ -116,19 +116,26 @@ class TaskService(ITaskService):
             model_id=ai_model.id
         )
         
-        # 异步处理任务 - 使用新的责任链处理器
+        # 异步处理任务 - 使用优化的并发安全处理器
         try:
             from app.services.new_task_processor import NewTaskProcessor
-            processor = NewTaskProcessor(self.db)
-            # 在测试环境中，可能没有运行的事件循环，使用try-except处理
+            # 不传递数据库会话，让处理器自己创建独立的会话
+            processor = NewTaskProcessor()
+            
+            # 检查当前是否在异步环境中
             try:
-                asyncio.create_task(processor.process_task(task.id))
+                # 尝试获取当前事件循环
+                loop = asyncio.get_running_loop()
+                # 在独立的任务中处理，避免阻塞主线程
+                task_future = asyncio.create_task(
+                    self._safe_process_task(processor, task.id)
+                )
                 print(f"✅ 后台任务已启动，任务ID: {task.id}")
-            except RuntimeError as e:
-                # 没有运行的事件循环，在测试环境中是正常的
-                print(f"⚠️ 无法启动后台任务（测试环境）: {e}")
-                # 在测试环境中，我们可以选择同步运行或者跳过
-                print(f"📝 任务 {task.id} 已创建，等待手动处理")
+            except RuntimeError:
+                # 没有运行的事件循环，在测试环境或同步环境中是正常的
+                print(f"⚠️ 无法启动后台任务（非异步环境），任务ID: {task.id}")
+                print(f"📝 任务已创建，等待异步环境处理")
+                
         except Exception as e:
             print(f"❌ 启动后台任务时出错: {e}")
             # 不抛出异常，让任务创建成功，只是处理会延后
@@ -140,6 +147,78 @@ class TaskService(ITaskService):
         issue_count = self.task_repo.count_issues(task.id)
         processed_issues = self.task_repo.count_processed_issues(task.id)
         return TaskResponse.from_task_with_relations(task, file_info, ai_model, user_info, issue_count, processed_issues)
+    
+    async def _safe_process_task(self, processor, task_id: int):
+        """安全的任务处理包装器，处理异常和错误恢复"""
+        try:
+            await processor.process_task(task_id)
+        except Exception as e:
+            print(f"❌ 任务 {task_id} 处理失败: {e}")
+            # 这里可以添加更多的错误恢复逻辑，比如重试机制
+            # 或者发送错误通知等
+            
+    async def batch_create_tasks(self, files_data: List[dict], user_id: Optional[int] = None, max_concurrent: int = 5) -> List[TaskResponse]:
+        """批量并发创建任务
+        
+        Args:
+            files_data: 文件数据列表，每个元素包含file, title, model_index等
+            user_id: 用户ID
+            max_concurrent: 最大并发数，默认5个
+            
+        Returns:
+            List[TaskResponse]: 创建的任务列表
+        """
+        print(f"🚀 开始批量创建 {len(files_data)} 个任务，最大并发数: {max_concurrent}")
+        
+        # 使用信号量控制并发数
+        semaphore = asyncio.Semaphore(max_concurrent)
+        
+        async def create_single_task(file_data: dict) -> TaskResponse:
+            """创建单个任务"""
+            async with semaphore:
+                try:
+                    return await self.create_task(
+                        file=file_data.get('file'),
+                        title=file_data.get('title'),
+                        model_index=file_data.get('model_index'),
+                        user_id=user_id
+                    )
+                except Exception as e:
+                    print(f"❌ 创建任务失败: {e}")
+                    raise
+        
+        # 并发创建所有任务
+        start_time = time.time()
+        tasks = await asyncio.gather(
+            *[create_single_task(file_data) for file_data in files_data],
+            return_exceptions=True
+        )
+        
+        # 处理结果
+        successful_tasks = []
+        failed_tasks = []
+        
+        for i, result in enumerate(tasks):
+            if isinstance(result, Exception):
+                failed_tasks.append({
+                    'index': i,
+                    'file': files_data[i].get('file', {}).get('filename', 'unknown'),
+                    'error': str(result)
+                })
+            else:
+                successful_tasks.append(result)
+        
+        total_time = time.time() - start_time
+        print(f"✅ 批量创建完成，耗时: {total_time:.2f}s")
+        print(f"   成功: {len(successful_tasks)} 个")
+        print(f"   失败: {len(failed_tasks)} 个")
+        
+        if failed_tasks:
+            print("❌ 失败的任务:")
+            for failed in failed_tasks:
+                print(f"   - {failed['file']}: {failed['error']}")
+        
+        return successful_tasks
     
     def get_all_tasks(self) -> List[TaskResponse]:
         """获取所有任务（性能优化版）"""
