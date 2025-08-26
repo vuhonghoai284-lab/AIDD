@@ -25,18 +25,21 @@ def get_database_connection():
     database_config = settings.database_config
     
     # 构建数据库连接URL
-    if database_config.get('driver') == 'sqlite':
+    if database_config.get('type', 'sqlite').lower() == 'sqlite':
         # SQLite - 本地开发环境
-        database_url = f"sqlite:///{database_config.get('database', './data/app.db')}"
+        sqlite_config = database_config.get('sqlite', {})
+        db_path = sqlite_config.get('path', './data/app.db')
+        database_url = f"sqlite:///{db_path}"
         engine = create_engine(database_url)
         return engine, 'sqlite'
     else:
         # MySQL - 生产环境
-        host = database_config.get('host', 'localhost')
-        port = database_config.get('port', 3306)
-        username = database_config.get('username', 'root')
-        password = database_config.get('password', '')
-        database = database_config.get('database', 'ai_doc_test')
+        mysql_config = database_config.get('mysql', {})
+        host = mysql_config.get('host', 'localhost')
+        port = mysql_config.get('port', 3306)
+        username = mysql_config.get('username', 'root')
+        password = mysql_config.get('password', '')
+        database = mysql_config.get('database', 'ai_doc_test')
         
         try:
             database_url = f"mysql+pymysql://{username}:{password}@{host}:{port}/{database}?charset=utf8mb4"
@@ -66,6 +69,7 @@ def get_db_session(engine):
 
 def check_table_structure(engine, db_type):
     """检查当前表结构"""
+    from sqlalchemy import text
     print("🔍 检查ai_outputs表当前结构...")
     
     with engine.connect() as conn:
@@ -101,6 +105,7 @@ def check_table_structure(engine, db_type):
 
 def migrate_to_longtext(engine, db_type):
     """执行迁移到LONGTEXT"""
+    from sqlalchemy import text
     if db_type != 'mysql':
         print("ℹ️ 非MySQL数据库，跳过迁移")
         return True
@@ -132,6 +137,7 @@ def migrate_to_longtext(engine, db_type):
 
 def verify_migration(engine, db_type):
     """验证迁移结果"""
+    from sqlalchemy import text
     print("🔍 验证迁移结果...")
     
     with engine.connect() as conn:
@@ -161,6 +167,7 @@ def verify_migration(engine, db_type):
 
 def test_large_data_insert(engine, db_type):
     """测试大数据插入"""
+    from sqlalchemy import text
     print("🧪 测试大数据插入能力...")
     
     # 创建测试数据（模拟AI输出的大JSON）
@@ -169,12 +176,20 @@ def test_large_data_insert(engine, db_type):
     try:
         with get_db_session(engine) as session:
             # 插入测试数据
-            insert_sql = text("""
-                INSERT INTO ai_outputs 
-                (task_id, operation_type, input_text, raw_output, status, created_at)
-                VALUES 
-                (:task_id, :operation_type, :input_text, :raw_output, :status, NOW())
-            """)
+            if db_type == 'mysql':
+                insert_sql = text("""
+                    INSERT INTO ai_outputs 
+                    (task_id, operation_type, input_text, raw_output, status, created_at)
+                    VALUES 
+                    (:task_id, :operation_type, :input_text, :raw_output, :status, NOW())
+                """)
+            else:
+                insert_sql = text("""
+                    INSERT INTO ai_outputs 
+                    (task_id, operation_type, input_text, raw_output, status, created_at)
+                    VALUES 
+                    (:task_id, :operation_type, :input_text, :raw_output, :status, datetime('now'))
+                """)
             
             session.execute(insert_sql, {
                 'task_id': 999999,  # 测试任务ID
