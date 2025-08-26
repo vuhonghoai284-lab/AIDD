@@ -46,22 +46,25 @@
   transform: translateY(-1px);
 }
 
-/* 紧凑式问题头部布局 */
+/* 紧凑式问题头部布局 - 改进版 */
 .task-detail-enhanced .issue-header-compact {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   padding: 12px 16px;
   background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   border-bottom: 1px solid #e2e8f0;
 }
 
-.task-detail-enhanced .issue-main-info {
+.task-detail-enhanced .issue-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.task-detail-enhanced .issue-meta-info {
   flex: 1;
   min-width: 0; /* 允许内容收缩 */
 }
 
-.task-detail-enhanced .issue-main-info .issue-number {
+.task-detail-enhanced .issue-meta-info .issue-number {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   padding: 4px 8px;
@@ -71,20 +74,26 @@
   white-space: nowrap;
 }
 
-.task-detail-enhanced .issue-main-info .issue-type-tag {
+.task-detail-enhanced .issue-meta-info .issue-type-tag {
   font-size: 11px;
   padding: 2px 6px;
   white-space: nowrap;
 }
 
-.task-detail-enhanced .issue-main-info .issue-description {
-  flex: 1;
-  min-width: 0;
-}
-
 .task-detail-enhanced .issue-status-section {
   flex-shrink: 0;
   margin-left: 12px;
+}
+
+/* 问题描述区域 - 独立显示 */
+.task-detail-enhanced .issue-description-full {
+  margin-top: 8px;
+}
+
+.task-detail-enhanced .issue-description-text {
+  word-break: break-word;
+  white-space: pre-wrap;
+  max-height: none; /* 允许多行显示 */
 }
 
 .task-detail-enhanced .issue-type-tag {

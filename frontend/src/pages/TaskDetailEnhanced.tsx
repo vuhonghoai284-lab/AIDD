@@ -512,36 +512,47 @@ const TaskDetailEnhanced: React.FC = () => {
                           className={`issue-card-enhanced issue-severity-${issue.severity.toLowerCase()} ${issue.feedback_type ? 'processed' : 'pending'}`}
                           size="small"
                         >
-                          {/* 第一行：问题编号 + 级别 + 错误类型 + 问题描述 + 状态 */}
+                          {/* 第一行：问题编号 + 级别 + 错误类型 + 状态 */}
                           <div className="issue-header-compact">
-                            <div className="issue-main-info">
-                              <Space size={12} align="center">
-                                <span className="issue-number">#{startIndex + paginatedIssues.indexOf(issue) + 1}</span>
-                                {getSeverityBadge(issue.severity, false)}
-                                <Tag color="blue" className="issue-type-tag">[{issue.issue_type}]</Tag>
-                                <Text 
-                                  className="issue-description" 
-                                  ellipsis={{ tooltip: decodeUnicode(issue.description) }}
-                                  style={{ fontWeight: '500', color: '#262626', flex: 1 }}
-                                >
-                                  {decodeUnicode(issue.description)}
-                                </Text>
-                              </Space>
+                            <div className="issue-header-top">
+                              <div className="issue-meta-info">
+                                <Space size={12} align="center">
+                                  <span className="issue-number">#{startIndex + paginatedIssues.indexOf(issue) + 1}</span>
+                                  {getSeverityBadge(issue.severity, false)}
+                                  <Tag color="blue" className="issue-type-tag">[{issue.issue_type}]</Tag>
+                                </Space>
+                              </div>
+                              <div className="issue-status-section">
+                                {issue.feedback_type ? (
+                                  <Tag 
+                                    icon={issue.feedback_type === 'accept' ? <CheckOutlined /> : <CloseOutlined />} 
+                                    color={issue.feedback_type === 'accept' ? 'success' : 'error'}
+                                    style={{ fontSize: '12px' }}
+                                  >
+                                    {issue.feedback_type === 'accept' ? '已接受' : '已拒绝'}
+                                  </Tag>
+                                ) : (
+                                  <Tag color="default" style={{ fontSize: '12px' }}>
+                                    待处理
+                                  </Tag>
+                                )}
+                              </div>
                             </div>
-                            <div className="issue-status-section">
-                              {issue.feedback_type ? (
-                                <Tag 
-                                  icon={issue.feedback_type === 'accept' ? <CheckOutlined /> : <CloseOutlined />} 
-                                  color={issue.feedback_type === 'accept' ? 'success' : 'error'}
-                                  style={{ fontSize: '12px' }}
-                                >
-                                  {issue.feedback_type === 'accept' ? '已接受' : '已拒绝'}
-                                </Tag>
-                              ) : (
-                                <Tag color="default" style={{ fontSize: '12px' }}>
-                                  待处理
-                                </Tag>
-                              )}
+                            {/* 第二行：问题描述（独立显示，可以换行） */}
+                            <div className="issue-description-full">
+                              <Text 
+                                className="issue-description-text" 
+                                style={{ 
+                                  fontWeight: '500', 
+                                  color: '#262626',
+                                  display: 'block',
+                                  lineHeight: '1.4',
+                                  marginTop: '8px',
+                                  wordBreak: 'break-word'
+                                }}
+                              >
+                                {decodeUnicode(issue.description)}
+                              </Text>
                             </div>
                           </div>
 
