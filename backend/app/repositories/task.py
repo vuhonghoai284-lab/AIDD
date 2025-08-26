@@ -53,10 +53,11 @@ class TaskRepository(ITaskRepository):
         """删除任务"""
         task = self.get_by_id(task_id)
         if task:
-            # 删除相关的问题和AI输出
+            # 删除相关的问题、AI输出和任务日志
             self.db.query(Issue).filter(Issue.task_id == task_id).delete()
-            from app.models import AIOutput
+            from app.models import AIOutput, TaskLog
             self.db.query(AIOutput).filter(AIOutput.task_id == task_id).delete()
+            self.db.query(TaskLog).filter(TaskLog.task_id == task_id).delete()
             
             self.db.delete(task)
             self.db.commit()
