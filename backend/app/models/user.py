@@ -24,6 +24,8 @@ class User(Base):
     is_admin = Column(Boolean, default=False)
     # 是否为系统管理员（用于本地登录）
     is_system_admin = Column(Boolean, default=False)
+    # 用户并发任务限制
+    max_concurrent_tasks = Column(Integer, default=10)
     # 创建时间
     created_at = Column(DateTime, default=datetime.utcnow)
     # 最后登录时间

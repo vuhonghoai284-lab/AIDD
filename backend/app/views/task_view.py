@@ -10,6 +10,7 @@ from app.core.database import get_db
 from app.models.user import User
 from app.services.task import TaskService
 from app.services.report_service import ReportService
+from app.services.concurrency_service import concurrency_service, ConcurrencyLimitExceeded
 from app.dto.task import TaskResponse, TaskDetail
 from app.dto.issue import FeedbackRequest
 from app.views.base import BaseView
@@ -34,6 +35,8 @@ class TaskView(BaseView):
         self.router.add_api_route("/{task_id}/report", self.download_report, methods=["GET"])
         self.router.add_api_route("/{task_id}/report/check", self.check_report_permission, methods=["GET"])
         self.router.add_api_route("/{task_id}/file", self.download_task_file, methods=["GET"])
+        self.router.add_api_route("/concurrency-status", self.get_concurrency_status, methods=["GET"])
+        self.router.add_api_route("/user/{user_id}/concurrency-limit", self.update_user_concurrency_limit, methods=["PUT"])
         print("🛠️  TaskView 路由已设置：")
         for route in self.router.routes:
             print(f"   {route.methods} {route.path}")
@@ -48,6 +51,45 @@ class TaskView(BaseView):
         db: Session = Depends(get_db)
     ) -> TaskResponse:
         """创建任务"""
+        # 检查并发限制
+        try:
+            allowed, status_info = concurrency_service.check_concurrency_limits(
+                db, current_user, requested_tasks=1, raise_exception=True
+            )
+        except ConcurrencyLimitExceeded as e:
+            # 返回详细的错误信息
+            if e.limit_type == 'system':
+                raise HTTPException(
+                    status_code=429, 
+                    detail={
+                        "error": "system_concurrency_limit_exceeded",
+                        "message": str(e),
+                        "current_count": e.current_count,
+                        "max_count": e.max_count,
+                        "limit_type": "system"
+                    }
+                )
+            elif e.limit_type == 'user':
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "error": "user_concurrency_limit_exceeded", 
+                        "message": str(e),
+                        "current_count": e.current_count,
+                        "max_count": e.max_count,
+                        "limit_type": "user"
+                    }
+                )
+            else:
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "error": "concurrency_limit_exceeded",
+                        "message": str(e),
+                        "limit_type": "both"
+                    }
+                )
+        
         service = TaskService(db)
         return await service.create_task(file, title, model_index, user_id=current_user.id)
     
@@ -61,6 +103,52 @@ class TaskView(BaseView):
     ) -> List[TaskResponse]:
         """批量创建任务"""
         print(f"🚀 批量创建任务请求: {len(files)} 个文件, model_index={model_index}, user={current_user.uid}")
+        
+        # 检查并发限制（批量任务需要检查请求的任务数量）
+        try:
+            allowed, status_info = concurrency_service.check_concurrency_limits(
+                db, current_user, requested_tasks=len(files), raise_exception=True
+            )
+        except ConcurrencyLimitExceeded as e:
+            # 提供批量任务的特殊错误处理
+            if e.limit_type == 'system':
+                available_slots = status_info['system']['available_slots']
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "error": "system_concurrency_limit_exceeded",
+                        "message": f"系统最多还能创建 {available_slots} 个任务，无法创建 {len(files)} 个任务",
+                        "requested_tasks": len(files),
+                        "available_slots": available_slots,
+                        "current_count": e.current_count,
+                        "max_count": e.max_count,
+                        "limit_type": "system"
+                    }
+                )
+            elif e.limit_type == 'user':
+                available_slots = status_info['user']['available_slots']
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "error": "user_concurrency_limit_exceeded",
+                        "message": f"您最多还能创建 {available_slots} 个任务，无法创建 {len(files)} 个任务",
+                        "requested_tasks": len(files),
+                        "available_slots": available_slots,
+                        "current_count": e.current_count,
+                        "max_count": e.max_count,
+                        "limit_type": "user"
+                    }
+                )
+            else:
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "error": "concurrency_limit_exceeded",
+                        "message": str(e),
+                        "requested_tasks": len(files),
+                        "limit_type": "both"
+                    }
+                )
         
         service = TaskService(db)
         
@@ -226,6 +314,30 @@ class TaskView(BaseView):
         
         print(f"📋 权限检查结果: {permission_check}")
         return permission_check
+    
+    def get_concurrency_status(
+        self,
+        current_user: User = Depends(BaseView.get_current_user),
+        db: Session = Depends(get_db)
+    ) -> dict:
+        """获取并发状态信息"""
+        return concurrency_service.get_concurrency_status(db, current_user)
+    
+    def update_user_concurrency_limit(
+        self,
+        user_id: int,
+        new_limit: int,
+        current_user: User = Depends(BaseView.get_current_user),
+        db: Session = Depends(get_db)
+    ) -> dict:
+        """更新用户并发限制（仅管理员）"""
+        success = concurrency_service.update_user_concurrency_limit(
+            db, user_id, new_limit, current_user
+        )
+        if success:
+            return {"message": f"成功更新用户 {user_id} 的并发限制为 {new_limit}"}
+        else:
+            raise HTTPException(403, "权限不足或操作失败")
     
     def download_task_file(
         self,

@@ -81,7 +81,14 @@ logging:
 
 # 任务处理配置
 task_processing:
-  max_concurrent_tasks: 3  # 最大并发任务数
+  # 并发限制配置
+  concurrency_limits:
+    system_max_concurrent_tasks: 100  # 系统级最大并发任务数
+    default_user_max_concurrent_tasks: 10  # 用户默认最大并发任务数
+    admin_max_concurrent_tasks: 50  # 管理员默认最大并发任务数
+    vip_max_concurrent_tasks: 20  # VIP用户最大并发任务数（预留）
+    
+  max_concurrent_tasks: 3  # 最大并发任务数（已废弃，保留兼容性）
   task_timeout: 12000  # 任务超时时间（秒）
   retry_failed_tasks: true  # 是否重试失败的任务
   
