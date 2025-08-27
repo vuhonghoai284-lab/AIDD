@@ -13,7 +13,7 @@ import { getCurrentUser, logout } from './services/authService';
 import { User } from './types';
 import { ThemeProvider } from './components/ThemeProvider';
 import { useTheme } from './hooks/useTheme';
-import SafeAvatar from './components/SafeAvatar';
+import AsyncAvatar from './components/AsyncAvatar';
 import './App.css';
 
 const { Header, Content } = Layout;
@@ -64,10 +64,11 @@ const UserInfo: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLogo
     <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
       <Dropdown menu={{ items: menuItems }} placement="bottomRight">
         <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-          <SafeAvatar 
+          <AsyncAvatar 
             src={user.avatar_url} 
             icon={<UserOutlined />}
-            timeout={3000}
+            timeout={1000}
+            fallbackDelay={50}
           />
           <span style={{ color: 'white', marginLeft: 8 }}>
             {user.display_name || user.uid}
