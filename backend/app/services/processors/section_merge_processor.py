@@ -272,11 +272,7 @@ class SectionMergeProcessor(ITaskProcessor):
         current_section['original_section_count'] += 1
         current_section['is_merged'] = True
         
-        # 更新标题以反映合并状态
-        if len(current_section['merged_sections']) == 2:
-            # 第一次合并，更新标题格式
-            original_title = current_section['merged_sections'][0]
-            current_section['section_title'] = f"{original_title} (合并章节)"
+        # 注意：按要求不修改章节标题，保持原始标题不变
     
     def _is_likely_split_section(self, current_section: Dict[str, Any], next_section: Dict[str, Any]) -> bool:
         """

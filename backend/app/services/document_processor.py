@@ -170,7 +170,7 @@ class DocumentProcessor:
                 ai_output = AIOutput(
                     task_id=task_id,
                     operation_type="preprocess",
-                    input_text=text[:1000],  # 保存前1000字符作为样本
+                    input_text=text[:1000],  # 显示完整的输入内容前1000字符
                     raw_output=json.dumps({"sections": final_sections}, ensure_ascii=False),
                     parsed_output={"sections": final_sections},
                     processing_time=processing_time,
@@ -193,7 +193,7 @@ class DocumentProcessor:
                 ai_output = AIOutput(
                     task_id=task_id,
                     operation_type="preprocess",
-                    input_text=text[:1000],
+                    input_text=text[:1000],  # 显示完整的输入内容前1000字符
                     raw_output="",
                     status="failed",
                     error_message=str(e),

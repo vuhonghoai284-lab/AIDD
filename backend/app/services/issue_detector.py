@@ -242,7 +242,7 @@ class IssueDetector:
                                     operation_type="detect_issues",
                                     section_title=section_title,
                                     section_index=index,
-                                    input_text=section_title + f" ({len(section_content)}字符)",
+                                    input_text=section_content[:1000],  # 显示完整的输入内容前1000字符
                                     raw_output=json.dumps(result, ensure_ascii=False),
                                     parsed_output=result,
                                     processing_time=processing_time,
@@ -284,7 +284,7 @@ class IssueDetector:
                                     operation_type="detect_issues",
                                     section_title=section_title,
                                     section_index=index,
-                                    input_text=section_title + f" ({len(section_content)}字符)",
+                                    input_text=section_content[:1000],  # 显示完整的输入内容前1000字符
                                     raw_output="",
                                     processing_time=processing_time,
                                     status="failed_with_retry",
@@ -321,7 +321,7 @@ class IssueDetector:
                                 operation_type="detect_issues",
                                 section_title=section_title,
                                 section_index=index,
-                                input_text=section_title + f" ({len(section_content)}字符)",  # 保存标题和长度信息
+                                input_text=section_content[:1000],  # 显示完整的输入内容前1000字符
                                 raw_output="",
                                 status="failed",
                                 error_message=str(e),
