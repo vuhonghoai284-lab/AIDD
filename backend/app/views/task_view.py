@@ -195,6 +195,10 @@ class TaskView(BaseView):
         db: Session = Depends(get_db)
     ) -> PaginatedResponse[TaskResponse]:
         """分页获取任务列表"""
+        import time
+        start_time = time.time()
+        print(f"🎯 TaskView.get_tasks_paginated 开始处理: page={page}, size={page_size}, status={status}, user={current_user.uid}")
+        
         # 构建分页参数
         params = PaginationParams(
             page=page,
@@ -208,9 +212,13 @@ class TaskView(BaseView):
         service = TaskService(db)
         # 管理员可以查看所有任务，普通用户只能查看自己的任务
         if current_user.is_admin:
-            return service.get_paginated_tasks(params, user_id=None)
+            result = service.get_paginated_tasks(params, user_id=None)
         else:
-            return service.get_paginated_tasks(params, user_id=current_user.id)
+            result = service.get_paginated_tasks(params, user_id=current_user.id)
+        
+        total_time = (time.time() - start_time) * 1000
+        print(f"✅ TaskView.get_tasks_paginated 处理完成: 耗时 {total_time:.1f}ms, 返回 {len(result.items)} 个任务")
+        return result
     
     def get_task_detail(
         self,

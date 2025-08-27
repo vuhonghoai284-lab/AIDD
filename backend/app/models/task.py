@@ -1,7 +1,7 @@
 """
 任务数据模型
 """
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
 
@@ -16,7 +16,7 @@ class Task(Base):
     title = Column(String(200), nullable=False)
     
     # 任务状态和进度
-    status = Column(String(50), default='pending')  # pending, processing, completed, failed
+    status = Column(String(50), default='pending', index=True)  # pending, processing, completed, failed
     progress = Column(Float, default=0.0)
     processing_time = Column(Float)
     error_message = Column(Text)
@@ -29,6 +29,18 @@ class Task(Base):
     # 时间戳（添加索引以优化排序查询）
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     completed_at = Column(DateTime)
+    
+    # 复合索引定义 - 优化常见查询组合
+    __table_args__ = (
+        # 用户+状态复合索引 - 优化用户特定状态查询
+        Index('ix_tasks_user_id_status', 'user_id', 'status'),
+        # 用户+创建时间索引 - 优化用户任务按时间排序
+        Index('ix_tasks_user_id_created_at', 'user_id', 'created_at'),
+        # 状态+创建时间索引 - 优化状态过滤并按时间排序  
+        Index('ix_tasks_status_created_at', 'status', 'created_at'),
+        # 用户+状态+时间复合索引 - 优化复合查询
+        Index('ix_tasks_user_id_status_created_at', 'user_id', 'status', 'created_at'),
+    )
     
     # 关系定义
     user = relationship("User", back_populates="tasks")

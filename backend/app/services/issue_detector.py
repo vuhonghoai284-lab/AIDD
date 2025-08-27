@@ -32,7 +32,7 @@ class DocumentIssue(BaseModel):
     original_text: str = Field(description="包含问题的原文内容关键片段，10~30字符", default="")
     user_impact: str = Field(description="该问题对用户阅读理解的影响，10~30字符", default="")
     reasoning: str = Field(description="判定为问题的详细分析和推理过程，20~100字符", default="")
-    context: str = Field(description="问题所在的上下文环境：包含问题原文前一句或一段话、问题内容本身、问题原文后一句或一段话，总长度50~200字符", default="")
+    context: str = Field(description="问题所在的上下文环境（20-200字）：请严格输出包含原文片段的上下文段落的完整内容", default="")
 
 
 class DocumentIssues(BaseModel):

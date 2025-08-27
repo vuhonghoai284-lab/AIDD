@@ -116,33 +116,42 @@ class TaskRepository(ITaskRepository):
         ).count()
         
     def batch_count_issues(self, task_ids: List[int]) -> dict:
-        """批量统计任务的问题数量"""
+        """批量统计任务的问题数量（性能优化版）"""
         from sqlalchemy import func
         if not task_ids:
             return {}
         
-        # 批量查询所有问题数量
-        issue_counts = (self.db.query(Issue.task_id, func.count(Issue.id))
-                       .filter(Issue.task_id.in_(task_ids))
-                       .group_by(Issue.task_id)
-                       .all())
+        # 快速检查：如果issues表为空，直接返回零值结果
+        total_issues = self.db.query(Issue).count()
+        if total_issues == 0:
+            result = {}
+            for task_id in task_ids:
+                result[task_id] = {"issue_count": 0, "processed_issues": 0}
+            return result
         
-        # 批量查询已处理问题数量  
-        processed_counts = (self.db.query(Issue.task_id, func.count(Issue.id))
-                           .filter(Issue.task_id.in_(task_ids), Issue.feedback_type.isnot(None))
-                           .group_by(Issue.task_id)
-                           .all())
+        # 使用单个查询获取所有统计信息，减少数据库往返
+        from sqlalchemy import case
+        stats_query = (
+            self.db.query(
+                Issue.task_id,
+                func.count(Issue.id).label('total_count'),
+                func.count(case((Issue.feedback_type.isnot(None), Issue.id))).label('processed_count')
+            )
+            .filter(Issue.task_id.in_(task_ids))
+            .group_by(Issue.task_id)
+            .all()
+        )
         
         # 构建结果字典
         result = {}
         for task_id in task_ids:
             result[task_id] = {"issue_count": 0, "processed_issues": 0}
         
-        for task_id, count in issue_counts:
-            result[task_id]["issue_count"] = count
-            
-        for task_id, count in processed_counts:
-            result[task_id]["processed_issues"] = count
+        for task_id, total_count, processed_count in stats_query:
+            result[task_id] = {
+                "issue_count": total_count,
+                "processed_issues": processed_count
+            }
             
         return result
     
@@ -219,10 +228,29 @@ class TaskRepository(ITaskRepository):
         else:
             query = query.order_by(desc(Task.created_at))
         
-        # 获取总数
-        total = query.count()
+        # 优化：使用子查询获取总数，避免重复构建复杂查询
+        # 构建计数查询（去除joinedload以提高计数性能）
+        count_query = self.db.query(Task)
         
-        # 分页
+        # 应用相同的过滤条件
+        if user_id is not None:
+            count_query = count_query.filter(Task.user_id == user_id)
+        if params.status and params.status != 'all':
+            count_query = count_query.filter(Task.status == params.status)
+        if params.search:
+            from app.models.file_info import FileInfo
+            search_term = f"%{params.search}%"
+            count_query = count_query.join(FileInfo, Task.file_id == FileInfo.id, isouter=True).filter(
+                or_(
+                    Task.title.ilike(search_term),
+                    FileInfo.original_name.ilike(search_term)
+                )
+            )
+        
+        # 执行计数查询
+        total = count_query.count()
+        
+        # 分页查询数据
         offset = (params.page - 1) * params.page_size
         items = query.offset(offset).limit(params.page_size).all()
         
