@@ -131,7 +131,7 @@ class GenericOAuthProvider(IOAuthProvider):
             uid=data["uid"],
             display_name=data.get("displayNameCn"),
             email=data.get("email", f"{data['uid']}@example.com"),
-            avatar_url=f"https://api.dicebear.com/7.x/avataaars/svg?seed={data['uid']}"
+            avatar_url=None  # 移除外部头像链接，使用默认头像或空值
         )
     
     async def _mock_token_exchange(self, code: str) -> ThirdPartyTokenResponse:
