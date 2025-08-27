@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
-import { Layout, Menu, Dropdown, Avatar, message } from 'antd';
+import { Layout, Menu, Dropdown, message } from 'antd';
 import { FileAddOutlined, UnorderedListOutlined, UserOutlined, BarChartOutlined } from '@ant-design/icons';
 import { flushSync } from 'react-dom';
 import TaskCreate from './pages/TaskCreate';
@@ -13,6 +13,7 @@ import { getCurrentUser, logout } from './services/authService';
 import { User } from './types';
 import { ThemeProvider } from './components/ThemeProvider';
 import { useTheme } from './hooks/useTheme';
+import SafeAvatar from './components/SafeAvatar';
 import './App.css';
 
 const { Header, Content } = Layout;
@@ -63,11 +64,11 @@ const UserInfo: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLogo
     <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
       <Dropdown menu={{ items: menuItems }} placement="bottomRight">
         <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-          {user.avatar_url ? (
-            <Avatar src={user.avatar_url} />
-          ) : (
-            <Avatar icon={<UserOutlined />} />
-          )}
+          <SafeAvatar 
+            src={user.avatar_url} 
+            icon={<UserOutlined />}
+            timeout={3000}
+          />
           <span style={{ color: 'white', marginLeft: 8 }}>
             {user.display_name || user.uid}
             {user.is_admin && ' (管理员)'}

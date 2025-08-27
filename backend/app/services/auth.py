@@ -11,6 +11,7 @@ from app.repositories.user import UserRepository
 from app.dto.user import UserCreate, ThirdPartyTokenResponse, ThirdPartyUserInfoResponse
 from app.core.config import get_settings
 from app.services.interfaces.auth_service import IAuthService
+from app.services.avatar_service import AvatarService
 
 
 class AuthService(IAuthService):
@@ -20,6 +21,7 @@ class AuthService(IAuthService):
         self.db = db
         self.user_repo = UserRepository(db)
         self.settings = get_settings()
+        self.avatar_service = AvatarService()
         # JWT密钥和过期时间配置
         jwt_config = self.settings.jwt_config
         self.SECRET_KEY = jwt_config.get("secret_key", "ai_doc_test_secret_key")
@@ -236,19 +238,36 @@ class AuthService(IAuthService):
         provider_type = self.third_party_config.get("provider_type", "generic")
         if provider_type == "gitee":
             # Gitee返回的字段格式
+            uid = str(user_data["id"])  # Gitee返回数字id，转为字符串
+            display_name = user_data.get("name") or user_data.get("login", "Gitee用户")
+            original_avatar = user_data.get("avatar_url", "")
+            
+            # 使用头像服务处理头像URL
+            safe_avatar_url = self.avatar_service.process_third_party_avatar(
+                uid, provider_type, original_avatar, display_name
+            )
+            
             return ThirdPartyUserInfoResponse(
-                uid=str(user_data["id"]),  # Gitee返回数字id，转为字符串
-                display_name=user_data.get("name") or user_data.get("login", "Gitee用户"),
+                uid=uid,
+                display_name=display_name,
                 email=user_data.get("email") or f"{user_data.get('login', 'user')}@gitee.local",
-                avatar_url=user_data.get("avatar_url", "")
+                avatar_url=safe_avatar_url
             )
         else:
             # 通用OAuth格式
+            uid = user_data["uid"]
+            display_name = user_data.get("displayNameCn")
+            
+            # 使用头像服务处理头像URL（通用OAuth通常不返回头像）
+            safe_avatar_url = self.avatar_service.process_third_party_avatar(
+                uid, provider_type, None, display_name
+            )
+            
             return ThirdPartyUserInfoResponse(
-                uid=user_data["uid"],
-                display_name=user_data.get("displayNameCn"),
-                email=user_data.get("email", f"{user_data['uid']}@example.com"),
-                avatar_url=f"https://api.dicebear.com/7.x/avataaars/svg?seed={user_data['uid']}"
+                uid=uid,
+                display_name=display_name,
+                email=user_data.get("email", f"{uid}@example.com"),
+                avatar_url=safe_avatar_url
             )
     
     async def _call_third_party_userinfo_api(self, payload: dict) -> dict:
