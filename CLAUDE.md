@@ -283,7 +283,7 @@ Planned feature using MCP+Agent for operational validation (not yet implemented 
 ## Development Workflow
 
 ### Git 操作
-- 本项目每次提交请先创建分支，提交本次更新至远端仓库，合入到main分支
+- 每次解决一个问题或完成一个任务，请创建分支，并推送到远端，创建PR合入远端main分支
 - 分支命名规范: `feature/`, `fix/`, `refactor/`, `test/`
 
 ### 任务处理

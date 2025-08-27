@@ -37,6 +37,9 @@ class TaskView(BaseView):
         self.router.add_api_route("/{task_id}/file", self.download_task_file, methods=["GET"])
         self.router.add_api_route("/concurrency-status", self.get_concurrency_status, methods=["GET"])
         self.router.add_api_route("/user/{user_id}/concurrency-limit", self.update_user_concurrency_limit, methods=["PUT"])
+        self.router.add_api_route("/recovery-status", self.get_recovery_status, methods=["GET"])
+        self.router.add_api_route("/recover-timeout-tasks", self.recover_timeout_tasks, methods=["POST"])
+        self.router.add_api_route("/schedule-pending-tasks", self.schedule_pending_tasks, methods=["POST"])
         print("🛠️  TaskView 路由已设置：")
         for route in self.router.routes:
             print(f"   {route.methods} {route.path}")
@@ -215,7 +218,7 @@ class TaskView(BaseView):
         success = service.delete_task(task_id)
         return {"success": success}
     
-    def retry_task(
+    async def retry_task(
         self,
         task_id: int,
         current_user: User = Depends(BaseView.get_current_user),
@@ -223,6 +226,8 @@ class TaskView(BaseView):
     ):
         """重试任务"""
         from app.repositories.task import TaskRepository
+        from app.services.task_recovery_service import task_recovery_service
+        
         task_repo = TaskRepository(db)
         task = task_repo.get_by_id(task_id)
         if not task:
@@ -231,8 +236,50 @@ class TaskView(BaseView):
         # 检查用户权限
         self.check_task_access_permission(current_user, task.user_id)
         
-        # TODO: 实现任务重试逻辑
-        return {"message": "任务重试功能待实现"}
+        # 检查任务状态是否可重试
+        if task.status not in ['failed', 'completed']:
+            raise HTTPException(400, f"任务状态为 '{task.status}'，无法重试。只有已完成或失败的任务可以重试。")
+        
+        # 检查并发限制
+        try:
+            allowed, status_info = concurrency_service.check_concurrency_limits(
+                db, current_user, requested_tasks=1, raise_exception=True
+            )
+        except ConcurrencyLimitExceeded as e:
+            if e.limit_type == 'system':
+                raise HTTPException(
+                    status_code=429, 
+                    detail={
+                        "error": "system_concurrency_limit_exceeded",
+                        "message": f"系统并发限制已达上限，任务已重置为pending状态，将在资源可用时自动执行",
+                        "current_count": e.current_count,
+                        "max_count": e.max_count,
+                        "limit_type": "system"
+                    }
+                )
+            elif e.limit_type == 'user':
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "error": "user_concurrency_limit_exceeded", 
+                        "message": f"用户并发限制已达上限，任务已重置为pending状态，将在资源可用时自动执行",
+                        "current_count": e.current_count,
+                        "max_count": e.max_count,
+                        "limit_type": "user"
+                    }
+                )
+        
+        # 执行任务重试
+        success = await task_recovery_service.retry_task(task_id, db)
+        
+        if not success:
+            raise HTTPException(500, "任务重试失败")
+        
+        return {
+            "success": True,
+            "message": "任务重试已启动",
+            "task_id": task_id
+        }
     
     def download_report(
         self,
@@ -417,6 +464,51 @@ class TaskView(BaseView):
         except Exception as e:
             print(f"❌ 文件下载失败: {e}")
             raise HTTPException(500, f"文件下载失败: {str(e)}")
+    
+    def get_recovery_status(
+        self,
+        current_user: User = Depends(BaseView.get_current_user),
+        db: Session = Depends(get_db)
+    ) -> dict:
+        """获取任务恢复状态"""
+        from app.services.task_recovery_service import task_recovery_service
+        return task_recovery_service.get_recovery_status(db)
+    
+    async def recover_timeout_tasks(
+        self,
+        current_user: User = Depends(BaseView.get_current_user),
+        db: Session = Depends(get_db)
+    ) -> dict:
+        """恢复超时任务（管理员功能）"""
+        if not (current_user.is_admin or current_user.is_system_admin):
+            raise HTTPException(403, "权限不足，仅管理员可执行此操作")
+        
+        from app.services.task_recovery_service import task_recovery_service
+        recovered_count = await task_recovery_service.check_and_recover_timeout_tasks(db)
+        
+        return {
+            "success": True,
+            "message": f"已恢复 {recovered_count} 个超时任务",
+            "recovered_count": recovered_count
+        }
+    
+    async def schedule_pending_tasks(
+        self,
+        current_user: User = Depends(BaseView.get_current_user),
+        db: Session = Depends(get_db)
+    ) -> dict:
+        """手动调度待处理任务（管理员功能）"""
+        if not (current_user.is_admin or current_user.is_system_admin):
+            raise HTTPException(403, "权限不足，仅管理员可执行此操作")
+        
+        from app.services.task_recovery_service import task_recovery_service
+        scheduled_count = await task_recovery_service.schedule_pending_tasks_if_available(db)
+        
+        return {
+            "success": True,
+            "message": f"已调度 {scheduled_count} 个待处理任务",
+            "scheduled_count": scheduled_count
+        }
 
 
 # 创建视图实例并导出router
