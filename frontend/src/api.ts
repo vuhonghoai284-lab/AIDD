@@ -171,6 +171,14 @@ export const taskAPI = {
     return response.data;
   },
 
+  // 只更新评论，不改变反馈状态
+  updateCommentOnly: async (issueId: number, comment?: string) => {
+    const response = await api.put(`/issues/${issueId}/comment`, {
+      comment,
+    });
+    return response.data;
+  },
+
   // 下载任务原文件
   downloadTaskFile: async (taskId: number) => {
     try {

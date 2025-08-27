@@ -34,3 +34,8 @@ class FeedbackRequest(BaseModel):
 class SatisfactionRatingRequest(BaseModel):
     """满意度评分请求"""
     satisfaction_rating: float = Field(..., ge=1.0, le=5.0, description="满意度评分，范围1-5星")
+
+
+class CommentOnlyRequest(BaseModel):
+    """只更新评论的请求"""
+    comment: Optional[str] = None

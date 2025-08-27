@@ -70,6 +70,15 @@ class IssueRepository:
             self.db.refresh(issue)
         return issue
     
+    def update_comment_only(self, issue_id: int, comment: Optional[str]) -> Optional[Issue]:
+        """只更新评论，不改变反馈类型"""
+        issue = self.get_by_id(issue_id)
+        if issue:
+            issue.feedback_comment = comment
+            self.db.commit()
+            self.db.refresh(issue)
+        return issue
+    
     def update_satisfaction_rating(self, issue_id: int, rating: float) -> Optional[Issue]:
         """更新满意度评分"""
         issue = self.get_by_id(issue_id)

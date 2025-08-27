@@ -941,9 +941,20 @@ const TaskDetailEnhanced: React.FC = () => {
                                       size="small" 
                                       type="primary"
                                       onClick={async () => {
-                                        if (issue.feedback_type) {
-                                          await handleFeedback(issue.id, issue.feedback_type, issue.feedback_comment);
+                                        try {
+                                          // 如果已有反馈类型，更新整个反馈；否则只保存评论
+                                          if (issue.feedback_type) {
+                                            await handleFeedback(issue.id, issue.feedback_type, issue.feedback_comment);
+                                          } else {
+                                            // 使用新的API只更新评论，不改变反馈状态
+                                            await taskAPI.updateCommentOnly(issue.id, issue.feedback_comment);
+                                            // 重新加载任务详情以获取最新的评论
+                                            await loadTaskDetail();
+                                          }
+                                          message.success('评论已保存');
                                           toggleComment(issue.id);
+                                        } catch (error) {
+                                          message.error('评论保存失败');
                                         }
                                       }}
                                     >
