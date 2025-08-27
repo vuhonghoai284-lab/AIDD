@@ -47,6 +47,7 @@ class TaskResponse(BaseModel):
         created_by_type = None
         
         if user_info:
+            # 优先使用display_name，如果没有则使用uid
             created_by_name = user_info.display_name or user_info.uid
             if user_info.is_system_admin:
                 created_by_type = 'system_admin'
@@ -54,6 +55,10 @@ class TaskResponse(BaseModel):
                 created_by_type = 'admin'
             else:
                 created_by_type = 'normal_user'
+        else:
+            # 如果没有用户信息，使用系统默认值
+            created_by_name = '系统用户'
+            created_by_type = 'system_admin'
         
         return cls(
             id=task.id,

@@ -290,23 +290,12 @@ class TaskService(ITaskService):
             # 从批量统计结果中获取问题数量
             issue_stat = issue_stats.get(task.id, {"issue_count": 0, "processed_issues": 0})
             
-            result.append(TaskResponse(
-                id=task.id,
-                title=task.title or (file_info.original_name if file_info else "未知文件"),
-                status=task.status,
-                progress=task.progress,
-                file_name=file_info.original_name if file_info else "未知文件",
-                file_size=file_info.file_size if file_info else 0,
-                file_type=file_info.file_type if file_info else "unknown",
-                created_at=task.created_at,
-                completed_at=task.completed_at,
-                issue_count=issue_stat["issue_count"],
-                processed_issues=issue_stat["processed_issues"],
-                ai_model_name=ai_model.label if ai_model else "未知模型",
-                user_name=user_info.display_name if user_info else "未知用户",
-                processing_time=task.processing_time,
-                error_message=task.error_message
-            ))
+            # 使用from_task_with_relations方法确保所有字段正确设置
+            task_resp = TaskResponse.from_task_with_relations(
+                task, file_info, ai_model, user_info, 
+                issue_stat["issue_count"], issue_stat["processed_issues"]
+            )
+            result.append(task_resp)
         
         print(f"✅ 分页任务获取完成，总耗时: {(time.time() - start_time)*1000:.1f}ms")
         return PaginatedResponse.create(result, total, params.page, params.page_size)
