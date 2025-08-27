@@ -550,156 +550,159 @@ const TaskDetailEnhanced: React.FC = () => {
           >
             {task.status === 'completed' && (
               <>
+                {/* 筛选器 - 只要有问题就显示，即使当前筛选结果为0 */}
+                {totalIssues > 0 && (
+                  <Card className="filter-card" size="small" style={{ marginBottom: 16 }}>
+                    <Space size={16} wrap>
+                      <Space size={8}>
+                        <Text strong>问题级别:</Text>
+                        <Radio.Group 
+                          value={severityFilter} 
+                          onChange={(e) => {
+                            setSeverityFilter(e.target.value);
+                            setCurrentPage(1);
+                          }}
+                          size="small"
+                        >
+                          <Radio.Button value="all">全部 ({totalIssues})</Radio.Button>
+                          <Radio.Button value="致命">
+                            <Tag color="error">致命 ({severityCounts['致命']})</Tag>
+                          </Radio.Button>
+                          <Radio.Button value="严重">
+                            <Tag color="warning">严重 ({severityCounts['严重']})</Tag>
+                          </Radio.Button>
+                          <Radio.Button value="一般">
+                            <Tag color="processing">一般 ({severityCounts['一般']})</Tag>
+                          </Radio.Button>
+                          <Radio.Button value="提示">
+                            <Tag color="success">提示 ({severityCounts['提示']})</Tag>
+                          </Radio.Button>
+                        </Radio.Group>
+                      </Space>
+                      <Divider type="vertical" />
+                      <Space size={8}>
+                        <Text strong>处理状态:</Text>
+                        <Radio.Group 
+                          value={statusFilter} 
+                          onChange={(e) => {
+                            setStatusFilter(e.target.value);
+                            setCurrentPage(1);
+                          }}
+                          size="small"
+                        >
+                          <Radio.Button value="all">全部 ({totalIssues})</Radio.Button>
+                          <Radio.Button value="accepted">
+                            <CheckOutlined style={{ color: '#52c41a' }} /> 已接受 ({acceptedCount})
+                          </Radio.Button>
+                          <Radio.Button value="rejected">
+                            <CloseOutlined style={{ color: '#ff4d4f' }} /> 已拒绝 ({processedCount - acceptedCount})
+                          </Radio.Button>
+                          <Radio.Button value="pending">
+                            <QuestionCircleOutlined /> 未处理 ({issueSummary?.unprocessed || (totalIssues - processedCount)})
+                          </Radio.Button>
+                        </Radio.Group>
+                      </Space>
+                      <Tag color="blue">显示 {displayIssues.length} 个问题</Tag>
+                    </Space>
+                  </Card>
+                )}
+
+                {/* 问题统计 - 改进版（只有有问题时才显示） */}
+                {totalIssues > 0 && (
+                  <Card className="statistics-card" size="small" style={{ marginBottom: 16 }}>
+                    <Row gutter={24}>
+                      <Col span={8}>
+                        <div className="stat-section">
+                          <Text type="secondary">处理进度</Text>
+                          <Progress 
+                            percent={Math.round((processedCount / totalIssues) * 100)} 
+                            status="active"
+                            strokeColor="#1890ff"
+                          />
+                          <div className="stat-detail">
+                            <Text>已处理: {processedCount}/{totalIssues}</Text>
+                            <Text type="success"> | 已接受: {acceptedCount}</Text>
+                          </div>
+                        </div>
+                      </Col>
+                      <Col span={8}>
+                        <div className="stat-section">
+                          <Text type="secondary">问题级别分布</Text>
+                          <div className="severity-bars">
+                            <div className="bar-item">
+                              <Text>致命</Text>
+                              <Progress 
+                                percent={totalIssues ? Math.round((severityCounts['致命'] / totalIssues) * 100) : 0} 
+                                size="small"
+                                strokeColor="#ff4d4f"
+                                format={() => severityCounts['致命']}
+                              />
+                            </div>
+                            <div className="bar-item">
+                              <Text>严重</Text>
+                              <Progress 
+                                percent={totalIssues ? Math.round((severityCounts['严重'] / totalIssues) * 100) : 0}
+                                size="small"
+                                strokeColor="#faad14"
+                                format={() => severityCounts['严重']}
+                              />
+                            </div>
+                            <div className="bar-item">
+                              <Text>一般</Text>
+                              <Progress 
+                                percent={totalIssues ? Math.round((severityCounts['一般'] / totalIssues) * 100) : 0}
+                                size="small"
+                                strokeColor="#1890ff"
+                                format={() => severityCounts['一般']}
+                              />
+                            </div>
+                            <div className="bar-item">
+                              <Text>提示</Text>
+                              <Progress 
+                                percent={totalIssues ? Math.round((severityCounts['提示'] / totalIssues) * 100) : 0}
+                                size="small"
+                                strokeColor="#52c41a"
+                                format={() => severityCounts['提示']}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </Col>
+                      <Col span={8}>
+                        <div className="stat-section">
+                          <Text type="secondary">接受率</Text>
+                          <div className="acceptance-rate">
+                            <Progress 
+                              type="circle" 
+                              percent={processedCount ? Math.round((acceptedCount / processedCount) * 100) : 0}
+                              width={80}
+                              strokeColor={{
+                                '0%': '#52c41a',
+                                '100%': '#87d068',
+                              }}
+                            />
+                            <div className="rate-detail">
+                              <Text>接受: {acceptedCount}</Text>
+                              <br />
+                              <Text>拒绝: {processedCount - acceptedCount}</Text>
+                            </div>
+                          </div>
+                        </div>
+                      </Col>
+                    </Row>
+                  </Card>
+                )}
+
+                {/* 问题列表内容区域 */}
                 {totalIssues === 0 ? (
                   <Empty description="未发现任何问题" />
                 ) : (
-                  <>
-                    {/* 筛选器 */}
-                    <Card className="filter-card" size="small" style={{ marginBottom: 16 }}>
-                      <Space size={16} wrap>
-                        <Space size={8}>
-                          <Text strong>问题级别:</Text>
-                          <Radio.Group 
-                            value={severityFilter} 
-                            onChange={(e) => {
-                              setSeverityFilter(e.target.value);
-                              setCurrentPage(1);
-                            }}
-                            size="small"
-                          >
-                            <Radio.Button value="all">全部 ({totalIssues})</Radio.Button>
-                            <Radio.Button value="致命">
-                              <Tag color="error">致命 ({severityCounts['致命']})</Tag>
-                            </Radio.Button>
-                            <Radio.Button value="严重">
-                              <Tag color="warning">严重 ({severityCounts['严重']})</Tag>
-                            </Radio.Button>
-                            <Radio.Button value="一般">
-                              <Tag color="processing">一般 ({severityCounts['一般']})</Tag>
-                            </Radio.Button>
-                            <Radio.Button value="提示">
-                              <Tag color="success">提示 ({severityCounts['提示']})</Tag>
-                            </Radio.Button>
-                          </Radio.Group>
-                        </Space>
-                        <Divider type="vertical" />
-                        <Space size={8}>
-                          <Text strong>处理状态:</Text>
-                          <Radio.Group 
-                            value={statusFilter} 
-                            onChange={(e) => {
-                              setStatusFilter(e.target.value);
-                              setCurrentPage(1);
-                            }}
-                            size="small"
-                          >
-                            <Radio.Button value="all">全部 ({totalIssues})</Radio.Button>
-                            <Radio.Button value="accepted">
-                              <CheckOutlined style={{ color: '#52c41a' }} /> 已接受 ({acceptedCount})
-                            </Radio.Button>
-                            <Radio.Button value="rejected">
-                              <CloseOutlined style={{ color: '#ff4d4f' }} /> 已拒绝 ({processedCount - acceptedCount})
-                            </Radio.Button>
-                            <Radio.Button value="pending">
-                              <QuestionCircleOutlined /> 未处理 ({issueSummary?.unprocessed || (totalIssues - processedCount)})
-                            </Radio.Button>
-                          </Radio.Group>
-                        </Space>
-                        <Tag color="blue">显示 {displayIssues.length} 个问题</Tag>
-                      </Space>
-                    </Card>
-
-                    {/* 问题统计 - 改进版 */}
-                    <Card className="statistics-card" size="small" style={{ marginBottom: 16 }}>
-                      <Row gutter={24}>
-                        <Col span={8}>
-                          <div className="stat-section">
-                            <Text type="secondary">处理进度</Text>
-                            <Progress 
-                              percent={Math.round((processedCount / totalIssues) * 100)} 
-                              status="active"
-                              strokeColor="#1890ff"
-                            />
-                            <div className="stat-detail">
-                              <Text>已处理: {processedCount}/{totalIssues}</Text>
-                              <Text type="success"> | 已接受: {acceptedCount}</Text>
-                            </div>
-                          </div>
-                        </Col>
-                        <Col span={8}>
-                          <div className="stat-section">
-                            <Text type="secondary">问题级别分布</Text>
-                            <div className="severity-bars">
-                              <div className="bar-item">
-                                <Text>致命</Text>
-                                <Progress 
-                                  percent={totalIssues ? Math.round((severityCounts['致命'] / totalIssues) * 100) : 0} 
-                                  size="small"
-                                  strokeColor="#ff4d4f"
-                                  format={() => severityCounts['致命']}
-                                />
-                              </div>
-                              <div className="bar-item">
-                                <Text>严重</Text>
-                                <Progress 
-                                  percent={totalIssues ? Math.round((severityCounts['严重'] / totalIssues) * 100) : 0}
-                                  size="small"
-                                  strokeColor="#faad14"
-                                  format={() => severityCounts['严重']}
-                                />
-                              </div>
-                              <div className="bar-item">
-                                <Text>一般</Text>
-                                <Progress 
-                                  percent={totalIssues ? Math.round((severityCounts['一般'] / totalIssues) * 100) : 0}
-                                  size="small"
-                                  strokeColor="#1890ff"
-                                  format={() => severityCounts['一般']}
-                                />
-                              </div>
-                              <div className="bar-item">
-                                <Text>提示</Text>
-                                <Progress 
-                                  percent={totalIssues ? Math.round((severityCounts['提示'] / totalIssues) * 100) : 0}
-                                  size="small"
-                                  strokeColor="#52c41a"
-                                  format={() => severityCounts['提示']}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        </Col>
-                        <Col span={8}>
-                          <div className="stat-section">
-                            <Text type="secondary">接受率</Text>
-                            <div className="acceptance-rate">
-                              <Progress 
-                                type="circle" 
-                                percent={processedCount ? Math.round((acceptedCount / processedCount) * 100) : 0}
-                                width={80}
-                                strokeColor={{
-                                  '0%': '#52c41a',
-                                  '100%': '#87d068',
-                                }}
-                              />
-                              <div className="rate-detail">
-                                <Text>接受: {acceptedCount}</Text>
-                                <br />
-                                <Text>拒绝: {processedCount - acceptedCount}</Text>
-                              </div>
-                            </div>
-                          </div>
-                        </Col>
-                      </Row>
-                    </Card>
-
-                    {/* 问题列表 - 优化设计 */}
-                    <div className="issues-list">
-                      {issuesLoading ? (
-                        <div style={{ textAlign: 'center', padding: 50 }}>
-                          <Spin size="large" tip="加载问题中..." />
-                        </div>
-                      ) : displayIssues.length > 0 ? (
+                  <div className="issues-list">
+                    {issuesLoading ? (
+                      <div style={{ textAlign: 'center', padding: 50 }}>
+                        <Spin size="large" tip="加载问题中..." />
+                      </div>
+                    ) : displayIssues.length > 0 ? (
                         displayIssues.map((issue, index) => (
                         <Card 
                           key={issue.id} 
@@ -1040,41 +1043,31 @@ const TaskDetailEnhanced: React.FC = () => {
                           )}
                         </Card>
                         ))
-                      ) : (
-                        <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                          <Empty 
-                            image={Empty.PRESENTED_IMAGE_SIMPLE}
-                            description={
-                              <div>
-                                <Text type="secondary" style={{ fontSize: '16px' }}>
-                                  {totalIssues === 0 ? '暂无问题记录' : '当前筛选条件下无问题'}
-                                </Text>
-                                {totalIssues === 0 && task.status === 'completed' && (
-                                  <div style={{ marginTop: '8px' }}>
-                                    <Text type="secondary" style={{ fontSize: '14px' }}>
-                                      🎉 恭喜！此文档没有发现问题
-                                    </Text>
-                                  </div>
-                                )}
-                                {totalIssues > 0 && (
-                                  <div style={{ marginTop: '8px' }}>
-                                    <Button 
-                                      type="link" 
-                                      onClick={() => {
-                                        setSeverityFilter('all');
-                                        setStatusFilter('all');
-                                      }}
-                                    >
-                                      清除筛选条件
-                                    </Button>
-                                  </div>
-                                )}
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                        <Empty 
+                          image={Empty.PRESENTED_IMAGE_SIMPLE}
+                          description={
+                            <div>
+                              <Text type="secondary" style={{ fontSize: '16px' }}>
+                                当前筛选条件下无问题
+                              </Text>
+                              <div style={{ marginTop: '8px' }}>
+                                <Button 
+                                  type="link" 
+                                  onClick={() => {
+                                    setSeverityFilter('all');
+                                    setStatusFilter('all');
+                                  }}
+                                >
+                                  清除筛选条件
+                                </Button>
                               </div>
-                            }
-                          />
-                        </div>
-                      )}
-                    </div>
+                            </div>
+                          }
+                        />
+                      </div>
+                    )}
 
                     {/* 分页器 */}
                     {totalIssues > 0 && (
@@ -1099,7 +1092,7 @@ const TaskDetailEnhanced: React.FC = () => {
                         />
                       </div>
                     )}
-                  </>
+                  </div>
                 )}
               </>
             )}
