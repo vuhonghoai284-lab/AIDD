@@ -269,8 +269,12 @@ class TaskView(BaseView):
         self.check_task_access_permission(current_user, task.user_id)
         
         # 检查任务状态是否可重试
-        if task.status not in ['failed', 'completed']:
-            raise HTTPException(400, f"任务状态为 '{task.status}'，无法重试。只有已完成或失败的任务可以重试。")
+        if task.status == 'pending':
+            raise HTTPException(400, f"任务状态为 '{task.status}'，无法重试。待处理的任务不需要重试，请等待系统自动处理。")
+        
+        # 如果是正在处理的任务，先将其标记为失败，然后允许重试
+        if task.status == 'processing':
+            task_repo.update(task_id, status='failed', error_message="用户手动停止并重试任务")
         
         # 检查并发限制
         try:

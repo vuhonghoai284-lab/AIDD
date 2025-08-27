@@ -80,24 +80,23 @@ class TaskRecoveryService:
             重置的任务数量
         """
         try:
-            # 查找可能的僵尸任务：状态为processing且创建时间超过超时阈值
-            timeout_threshold = datetime.utcnow() - timedelta(seconds=self.processing_timeout)
-            
-            zombie_tasks = task_repo.db.query(Task).filter(
-                and_(
-                    Task.status == 'processing',
-                    Task.created_at < timeout_threshold
-                )
-            ).all()
+            # 查找可能的僵尸任务：状态为processing的所有任务（服务重启后，所有processing任务都是僵尸任务）
+            # 这里不用时间判断，因为服务重启意味着所有processing任务都应该被重置
+            zombie_tasks = task_repo.db.query(Task).filter(Task.status == 'processing').all()
             
             reset_count = 0
             for task in zombie_tasks:
-                logger.warning(f"🧟 发现僵尸任务: {task.id} ({task.title})，重置为pending状态")
-                task_repo.update(task.id, status='pending', progress=0, error_message=None)
+                logger.warning(f"🧟 发现僵尸任务: {task.id} ({task.title})，标记为失败状态（服务重启导致中断）")
+                task_repo.update(
+                    task.id, 
+                    status='failed', 
+                    progress=0, 
+                    error_message="服务重启导致任务中断，请手动重试"
+                )
                 reset_count += 1
             
             if reset_count > 0:
-                logger.info(f"✅ 重置了 {reset_count} 个僵尸任务")
+                logger.info(f"✅ 发现并重置了 {reset_count} 个僵尸任务（因服务重启中断）")
             
             return reset_count
             
@@ -284,11 +283,14 @@ class TaskRecoveryService:
             task_repo = TaskRepository(db)
             timeout_threshold = datetime.utcnow() - timedelta(seconds=self.processing_timeout)
             
-            # 查找超时的处理中任务
+            # 查找超时的处理中任务（基于updated_at字段，更准确反映任务最后活动时间）
             timeout_tasks = task_repo.db.query(Task).filter(
                 and_(
                     Task.status == 'processing',
-                    Task.created_at < timeout_threshold
+                    or_(
+                        Task.updated_at < timeout_threshold,
+                        and_(Task.updated_at.is_(None), Task.created_at < timeout_threshold)  # 处理updated_at为空的情况
+                    )
                 )
             ).all()
             

@@ -124,6 +124,14 @@ task_processing:
     min_chars: 500   # 最小章节字符数（短于此数值的章节总是被合并）
     preserve_structure: true  # 是否保持章节层级结构
   
+  # 任务处理和恢复配置
+  task_processing:
+    processing_timeout: 1800  # 任务处理超时时间（秒），默认30分钟
+    recovery_enabled: true    # 是否启用任务恢复机制
+    auto_retry_failed_tasks: false  # 是否自动重试失败的任务
+    max_concurrent_tasks: 5   # 系统最大并发任务数
+    zombie_detection_interval: 300  # 僵尸任务检测间隔（秒），默认5分钟
+  
 # CORS配置
 cors:
   enabled: true

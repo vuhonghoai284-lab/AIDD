@@ -52,6 +52,7 @@ def setup_startup_event(app: FastAPI):
         """应用启动时的初始化操作"""        
         from app.services.model_initializer import model_initializer
         from app.services.task_recovery_service import task_recovery_service
+        from app.services.background_task_service import background_task_service
         
         # 初始化AI模型配置到数据库
         db = next(get_db())
@@ -69,6 +70,24 @@ def setup_startup_event(app: FastAPI):
             print(f"✗ 任务恢复失败: {e}")
         finally:
             db.close()
+        
+        # 启动后台任务服务
+        try:
+            await background_task_service.start()
+            print("✓ 后台任务服务已启动")
+        except Exception as e:
+            print(f"✗ 后台任务服务启动失败: {e}")
+    
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        """应用关闭时的清理操作"""
+        from app.services.background_task_service import background_task_service
+        
+        try:
+            await background_task_service.stop()
+            print("✓ 后台任务服务已停止")
+        except Exception as e:
+            print(f"✗ 后台任务服务停止失败: {e}")
 
 # 设置启动事件
 setup_startup_event(app)
