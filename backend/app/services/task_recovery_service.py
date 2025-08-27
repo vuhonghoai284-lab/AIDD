@@ -283,14 +283,11 @@ class TaskRecoveryService:
             task_repo = TaskRepository(db)
             timeout_threshold = datetime.utcnow() - timedelta(seconds=self.processing_timeout)
             
-            # 查找超时的处理中任务（基于updated_at字段，更准确反映任务最后活动时间）
+            # 查找超时的处理中任务（基于created_at字段）
             timeout_tasks = task_repo.db.query(Task).filter(
                 and_(
                     Task.status == 'processing',
-                    or_(
-                        Task.updated_at < timeout_threshold,
-                        and_(Task.updated_at.is_(None), Task.created_at < timeout_threshold)  # 处理updated_at为空的情况
-                    )
+                    Task.created_at < timeout_threshold
                 )
             ).all()
             
