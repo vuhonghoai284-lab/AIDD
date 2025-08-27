@@ -33,11 +33,22 @@ class DocumentProcessingProcessor(ITaskProcessor):
         
         try:
             document_processor = self.ai_service_provider.get_document_processor()
+            
+            # 定义内部进度回调，将内部进度映射到20-40范围
+            async def internal_progress_callback(message: str, internal_progress: int):
+                # 将内部进度(0-100)映射到外部进度(20-40)
+                mapped_progress = 20 + int((internal_progress / 100) * 20)
+                if progress_callback:
+                    await progress_callback(f"文档预处理: {message}", mapped_progress)
+            
             sections = await document_processor.preprocess_document(
                 text_content,
                 task_id,
-                progress_callback
+                internal_progress_callback
             )
+            
+            if progress_callback:
+                await progress_callback("文档预处理完成", 40)
             
             # 将结果保存到上下文中，供下一个处理器使用
             context['document_processing_result'] = sections

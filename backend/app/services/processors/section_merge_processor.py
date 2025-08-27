@@ -45,7 +45,7 @@ class SectionMergeProcessor(ITaskProcessor):
             )
         
         if progress_callback:
-            await progress_callback("开始章节合并优化...", 25)
+            await progress_callback("开始章节合并优化...", 40)
         
         try:
             self.logger.info(f"📚 开始章节合并，原始章节数: {len(sections)}")
@@ -59,7 +59,7 @@ class SectionMergeProcessor(ITaskProcessor):
             context['original_sections'] = sections  # 保留原始章节数据
             
             if progress_callback:
-                await progress_callback(f"章节合并完成: {len(sections)} -> {len(merged_sections)}", 30)
+                await progress_callback(f"章节合并完成: {len(sections)} -> {len(merged_sections)}", 50)
             
             return ProcessingResult(
                 success=True,

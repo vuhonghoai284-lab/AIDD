@@ -69,6 +69,7 @@ const TaskDetailEnhanced: React.FC = () => {
   const [aiOutputsLoaded, setAiOutputsLoaded] = useState(false); // 跟踪是否已加载AI输出
   const [aiCurrentPage, setAiCurrentPage] = useState(1);
   const [aiPageSize] = useState(5); // AI输出每页较少，减少加载时间
+  const [aiOutputsTotal, setAiOutputsTotal] = useState(0); // AI输出总数
 
   const loadTaskDetail = useCallback(async () => {
     if (!id) return;
@@ -155,6 +156,7 @@ const TaskDetailEnhanced: React.FC = () => {
       
       // 存储总数信息
       if (response.total !== undefined) {
+        setAiOutputsTotal(response.total);
         setAiOutputs(prev => Object.assign(prev, { _total: response.total }));
       }
     } catch (error: any) {
@@ -1126,7 +1128,7 @@ const TaskDetailEnhanced: React.FC = () => {
             tab={
               <Space>
                 <RobotOutlined />
-                <span>AI输出 ({aiOutputs.length})</span>
+                <span>AI输出 ({aiOutputsLoaded ? aiOutputsTotal : '..'})</span>
               </Space>
             } 
             key="ai-outputs"

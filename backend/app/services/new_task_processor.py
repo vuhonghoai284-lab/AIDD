@@ -136,8 +136,13 @@ class NewTaskProcessor:
             if not result.success:
                 raise ValueError(f"任务处理失败: {result.error}")
             
+            # 报告生成阶段
+            await self._log(task_id, "INFO", "开始生成处理报告", "报告生成", 90, db)
+            
             # 保存处理结果
             await self._save_processing_results(task_id, context, result, repos, db)
+            
+            await self._log(task_id, "INFO", "处理结果保存完成", "报告生成", 95, db)
             
             # 完成任务
             # 使用任务实际开始时间计算耗时，避免时区转换问题

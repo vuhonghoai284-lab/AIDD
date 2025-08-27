@@ -99,19 +99,8 @@ export const formatTextDisplay = (text: string, maxLineLength: number = 80): str
 export const formatInputText = (text: string): string => {
   if (!text) return '';
   
-  // 解码Unicode字符
-  let formattedText = decodeUnicode(text);
-  
-  // 在句号、感叹号、问号后添加换行（如果后面不是换行的话）
-  formattedText = formattedText
-    .replace(/([。！？])\s*(?![。！？\n])/g, '$1\n')
-    .replace(/([.!?])\s*(?![.!?\n])/g, '$1\n')
-    // 在冒号后添加换行（适用于标题或列表项）
-    .replace(/([：:])\s*(?![\n\s])/g, '$1\n')
-    // 去除多余的空行
-    .replace(/\n{3,}/g, '\n\n');
-  
-  return formattedText.trim();
+  // 仅解码Unicode字符，保持原始文本结构
+  return decodeUnicode(text);
 };
 
 /**

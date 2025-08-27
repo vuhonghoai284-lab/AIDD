@@ -263,7 +263,7 @@ const TaskList: React.FC = () => {
     }, 300); // 防抖300ms
     
     return () => clearTimeout(timeoutId);
-  }, [searchText, statusFilter]);
+  }, [searchText, statusFilter, loadTasks]);
   
   // 由于使用了服务端分页和过滤，这里不再需要客户端过滤
   const filteredTasks = useMemo(() => {

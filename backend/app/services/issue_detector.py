@@ -237,12 +237,15 @@ class IssueDetector:
                             task_exists = self.db.query(Task.id).filter(Task.id == task_id).first()
                             
                             if task_exists:
+                                # 保持原始输入文本内容，不进行任何修改
+                                display_input_text = section_content
+                                
                                 ai_output = AIOutput(
                                     task_id=task_id,
                                     operation_type="detect_issues",
                                     section_title=section_title,
                                     section_index=index,
-                                    input_text=section_content[:1000],  # 显示完整的输入内容前1000字符
+                                    input_text=display_input_text,
                                     raw_output=json.dumps(result, ensure_ascii=False),
                                     parsed_output=result,
                                     processing_time=processing_time,
@@ -279,12 +282,15 @@ class IssueDetector:
                             task_exists = self.db.query(Task.id).filter(Task.id == task_id).first()
                             
                             if task_exists:
+                                # 保持原始输入文本内容，不进行任何修改
+                                display_input_text = section_content
+                                
                                 ai_output = AIOutput(
                                     task_id=task_id,
                                     operation_type="detect_issues",
                                     section_title=section_title,
                                     section_index=index,
-                                    input_text=section_content[:1000],  # 显示完整的输入内容前1000字符
+                                    input_text=display_input_text,
                                     raw_output="",
                                     processing_time=processing_time,
                                     status="failed_with_retry",
@@ -316,12 +322,15 @@ class IssueDetector:
                         task_exists = self.db.query(Task.id).filter(Task.id == task_id).first()
                         
                         if task_exists:
+                            # 智能截取输入文本，避免在句子中间截断
+                            display_input_text = self._smart_truncate_text(section_content, 1000)
+                            
                             ai_output = AIOutput(
                                 task_id=task_id,
                                 operation_type="detect_issues",
                                 section_title=section_title,
                                 section_index=index,
-                                input_text=section_content[:1000],  # 显示完整的输入内容前1000字符
+                                input_text=display_input_text,
                                 raw_output="",
                                 status="failed",
                                 error_message=str(e),

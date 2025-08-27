@@ -33,15 +33,26 @@ class IssueDetectionProcessor(ITaskProcessor):
         # 记录使用的章节类型
         section_type = "merged" if 'section_merge_result' in context else "original"
         if progress_callback:
-            await progress_callback(f"开始问题检测 (使用{section_type}章节)", 60)
+            await progress_callback(f"开始问题检测 (使用{section_type}章节)", 50)
         
         try:
             issue_detector = self.ai_service_provider.get_issue_detector()
+            
+            # 定义内部进度回调，将内部进度映射到50-90范围
+            async def internal_progress_callback(message: str, internal_progress: int):
+                # 将内部进度(0-100)映射到外部进度(50-90)
+                mapped_progress = 50 + int((internal_progress / 100) * 40)
+                if progress_callback:
+                    await progress_callback(f"问题检测: {message}", mapped_progress)
+            
             issues = await issue_detector.detect_issues(
                 sections,
                 task_id,
-                progress_callback
+                internal_progress_callback
             )
+            
+            if progress_callback:
+                await progress_callback("问题检测完成", 90)
             
             # 将结果保存到上下文中
             context['issue_detection_result'] = issues

@@ -28,7 +28,7 @@ class FileParsingProcessor(ITaskProcessor):
         file_name = context.get('file_name', Path(file_path).name if file_path else "未知文件")
         
         if progress_callback:
-            await progress_callback(f"开始解析文件: {file_name}", 0)
+            await progress_callback(f"开始解析文件: {file_name}", 10)
         
         # 检查文件是否存在
         if not file_path or not Path(file_path).exists():
@@ -58,8 +58,18 @@ class FileParsingProcessor(ITaskProcessor):
                 error=f"不支持的文件类型: {Path(file_path).suffix}"
             )
         
+        # 定义内部进度回调，将内部进度映射到10-20范围
+        async def internal_progress_callback(message: str, internal_progress: int):
+            # 将内部进度(0-100)映射到外部进度(10-20)
+            mapped_progress = 10 + int((internal_progress / 100) * 10)
+            if progress_callback:
+                await progress_callback(f"文件解析: {message}", mapped_progress)
+        
         # 执行文件解析
-        result = await parser.parse(file_path, progress_callback)
+        result = await parser.parse(file_path, internal_progress_callback)
+        
+        if progress_callback:
+            await progress_callback(f"文件解析完成: {file_name}", 20)
         
         # 如果解析成功，将结果保存到上下文中
         if result.success:
