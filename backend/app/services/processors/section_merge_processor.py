@@ -263,9 +263,20 @@ class SectionMergeProcessor(ITaskProcessor):
         new_content = new_section.get('content', '')
         new_title = new_section.get('section_title', '未命名章节')
         
-        # 合并内容，添加章节分隔符
-        separator = f"\n\n=== {new_title} ===\n\n"
-        current_section['content'] += separator + new_content
+        # 检查当前章节是否被截断，决定合并方式
+        current_completeness = current_section.get('completeness_status', 'complete')
+        
+        if current_completeness == 'incomplete':
+            # 被截断的章节直接拼接，不添加分隔符
+            current_section['content'] += new_content
+            # 更新完整性状态
+            current_section['completeness_status'] = new_section.get('completeness_status', 'complete')
+            self.logger.debug(f"🔗 截断修复: '{current_section.get('section_title')}' + '{new_title}'")
+        else:
+            # 完整章节正常合并，添加分隔符
+            separator = f"\n\n=== {new_title} ===\n\n"
+            current_section['content'] += separator + new_content
+            self.logger.debug(f"📚 正常合并: '{current_section.get('section_title')}' + '{new_title}'")
         
         # 更新合并信息
         current_section['merged_sections'].append(new_title)
