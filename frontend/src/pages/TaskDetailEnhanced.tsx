@@ -42,7 +42,8 @@ const TaskDetailEnhanced: React.FC = () => {
   const [taskDetail, setTaskDetail] = useState<EnhancedTaskDetail | null>(null);
   const [issues, setIssues] = useState<EnhancedIssue[]>([]);
   const [issuesLoading, setIssuesLoading] = useState(false);
-  const [issuesTotal, setIssuesTotal] = useState(0);
+  const [issuesTotal, setIssuesTotal] = useState(0); // 当前筛选条件下的问题总数
+  const [allIssuesTotal, setAllIssuesTotal] = useState(0); // 任务的全部问题总数
   const [loading, setLoading] = useState(true);
   const [feedbackLoading, setFeedbackLoading] = useState<{ [key: number]: boolean }>({});
   const [aiOutputs, setAiOutputs] = useState<AIOutput[]>([]);
@@ -77,6 +78,17 @@ const TaskDetailEnhanced: React.FC = () => {
     try {
       const data = await taskAPI.getTaskDetail(parseInt(id));
       setTaskDetail(data as EnhancedTaskDetail);
+      
+      // 获取任务的全部问题总数（用于筛选器显示判断）
+      if (data.task.status === 'completed') {
+        const allIssuesResponse = await taskAPI.getTaskIssues(parseInt(id), {
+          page: 1,
+          page_size: 1, // 只需要获取总数，不需要具体数据
+          sort_by: 'id',
+          sort_order: 'desc' as const
+        });
+        setAllIssuesTotal(allIssuesResponse.total);
+      }
       
       // 更新状态引用
       taskStatusRef.current = data.task.status;
@@ -448,18 +460,19 @@ const TaskDetailEnhanced: React.FC = () => {
   const { task } = taskDetail;
   
   // 使用新的issues状态
-  const totalIssues = issuesTotal;
+  const totalIssues = issuesTotal; // 当前筛选条件下的问题总数
   const displayIssues = issues; // 当前页面显示的问题
+  const hasAnyIssues = allIssuesTotal > 0; // 任务是否有任何问题（用于筛选器显示判断）
 
   // 统计信息 - 优先使用从后端获取的完整统计数据
   const issueSummary = taskDetail?.issue_summary;
-  const processedCount = issueSummary?.processed || issues.filter(i => i.feedback_type).length;
-  const acceptedCount = issueSummary?.by_feedback.accept || issues.filter(i => i.feedback_type === 'accept').length;
+  const processedCount = issueSummary?.processed || 0;
+  const acceptedCount = issueSummary?.by_feedback?.accept || 0;
   const severityCounts = {
-    '致命': issueSummary?.by_severity['致命'] || issues.filter(i => i.severity === '致命').length,
-    '严重': issueSummary?.by_severity['严重'] || issues.filter(i => i.severity === '严重').length,
-    '一般': issueSummary?.by_severity['一般'] || issues.filter(i => i.severity === '一般').length,
-    '提示': issueSummary?.by_severity['提示'] || issues.filter(i => i.severity === '提示').length
+    '致命': issueSummary?.by_severity?.['致命'] || 0,
+    '严重': issueSummary?.by_severity?.['严重'] || 0,
+    '一般': issueSummary?.by_severity?.['一般'] || 0,
+    '提示': issueSummary?.by_severity?.['提示'] || 0
   };
 
   return (
@@ -550,8 +563,8 @@ const TaskDetailEnhanced: React.FC = () => {
           >
             {task.status === 'completed' && (
               <>
-                {/* 筛选器 - 只要有问题就显示，即使当前筛选结果为0 */}
-                {totalIssues > 0 && (
+                {/* 筛选器 - 只要任务有任何问题就显示，即使当前筛选结果为0 */}
+                {hasAnyIssues && (
                   <Card className="filter-card" size="small" style={{ marginBottom: 16 }}>
                     <Space size={16} wrap>
                       <Space size={8}>
@@ -564,7 +577,7 @@ const TaskDetailEnhanced: React.FC = () => {
                           }}
                           size="small"
                         >
-                          <Radio.Button value="all">全部 ({totalIssues})</Radio.Button>
+                          <Radio.Button value="all">全部 ({allIssuesTotal})</Radio.Button>
                           <Radio.Button value="致命">
                             <Tag color="error">致命 ({severityCounts['致命']})</Tag>
                           </Radio.Button>
@@ -590,7 +603,7 @@ const TaskDetailEnhanced: React.FC = () => {
                           }}
                           size="small"
                         >
-                          <Radio.Button value="all">全部 ({totalIssues})</Radio.Button>
+                          <Radio.Button value="all">全部 ({allIssuesTotal})</Radio.Button>
                           <Radio.Button value="accepted">
                             <CheckOutlined style={{ color: '#52c41a' }} /> 已接受 ({acceptedCount})
                           </Radio.Button>
@@ -608,19 +621,19 @@ const TaskDetailEnhanced: React.FC = () => {
                 )}
 
                 {/* 问题统计 - 改进版（只有有问题时才显示） */}
-                {totalIssues > 0 && (
+                {hasAnyIssues && (
                   <Card className="statistics-card" size="small" style={{ marginBottom: 16 }}>
                     <Row gutter={24}>
                       <Col span={8}>
                         <div className="stat-section">
                           <Text type="secondary">处理进度</Text>
                           <Progress 
-                            percent={Math.round((processedCount / totalIssues) * 100)} 
+                            percent={Math.round((processedCount / allIssuesTotal) * 100)} 
                             status="active"
                             strokeColor="#1890ff"
                           />
                           <div className="stat-detail">
-                            <Text>已处理: {processedCount}/{totalIssues}</Text>
+                            <Text>已处理: {processedCount}/{allIssuesTotal}</Text>
                             <Text type="success"> | 已接受: {acceptedCount}</Text>
                           </div>
                         </div>
@@ -632,7 +645,7 @@ const TaskDetailEnhanced: React.FC = () => {
                             <div className="bar-item">
                               <Text>致命</Text>
                               <Progress 
-                                percent={totalIssues ? Math.round((severityCounts['致命'] / totalIssues) * 100) : 0} 
+                                percent={allIssuesTotal ? Math.round((severityCounts['致命'] / allIssuesTotal) * 100) : 0} 
                                 size="small"
                                 strokeColor="#ff4d4f"
                                 format={() => severityCounts['致命']}
@@ -641,7 +654,7 @@ const TaskDetailEnhanced: React.FC = () => {
                             <div className="bar-item">
                               <Text>严重</Text>
                               <Progress 
-                                percent={totalIssues ? Math.round((severityCounts['严重'] / totalIssues) * 100) : 0}
+                                percent={allIssuesTotal ? Math.round((severityCounts['严重'] / allIssuesTotal) * 100) : 0}
                                 size="small"
                                 strokeColor="#faad14"
                                 format={() => severityCounts['严重']}
@@ -650,7 +663,7 @@ const TaskDetailEnhanced: React.FC = () => {
                             <div className="bar-item">
                               <Text>一般</Text>
                               <Progress 
-                                percent={totalIssues ? Math.round((severityCounts['一般'] / totalIssues) * 100) : 0}
+                                percent={allIssuesTotal ? Math.round((severityCounts['一般'] / allIssuesTotal) * 100) : 0}
                                 size="small"
                                 strokeColor="#1890ff"
                                 format={() => severityCounts['一般']}
@@ -659,7 +672,7 @@ const TaskDetailEnhanced: React.FC = () => {
                             <div className="bar-item">
                               <Text>提示</Text>
                               <Progress 
-                                percent={totalIssues ? Math.round((severityCounts['提示'] / totalIssues) * 100) : 0}
+                                percent={allIssuesTotal ? Math.round((severityCounts['提示'] / allIssuesTotal) * 100) : 0}
                                 size="small"
                                 strokeColor="#52c41a"
                                 format={() => severityCounts['提示']}
@@ -694,7 +707,7 @@ const TaskDetailEnhanced: React.FC = () => {
                 )}
 
                 {/* 问题列表内容区域 */}
-                {totalIssues === 0 ? (
+                {!hasAnyIssues ? (
                   <Empty description="未发现任何问题" />
                 ) : (
                   <div className="issues-list">
@@ -1070,7 +1083,7 @@ const TaskDetailEnhanced: React.FC = () => {
                     )}
 
                     {/* 分页器 */}
-                    {totalIssues > 0 && (
+                    {hasAnyIssues && totalIssues > 0 && (
                       <div className="pagination-container">
                         <Pagination
                           current={currentPage}
