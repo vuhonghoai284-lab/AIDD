@@ -13,7 +13,7 @@ vi.mock('../../services/authService', () => ({
   loginWithThirdParty: vi.fn(() => 
     Promise.resolve({
       success: true,
-      user: { id: 1, name: 'Test User' },
+      user: { id: 1, uid: 'test_user', display_name: 'Test User', is_admin: false, is_system_admin: false, created_at: '2024-01-01T00:00:00' },
       access_token: 'test_token'
     })
   )
@@ -93,7 +93,7 @@ describe('第三方登录用户体验优化测试', () => {
     const { loginWithThirdParty } = await import('../../services/authService');
     vi.mocked(loginWithThirdParty).mockResolvedValueOnce({
       success: true,
-      user: { id: 1, name: 'Test User' },
+      user: { id: 1, uid: 'test_user', display_name: 'Test User', is_admin: false, is_system_admin: false, created_at: '2024-01-01T00:00:00' },
       access_token: 'test_token'
     });
 

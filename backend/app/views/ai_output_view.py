@@ -10,6 +10,7 @@ from app.models.user import User
 from app.repositories.ai_output import AIOutputRepository
 from app.repositories.task import TaskRepository
 from app.dto.ai_output import AIOutputResponse
+from app.dto.pagination import PaginationParams, PaginatedResponse
 from app.views.base import BaseView
 
 
@@ -30,6 +31,7 @@ class AIOutputView(BaseView):
         if self.route_type == "task":
             # 任务相关的AI输出路由
             self.router.add_api_route("/{task_id}/ai-outputs", self.get_task_ai_outputs, methods=["GET"])
+            self.router.add_api_route("/{task_id}/ai-outputs/paginated", self.get_task_ai_outputs_paginated, methods=["GET"], response_model=PaginatedResponse[AIOutputResponse])
         else:
             # 单独的AI输出详情路由  
             self.router.add_api_route("/{output_id}", self.get_ai_output_detail, methods=["GET"])
@@ -76,6 +78,48 @@ class AIOutputView(BaseView):
         self.check_task_access_permission(current_user, task.user_id)
         
         return AIOutputResponse.from_orm(output)
+    
+    def get_task_ai_outputs_paginated(
+        self,
+        task_id: int,
+        page: int = 1,
+        page_size: int = 20,
+        search: Optional[str] = None,
+        operation_type: Optional[str] = None,
+        status: Optional[str] = None,
+        sort_by: Optional[str] = "created_at",
+        sort_order: Optional[str] = "desc",
+        current_user: User = Depends(BaseView.get_current_user),
+        db: Session = Depends(get_db)
+    ) -> PaginatedResponse[AIOutputResponse]:
+        """分页获取任务的AI输出记录"""
+        # 构建分页参数
+        params = PaginationParams(
+            page=page,
+            page_size=page_size,
+            search=search,
+            operation_type=operation_type,
+            status=status,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
+        
+        # 检查任务访问权限
+        task_repo = TaskRepository(db)
+        task = task_repo.get_by_id(task_id)
+        if not task:
+            raise HTTPException(404, "任务不存在")
+        
+        self.check_task_access_permission(current_user, task.user_id)
+        
+        # 分页查询AI输出
+        ai_output_repo = AIOutputRepository(db)
+        outputs, total = ai_output_repo.get_paginated_ai_outputs_by_task_id(task_id, params)
+        
+        # 转换为响应对象
+        output_responses = [AIOutputResponse.from_orm(output) for output in outputs]
+        
+        return PaginatedResponse.create(output_responses, total, params.page, params.page_size)
 
 
 # 创建两个不同的视图实例

@@ -1,10 +1,12 @@
 """
 问题数据访问层
 """
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
+from sqlalchemy import desc, asc
 
 from app.models import Issue
+from app.dto.pagination import PaginationParams
 
 
 class IssueRepository:
@@ -92,3 +94,65 @@ class IssueRepository:
         """删除任务的所有问题"""
         self.db.query(Issue).filter(Issue.task_id == task_id).delete()
         self.db.commit()
+    
+    def get_paginated_issues_by_task_id(self, task_id: int, params: PaginationParams) -> Tuple[List[Issue], int]:
+        """分页获取任务的问题列表
+        
+        Args:
+            task_id: 任务ID
+            params: 分页参数
+            
+        Returns:
+            (问题列表, 总数量)
+        """
+        # 构建查询
+        query = self.db.query(Issue).filter(Issue.task_id == task_id)
+        
+        # 严重程度过滤
+        if hasattr(params, 'severity') and params.severity and params.severity != 'all':
+            query = query.filter(Issue.severity == params.severity)
+        
+        # 问题类型过滤
+        if hasattr(params, 'issue_type') and params.issue_type and params.issue_type != 'all':
+            query = query.filter(Issue.issue_type == params.issue_type)
+        
+        # 反馈状态过滤
+        if hasattr(params, 'feedback_status') and params.feedback_status:
+            if params.feedback_status == 'processed':
+                query = query.filter(Issue.feedback_type.isnot(None))
+            elif params.feedback_status == 'unprocessed':
+                query = query.filter(Issue.feedback_type.is_(None))
+            elif params.feedback_status in ['accept', 'reject']:
+                query = query.filter(Issue.feedback_type == params.feedback_status)
+        
+        # 搜索过滤
+        if params.search:
+            search_term = f"%{params.search}%"
+            query = query.filter(
+                Issue.description.ilike(search_term) | 
+                Issue.location.ilike(search_term) |
+                Issue.original_text.ilike(search_term)
+            )
+        
+        # 排序
+        if params.sort_by:
+            sort_column = getattr(Issue, params.sort_by, None)
+            if sort_column is not None:
+                if params.sort_order == 'asc':
+                    query = query.order_by(asc(sort_column))
+                else:
+                    query = query.order_by(desc(sort_column))
+            else:
+                # 默认按ID倒序
+                query = query.order_by(desc(Issue.id))
+        else:
+            query = query.order_by(desc(Issue.id))
+        
+        # 获取总数
+        total = query.count()
+        
+        # 分页
+        offset = (params.page - 1) * params.page_size
+        items = query.offset(offset).limit(params.page_size).all()
+        
+        return items, total

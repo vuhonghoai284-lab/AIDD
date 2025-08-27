@@ -1,12 +1,14 @@
 """
 任务数据访问层
 """
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_, desc, asc, func
 from datetime import datetime
 
 from app.models import Task, Issue
 from app.repositories.interfaces.task_repository import ITaskRepository
+from app.dto.pagination import PaginationParams
 
 
 class TaskRepository(ITaskRepository):
@@ -164,3 +166,64 @@ class TaskRepository(ITaskRepository):
         if status == "completed":
             update_data["completed_at"] = datetime.utcnow()
         return self.update(task_id, **update_data)
+    
+    def get_paginated_tasks(self, params: PaginationParams, user_id: Optional[int] = None) -> Tuple[List[Task], int]:
+        """分页获取任务列表
+        
+        Args:
+            params: 分页参数
+            user_id: 用户ID，None表示获取所有任务（管理员）
+            
+        Returns:
+            (任务列表, 总数量)
+        """
+        from sqlalchemy.orm import joinedload
+        
+        # 构建查询
+        query = self.db.query(Task).options(
+            joinedload(Task.file_info),
+            joinedload(Task.ai_model),
+            joinedload(Task.user)
+        )
+        
+        # 用户权限过滤
+        if user_id is not None:
+            query = query.filter(Task.user_id == user_id)
+        
+        # 状态过滤
+        if params.status and params.status != 'all':
+            query = query.filter(Task.status == params.status)
+        
+        # 搜索过滤
+        if params.search:
+            from app.models.file_info import FileInfo
+            search_term = f"%{params.search}%"
+            query = query.join(FileInfo, Task.file_id == FileInfo.id, isouter=True).filter(
+                or_(
+                    Task.title.ilike(search_term),
+                    FileInfo.original_name.ilike(search_term)
+                )
+            )
+        
+        # 排序
+        if params.sort_by:
+            sort_column = getattr(Task, params.sort_by, None)
+            if sort_column is not None:
+                if params.sort_order == 'asc':
+                    query = query.order_by(asc(sort_column))
+                else:
+                    query = query.order_by(desc(sort_column))
+            else:
+                # 默认按创建时间倒序
+                query = query.order_by(desc(Task.created_at))
+        else:
+            query = query.order_by(desc(Task.created_at))
+        
+        # 获取总数
+        total = query.count()
+        
+        # 分页
+        offset = (params.page - 1) * params.page_size
+        items = query.offset(offset).limit(params.page_size).all()
+        
+        return items, total

@@ -1,6 +1,6 @@
 // API服务封装
 import axios from 'axios';
-import { Task, TaskDetail, AIOutput, AnalyticsData, UserStats, TaskStats, SystemStats, IssueStats, ErrorStats } from './types';
+import { Task, TaskDetail, AIOutput, AnalyticsData, UserStats, TaskStats, SystemStats, IssueStats, ErrorStats, Issue, PaginationParams, PaginatedResponse } from './types';
 import config from './config/index';
 
 const API_BASE = config.apiBaseUrl;
@@ -77,9 +77,22 @@ export const taskAPI = {
     return response.data;
   },
 
-  // 获取任务列表
+  // 获取任务列表（兼容性接口）
   getTasks: async () => {
     const response = await api.get<Task[]>('/tasks/');
+    return response.data;
+  },
+  
+  // 分页获取任务列表
+  getTasksPaginated: async (params: PaginationParams) => {
+    const queryParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        queryParams.append(key, value.toString());
+      }
+    });
+    
+    const response = await api.get<PaginatedResponse<Task>>(`/tasks/paginated?${queryParams.toString()}`);
     return response.data;
   },
 
@@ -87,6 +100,38 @@ export const taskAPI = {
   getTaskDetail: async (taskId: number) => {
     const response = await api.get<TaskDetail>(`/tasks/${taskId}`);
     return response.data;
+  },
+
+  // 分页获取任务问题列表
+  getTaskIssues: async (taskId: number, params: PaginationParams) => {
+    const queryParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        queryParams.append(key, value.toString());
+      }
+    });
+    
+    const response = await api.get<PaginatedResponse<Issue>>(`/tasks/${taskId}/issues?${queryParams.toString()}`);
+    return response.data;
+  },
+
+  // 获取任务AI输出列表
+  getTaskAIOutputs: async (taskId: number, params?: PaginationParams) => {
+    if (params) {
+      const queryParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          queryParams.append(key, value.toString());
+        }
+      });
+      
+      const response = await api.get<PaginatedResponse<AIOutput>>(`/tasks/${taskId}/ai-outputs?${queryParams.toString()}`);
+      return response.data;
+    } else {
+      // 兼容性接口，返回所有数据
+      const response = await api.get<AIOutput[]>(`/tasks/${taskId}/ai-outputs`);
+      return response.data;
+    }
   },
 
   // 删除任务
@@ -99,6 +144,22 @@ export const taskAPI = {
   submitFeedback: async (issueId: number, feedbackType: string, comment?: string) => {
     const response = await api.put(`/issues/${issueId}/feedback`, {
       feedback_type: feedbackType,
+      comment,
+    });
+    return response.data;
+  },
+
+  // 提交满意度评分
+  submitSatisfactionRating: async (issueId: number, rating: number) => {
+    const response = await api.put(`/issues/${issueId}/satisfaction`, {
+      satisfaction_rating: rating,
+    });
+    return response.data;
+  },
+
+  // 只更新评论，不改变反馈状态
+  updateCommentOnly: async (issueId: number, comment?: string) => {
+    const response = await api.put(`/issues/${issueId}/comment`, {
       comment,
     });
     return response.data;
@@ -144,10 +205,16 @@ export const taskAPI = {
     }
   },
 
-  // 获取任务的AI输出记录
-  getTaskAIOutputs: async (taskId: number, operationType?: string) => {
-    const params = operationType ? { operation_type: operationType } : {};
-    const response = await api.get<AIOutput[]>(`/tasks/${taskId}/ai-outputs`, { params });
+  // 分页获取任务的AI输出记录（新方法名避免冲突）
+  getTaskAIOutputsPaginated: async (taskId: number, params: PaginationParams) => {
+    const queryParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        queryParams.append(key, value.toString());
+      }
+    });
+    
+    const response = await api.get<PaginatedResponse<AIOutput>>(`/tasks/${taskId}/ai-outputs/paginated?${queryParams.toString()}`);
     return response.data;
   },
 
@@ -160,22 +227,6 @@ export const taskAPI = {
   // 重试任务
   retryTask: async (taskId: number) => {
     const response = await api.post(`/tasks/${taskId}/retry`);
-    return response.data;
-  },
-
-  // 提交满意度评分
-  submitSatisfactionRating: async (issueId: number, rating: number) => {
-    const response = await api.put(`/issues/${issueId}/satisfaction`, {
-      satisfaction_rating: rating,
-    });
-    return response.data;
-  },
-
-  // 只更新评论，不改变反馈状态
-  updateCommentOnly: async (issueId: number, comment?: string) => {
-    const response = await api.put(`/issues/${issueId}/comment`, {
-      comment,
-    });
     return response.data;
   },
 

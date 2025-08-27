@@ -40,6 +40,9 @@ const TaskDetailEnhanced: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [taskDetail, setTaskDetail] = useState<EnhancedTaskDetail | null>(null);
+  const [issues, setIssues] = useState<EnhancedIssue[]>([]);
+  const [issuesLoading, setIssuesLoading] = useState(false);
+  const [issuesTotal, setIssuesTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [feedbackLoading, setFeedbackLoading] = useState<{ [key: number]: boolean }>({});
   const [aiOutputs, setAiOutputs] = useState<AIOutput[]>([]);
@@ -63,6 +66,9 @@ const TaskDetailEnhanced: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [aiOutputFilter, setAiOutputFilter] = useState<string>('all');
   const [aiStatusFilter, setAiStatusFilter] = useState<string>('all');
+  const [aiOutputsLoaded, setAiOutputsLoaded] = useState(false); // 跟踪是否已加载AI输出
+  const [aiCurrentPage, setAiCurrentPage] = useState(1);
+  const [aiPageSize] = useState(5); // AI输出每页较少，减少加载时间
 
   const loadTaskDetail = useCallback(async () => {
     if (!id) return;
@@ -85,20 +91,72 @@ const TaskDetailEnhanced: React.FC = () => {
     setLoading(false);
   }, [id]);
 
-  const loadAIOutputs = useCallback(async () => {
+  const loadIssues = useCallback(async (page: number = 1, pageSize: number = 10) => {
     if (!id) return;
+    
+    setIssuesLoading(true);
+    try {
+      const params = {
+        page,
+        page_size: pageSize,
+        search: undefined,
+        severity: severityFilter !== 'all' ? severityFilter : undefined,
+        issue_type: undefined,
+        feedback_status: statusFilter !== 'all' ? statusFilter : undefined,
+        sort_by: 'id',
+        sort_order: 'desc' as const
+      };
+      
+      const response = await taskAPI.getTaskIssues(parseInt(id), params);
+      setIssues(response.items as EnhancedIssue[]);
+      setIssuesTotal(response.total);
+    } catch (error) {
+      message.error('加载问题列表失败');
+      console.error(error);
+    }
+    setIssuesLoading(false);
+  }, [id, severityFilter, statusFilter]);
+
+  const loadAIOutputs = useCallback(async (page: number = 1, pageSize: number = aiPageSize, forceReload = false) => {
+    if (!id) return;
+    
+    // 如果已加载且不是强制重载，跳过
+    if (aiOutputsLoaded && !forceReload && page === 1) {
+      return;
+    }
     
     setAiOutputsLoading(true);
     try {
+      // 使用分页API加载AI输出
+      const params = {
+        page,
+        page_size: pageSize,
+        operation_type: aiOutputFilter !== 'all' ? aiOutputFilter : undefined,
+        sort_by: 'id',
+        sort_order: 'desc' as const
+      };
+      
       // 添加超时处理，防止请求挂起
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('AI输出加载超时')), 10000)
       );
       
-      const outputsPromise = taskAPI.getTaskAIOutputs(parseInt(id));
-      const outputs = await Promise.race([outputsPromise, timeoutPromise]) as AIOutput[];
+      const outputsPromise = taskAPI.getTaskAIOutputsPaginated(parseInt(id), params);
+      const response = await Promise.race([outputsPromise, timeoutPromise]) as any;
       
-      setAiOutputs(outputs);
+      if (page === 1) {
+        // 第一页，替换数据
+        setAiOutputs(response.items || []);
+        setAiOutputsLoaded(true); // 标记已加载
+      } else {
+        // 后续页，追加数据（用于无限滚动）
+        setAiOutputs(prev => [...prev, ...(response.items || [])]);
+      }
+      
+      // 存储总数信息
+      if (response.total !== undefined) {
+        setAiOutputs(prev => Object.assign(prev, { _total: response.total }));
+      }
     } catch (error: any) {
       // AI输出加载失败不影响主页面显示
       if (process.env.NODE_ENV === 'development') {
@@ -111,17 +169,23 @@ const TaskDetailEnhanced: React.FC = () => {
     } finally {
       setAiOutputsLoading(false);
     }
-  }, [id]);
+  }, [id, aiOutputFilter, aiPageSize, aiOutputsLoaded]);
 
   useEffect(() => {
-    // 先加载任务详情，成功后再加载AI输出
+    // 先加载任务详情，成功后再加载问题
     loadTaskDetail().then(() => {
-      // AI输出加载不影响主页面显示，异步加载
-      setTimeout(() => {
-        loadAIOutputs();
-      }, 100);
+      // 加载问题列表
+      loadIssues(currentPage, pageSize);
+      // AI输出改为懒加载，只有用户点击标签页时才加载
     });
-  }, [loadTaskDetail, loadAIOutputs]); // 只在初始加载时执行
+  }, [loadTaskDetail]); // 移除loadAIOutputs依赖，改为按需加载
+
+  // 分页、过滤条件变化时重新加载问题
+  useEffect(() => {
+    if (taskDetail) {
+      loadIssues(currentPage, pageSize);
+    }
+  }, [currentPage, pageSize, severityFilter, statusFilter, taskDetail]);
 
   // 清理定时器 useEffect - 仅在组件卸载时清理
   useEffect(() => {
@@ -139,6 +203,7 @@ const TaskDetailEnhanced: React.FC = () => {
       await taskAPI.submitFeedback(issueId, feedbackType, comment);
       message.success('反馈已提交');
       await loadTaskDetail();
+      await loadIssues(currentPage, pageSize); // 重新加载当前页问题
       
       // 提交反馈后重新检查下载权限（可能影响下载权限）
       if (id && taskDetail?.task.status === 'completed') {
@@ -148,7 +213,7 @@ const TaskDetailEnhanced: React.FC = () => {
       message.error('提交反馈失败');
     }
     setFeedbackLoading(prev => ({ ...prev, [issueId]: false }));
-  }, [id, taskDetail?.task.status, loadTaskDetail]);
+  }, [id, taskDetail?.task.status, loadTaskDetail, loadIssues, currentPage, pageSize]);
 
   const handleQuickFeedback = useCallback(async (issueId: number, feedbackType: 'accept' | 'reject' | null, comment?: string) => {
     setFeedbackLoading(prev => ({ ...prev, [issueId]: true }));
@@ -166,12 +231,13 @@ const TaskDetailEnhanced: React.FC = () => {
         );
       }
       await loadTaskDetail();
+      await loadIssues(currentPage, pageSize); // 重新加载当前页问题
     } catch (error) {
       message.error('操作失败');
     }
     
     setFeedbackLoading(prev => ({ ...prev, [issueId]: false }));
-  }, [loadTaskDetail]);
+  }, [loadTaskDetail, loadIssues, currentPage, pageSize]);
 
   // 检查下载权限 - 内联函数避免依赖问题
   const checkDownloadPermission = async (taskId: number) => {
@@ -353,6 +419,13 @@ const TaskDetailEnhanced: React.FC = () => {
     });
   }, []);
 
+  const handleTabChange = useCallback((activeKey: string) => {
+    // 当切换到AI输出标签页时，懒加载AI输出数据
+    if (activeKey === 'ai-outputs' && !aiOutputsLoaded) {
+      loadAIOutputs(1, aiPageSize);
+    }
+  }, [aiOutputsLoaded, loadAIOutputs, aiPageSize]);
+
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: 50 }}>
@@ -365,35 +438,13 @@ const TaskDetailEnhanced: React.FC = () => {
     return <Empty description="任务不存在" />;
   }
 
-  const { task, issues } = taskDetail;
+  const { task } = taskDetail;
   
-  // 过滤处理
-  const filteredIssues = issues.filter(issue => {
-    // 级别过滤
-    if (severityFilter !== 'all' && issue.severity !== severityFilter) {
-      return false;
-    }
-    // 状态过滤
-    if (statusFilter === 'accepted' && issue.feedback_type !== 'accept') {
-      return false;
-    }
-    if (statusFilter === 'rejected' && issue.feedback_type !== 'reject') {
-      return false;
-    }
-    if (statusFilter === 'pending' && issue.feedback_type) {
-      return false;
-    }
-    return true;
-  });
+  // 使用新的issues状态
+  const totalIssues = issuesTotal;
+  const displayIssues = issues; // 当前页面显示的问题
 
-  // 分页处理
-  const totalIssues = issues.length;
-  const filteredCount = filteredIssues.length;
-  const startIndex = (currentPage - 1) * pageSize;
-  const endIndex = startIndex + pageSize;
-  const paginatedIssues = filteredIssues.slice(startIndex, endIndex);
-
-  // 统计信息
+  // 统计信息 - 使用从API获取的统计数据或计算当前页面数据
   const processedCount = issues.filter(i => i.feedback_type).length;
   const acceptedCount = issues.filter(i => i.feedback_type === 'accept').length;
   const severityCounts = {
@@ -475,7 +526,10 @@ const TaskDetailEnhanced: React.FC = () => {
         </Card>
 
         {/* 标签页 */}
-        <Tabs defaultActiveKey={task.status === 'processing' ? 'logs' : 'issues'}>
+        <Tabs 
+          defaultActiveKey={task.status === 'processing' ? 'logs' : 'issues'}
+          onChange={handleTabChange}
+        >
           {/* 问题列表标签页 */}
           <Tabs.TabPane 
             tab={
@@ -507,16 +561,16 @@ const TaskDetailEnhanced: React.FC = () => {
                           >
                             <Radio.Button value="all">全部</Radio.Button>
                             <Radio.Button value="致命">
-                              <Tag color="error">致命 ({issues.filter(i => i.severity === '致命').length})</Tag>
+                              <Tag color="error">致命</Tag>
                             </Radio.Button>
                             <Radio.Button value="严重">
-                              <Tag color="warning">严重 ({issues.filter(i => i.severity === '严重').length})</Tag>
+                              <Tag color="warning">严重</Tag>
                             </Radio.Button>
                             <Radio.Button value="一般">
-                              <Tag color="processing">一般 ({issues.filter(i => i.severity === '一般').length})</Tag>
+                              <Tag color="processing">一般</Tag>
                             </Radio.Button>
                             <Radio.Button value="提示">
-                              <Tag color="success">提示 ({issues.filter(i => i.severity === '提示').length})</Tag>
+                              <Tag color="success">提示</Tag>
                             </Radio.Button>
                           </Radio.Group>
                         </Space>
@@ -531,21 +585,19 @@ const TaskDetailEnhanced: React.FC = () => {
                             }}
                             size="small"
                           >
-                            <Radio.Button value="all">全部 ({totalIssues})</Radio.Button>
+                            <Radio.Button value="all">全部</Radio.Button>
                             <Radio.Button value="accepted">
-                              <CheckOutlined style={{ color: '#52c41a' }} /> 已接受 ({acceptedCount})
+                              <CheckOutlined style={{ color: '#52c41a' }} /> 已接受
                             </Radio.Button>
                             <Radio.Button value="rejected">
-                              <CloseOutlined style={{ color: '#ff4d4f' }} /> 已拒绝 ({processedCount - acceptedCount})
+                              <CloseOutlined style={{ color: '#ff4d4f' }} /> 已拒绝
                             </Radio.Button>
                             <Radio.Button value="pending">
-                              <QuestionCircleOutlined /> 未处理 ({totalIssues - processedCount})
+                              <QuestionCircleOutlined /> 未处理
                             </Radio.Button>
                           </Radio.Group>
                         </Space>
-                        {filteredCount < totalIssues && (
-                          <Tag color="blue">显示 {filteredCount}/{totalIssues} 个问题</Tag>
-                        )}
+                        <Tag color="blue">显示 {displayIssues.length} 个问题</Tag>
                       </Space>
                     </Card>
 
@@ -635,7 +687,12 @@ const TaskDetailEnhanced: React.FC = () => {
 
                     {/* 问题列表 - 优化设计 */}
                     <div className="issues-list">
-                      {paginatedIssues.map((issue) => (
+                      {issuesLoading ? (
+                        <div style={{ textAlign: 'center', padding: 50 }}>
+                          <Spin size="large" tip="加载问题中..." />
+                        </div>
+                      ) : displayIssues.length > 0 ? (
+                        displayIssues.map((issue, index) => (
                         <Card 
                           key={issue.id} 
                           className={`issue-card-enhanced issue-severity-${issue.severity.toLowerCase()} ${issue.feedback_type ? 'processed' : 'pending'}`}
@@ -646,7 +703,7 @@ const TaskDetailEnhanced: React.FC = () => {
                             <div className="issue-header-top">
                               <div className="issue-meta-info">
                                 <Space size={12} align="center">
-                                  <span className="issue-number">#{startIndex + paginatedIssues.indexOf(issue) + 1}</span>
+                                  <span className="issue-number">#{(currentPage - 1) * pageSize + index + 1}</span>
                                   {getSeverityBadge(issue.severity, false)}
                                   <Tag color="blue" className="issue-type-tag">[{issue.issue_type}]</Tag>
                                 </Space>
@@ -772,11 +829,12 @@ const TaskDetailEnhanced: React.FC = () => {
                                     value={issue.satisfaction_rating || 0}
                                     onChange={async (value) => {
                                       try {
+                                        // 更新当前显示的问题列表
                                         const newIssues = [...issues];
                                         const idx = newIssues.findIndex(i => i.id === issue.id);
                                         if (idx >= 0) {
                                           newIssues[idx].satisfaction_rating = value;
-                                          setTaskDetail({ ...taskDetail, issues: newIssues });
+                                          setIssues(newIssues);
                                         }
                                         await taskAPI.submitSatisfactionRating(issue.id, value);
                                         message.success('评分已保存');
@@ -895,7 +953,7 @@ const TaskDetailEnhanced: React.FC = () => {
                                     const idx = newIssues.findIndex(i => i.id === issue.id);
                                     if (idx >= 0) {
                                       newIssues[idx].feedback_comment = e.target.value;
-                                      setTaskDetail({ ...taskDetail, issues: newIssues });
+                                      setIssues(newIssues);
                                     }
                                   }}
                                   className="comment-textarea"
@@ -927,7 +985,7 @@ const TaskDetailEnhanced: React.FC = () => {
                                             const idx = newIssues.findIndex(i => i.id === issue.id);
                                             if (idx >= 0) {
                                               newIssues[idx].feedback_comment = template;
-                                              setTaskDetail({ ...taskDetail, issues: newIssues });
+                                              setIssues(newIssues);
                                             }
                                           }
                                         }
@@ -948,8 +1006,9 @@ const TaskDetailEnhanced: React.FC = () => {
                                           } else {
                                             // 使用新的API只更新评论，不改变反馈状态
                                             await taskAPI.updateCommentOnly(issue.id, issue.feedback_comment);
-                                            // 重新加载任务详情以获取最新的评论
+                                            // 重新加载任务详情和问题列表以获取最新的评论
                                             await loadTaskDetail();
+                                            await loadIssues(currentPage, pageSize);
                                           }
                                           message.success('评论已保存');
                                           toggleComment(issue.id);
@@ -972,26 +1031,66 @@ const TaskDetailEnhanced: React.FC = () => {
                             </div>
                           )}
                         </Card>
-                      ))}
+                        ))
+                      ) : (
+                        <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                          <Empty 
+                            image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            description={
+                              <div>
+                                <Text type="secondary" style={{ fontSize: '16px' }}>
+                                  {totalIssues === 0 ? '暂无问题记录' : '当前筛选条件下无问题'}
+                                </Text>
+                                {totalIssues === 0 && task.status === 'completed' && (
+                                  <div style={{ marginTop: '8px' }}>
+                                    <Text type="secondary" style={{ fontSize: '14px' }}>
+                                      🎉 恭喜！此文档没有发现问题
+                                    </Text>
+                                  </div>
+                                )}
+                                {totalIssues > 0 && (
+                                  <div style={{ marginTop: '8px' }}>
+                                    <Button 
+                                      type="link" 
+                                      onClick={() => {
+                                        setSeverityFilter('all');
+                                        setStatusFilter('all');
+                                      }}
+                                    >
+                                      清除筛选条件
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            }
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* 分页器 */}
-                    <div className="pagination-container">
-                      <Pagination
-                        current={currentPage}
-                        pageSize={pageSize}
-                        total={filteredCount}
-                        onChange={setCurrentPage}
-                        onShowSizeChange={(_, size) => {
-                          setPageSize(size);
-                          setCurrentPage(1);
-                        }}
-                        showSizeChanger
-                        showQuickJumper
-                        showTotal={(total) => `筛选后 ${total} 个问题`}
-                        pageSizeOptions={['5', '10', '20', '50']}
-                      />
-                    </div>
+                    {totalIssues > 0 && (
+                      <div className="pagination-container">
+                        <Pagination
+                          current={currentPage}
+                          pageSize={pageSize}
+                          total={totalIssues}
+                          onChange={(page) => {
+                            setCurrentPage(page);
+                            loadIssues(page, pageSize);
+                          }}
+                          onShowSizeChange={(_, size) => {
+                            setPageSize(size);
+                            setCurrentPage(1);
+                            loadIssues(1, size);
+                          }}
+                          showSizeChanger
+                          showQuickJumper
+                          showTotal={(total) => `共 ${total} 个问题`}
+                          pageSizeOptions={['5', '10', '20', '50']}
+                        />
+                      </div>
+                    )}
                   </>
                 )}
               </>
@@ -1037,7 +1136,40 @@ const TaskDetailEnhanced: React.FC = () => {
                 <Spin size="large" tip="加载AI输出中..." />
               </div>
             ) : aiOutputs.length === 0 ? (
-              <Empty description="暂无AI输出记录" />
+              <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+                <Empty 
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={
+                    <div>
+                      <Text type="secondary" style={{ fontSize: '16px' }}>
+                        暂无AI输出记录
+                      </Text>
+                      <div style={{ marginTop: '8px' }}>
+                        <Text type="secondary" style={{ fontSize: '14px' }}>
+                          {task.status === 'pending' && '任务尚未开始处理'}
+                          {task.status === 'processing' && '任务正在处理中，输出记录将陆续生成'}
+                          {task.status === 'failed' && '任务处理失败，无输出记录'}
+                          {task.status === 'completed' && '此任务没有生成AI输出记录'}
+                        </Text>
+                      </div>
+                      {task.status === 'failed' && (
+                        <div style={{ marginTop: '12px' }}>
+                          <Button 
+                            type="primary" 
+                            size="small"
+                            onClick={() => {
+                              // 这里可以添加重试逻辑
+                              navigate(`/task/${task.id}`);
+                            }}
+                          >
+                            查看错误详情
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  }
+                />
+              </div>
             ) : (
               <>
                 {/* AI输出筛选器 */}
@@ -1049,7 +1181,14 @@ const TaskDetailEnhanced: React.FC = () => {
                           <Text strong>操作类型:</Text>
                           <Radio.Group 
                             value={aiOutputFilter} 
-                            onChange={(e) => setAiOutputFilter(e.target.value)}
+                            onChange={(e) => {
+                              setAiOutputFilter(e.target.value);
+                              // 过滤条件变化时重新加载第一页
+                              if (aiOutputsLoaded) {
+                                setAiCurrentPage(1);
+                                loadAIOutputs(1, aiPageSize, true);
+                              }
+                            }}
                             size="small"
                           >
                             <Radio.Button value="all">
@@ -1068,7 +1207,14 @@ const TaskDetailEnhanced: React.FC = () => {
                           <Text strong>执行状态:</Text>
                           <Radio.Group 
                             value={aiStatusFilter}
-                            onChange={(e) => setAiStatusFilter(e.target.value)}
+                            onChange={(e) => {
+                              setAiStatusFilter(e.target.value);
+                              // 状态过滤条件变化时重新加载（这里可以扩展API支持状态过滤）
+                              if (aiOutputsLoaded) {
+                                setAiCurrentPage(1);
+                                // 注意：目前API可能不支持状态过滤，这里先保持原有的客户端过滤
+                              }
+                            }}
                             size="small"
                           >
                             <Radio.Button value="all">
@@ -1090,7 +1236,7 @@ const TaskDetailEnhanced: React.FC = () => {
                         size="small"
                         icon={<SwapOutlined />}
                         loading={aiOutputsLoading}
-                        onClick={loadAIOutputs}
+                        onClick={() => loadAIOutputs(1, aiPageSize, true)}
                       >
                         手动刷新
                       </Button>
@@ -1259,6 +1405,23 @@ const TaskDetailEnhanced: React.FC = () => {
                     </Collapse>
                   </Card>
                 ))}
+
+                {/* AI输出分页器 */}
+                {aiOutputs.length > 0 && (aiOutputs as any)._total && (
+                  <div style={{ textAlign: 'center', marginTop: 24 }}>
+                    <Pagination
+                      current={aiCurrentPage}
+                      pageSize={aiPageSize}
+                      total={(aiOutputs as any)._total}
+                      onChange={(page) => {
+                        setAiCurrentPage(page);
+                        loadAIOutputs(page, aiPageSize, true);
+                      }}
+                      showTotal={(total, range) => `${range[0]}-${range[1]} / ${total} 条AI输出`}
+                      size="small"
+                    />
+                  </div>
+                )}
                 </div>
               </>
             )}

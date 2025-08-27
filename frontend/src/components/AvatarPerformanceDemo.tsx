@@ -80,7 +80,6 @@ const AvatarPerformanceDemo: React.FC = () => {
                 icon={<UserOutlined />}
                 timeout={3000}
                 size="large"
-                onLoadStart={() => measureRenderTime('oldAvatar')}
               />
               <Text type="secondary">
                 <ClockCircleOutlined /> 渲染时间: {renderTime.oldAvatar.toFixed(2)}ms

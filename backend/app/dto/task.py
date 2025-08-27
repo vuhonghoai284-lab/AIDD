@@ -80,9 +80,9 @@ class TaskResponse(BaseModel):
         
 
 class TaskDetail(BaseModel):
-    """任务详情"""
+    """任务详情（懒加载模式）"""
     task: TaskResponse
-    issues: List['IssueResponse']
+    issue_summary: dict = {}  # 问题摘要统计信息，替代完整的问题列表
     
     model_config = ConfigDict(from_attributes=True, protected_namespaces=())
 

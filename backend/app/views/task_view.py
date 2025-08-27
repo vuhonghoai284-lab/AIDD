@@ -12,7 +12,8 @@ from app.services.task import TaskService
 from app.services.report_service import ReportService
 from app.services.concurrency_service import concurrency_service, ConcurrencyLimitExceeded
 from app.dto.task import TaskResponse, TaskDetail
-from app.dto.issue import FeedbackRequest
+from app.dto.issue import FeedbackRequest, IssueResponse
+from app.dto.pagination import PaginationParams, PaginatedResponse
 from app.views.base import BaseView
 
 
@@ -29,6 +30,7 @@ class TaskView(BaseView):
         self.router.add_api_route("/", self.create_task, methods=["POST"], response_model=TaskResponse, status_code=201)
         self.router.add_api_route("/batch", self.batch_create_tasks, methods=["POST"], response_model=List[TaskResponse], status_code=201)
         self.router.add_api_route("/", self.get_tasks, methods=["GET"], response_model=List[TaskResponse])
+        self.router.add_api_route("/paginated", self.get_tasks_paginated, methods=["GET"], response_model=PaginatedResponse[TaskResponse])
         self.router.add_api_route("/{task_id}", self.get_task_detail, methods=["GET"], response_model=TaskDetail)
         self.router.add_api_route("/{task_id}", self.delete_task, methods=["DELETE"])
         self.router.add_api_route("/{task_id}/retry", self.retry_task, methods=["POST"])
@@ -40,6 +42,7 @@ class TaskView(BaseView):
         self.router.add_api_route("/recovery-status", self.get_recovery_status, methods=["GET"])
         self.router.add_api_route("/recover-timeout-tasks", self.recover_timeout_tasks, methods=["POST"])
         self.router.add_api_route("/schedule-pending-tasks", self.schedule_pending_tasks, methods=["POST"])
+        self.router.add_api_route("/{task_id}/issues", self.get_task_issues, methods=["GET"], response_model=PaginatedResponse[IssueResponse])
         print("🛠️  TaskView 路由已设置：")
         for route in self.router.routes:
             print(f"   {route.methods} {route.path}")
@@ -172,13 +175,42 @@ class TaskView(BaseView):
         current_user: User = Depends(BaseView.get_current_user),
         db: Session = Depends(get_db)
     ) -> List[TaskResponse]:
-        """获取任务列表"""
+        """获取任务列表（兼容性接口）"""
         service = TaskService(db)
         # 管理员可以查看所有任务，普通用户只能查看自己的任务
         if current_user.is_admin:
             return service.get_all_tasks()
         else:
             return service.get_user_tasks(current_user.id)
+    
+    def get_tasks_paginated(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        search: Optional[str] = None,
+        status: Optional[str] = None,
+        sort_by: Optional[str] = "created_at",
+        sort_order: Optional[str] = "desc",
+        current_user: User = Depends(BaseView.get_current_user),
+        db: Session = Depends(get_db)
+    ) -> PaginatedResponse[TaskResponse]:
+        """分页获取任务列表"""
+        # 构建分页参数
+        params = PaginationParams(
+            page=page,
+            page_size=page_size,
+            search=search,
+            status=status,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
+        
+        service = TaskService(db)
+        # 管理员可以查看所有任务，普通用户只能查看自己的任务
+        if current_user.is_admin:
+            return service.get_paginated_tasks(params, user_id=None)
+        else:
+            return service.get_paginated_tasks(params, user_id=current_user.id)
     
     def get_task_detail(
         self,
@@ -509,6 +541,46 @@ class TaskView(BaseView):
             "message": f"已调度 {scheduled_count} 个待处理任务",
             "scheduled_count": scheduled_count
         }
+    
+    def get_task_issues(
+        self,
+        task_id: int,
+        page: int = 1,
+        page_size: int = 20,
+        search: Optional[str] = None,
+        severity: Optional[str] = None,
+        issue_type: Optional[str] = None,
+        feedback_status: Optional[str] = None,
+        sort_by: Optional[str] = "id",
+        sort_order: Optional[str] = "desc",
+        current_user: User = Depends(BaseView.get_current_user),
+        db: Session = Depends(get_db)
+    ) -> PaginatedResponse[IssueResponse]:
+        """分页获取任务的问题列表"""
+        # 构建分页参数
+        params = PaginationParams(
+            page=page,
+            page_size=page_size,
+            search=search,
+            severity=severity,
+            issue_type=issue_type,
+            feedback_status=feedback_status,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
+        
+        service = TaskService(db)
+        
+        # 检查任务访问权限
+        from app.repositories.task import TaskRepository
+        task_repo = TaskRepository(db)
+        task = task_repo.get_by_id(task_id)
+        if not task:
+            raise HTTPException(404, "任务不存在")
+        
+        self.check_task_access_permission(current_user, task.user_id)
+        
+        return service.get_task_issues_paginated(task_id, params)
 
 
 # 创建视图实例并导出router

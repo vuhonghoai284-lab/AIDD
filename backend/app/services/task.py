@@ -17,6 +17,7 @@ from app.repositories.ai_model import AIModelRepository
 from app.repositories.user import UserRepository
 from app.dto.task import TaskResponse, TaskDetail
 from app.dto.issue import IssueResponse
+from app.dto.pagination import PaginationParams, PaginatedResponse
 from app.core.config import get_settings
 from app.services.interfaces.task_service import ITaskService
 from datetime import datetime
@@ -260,6 +261,56 @@ class TaskService(ITaskService):
         print(f"✅ 任务列表获取完成，总耗时: {total_time*1000:.1f}ms")
         return result
     
+    def get_paginated_tasks(self, params: PaginationParams, user_id: Optional[int] = None) -> PaginatedResponse[TaskResponse]:
+        """分页获取任务列表（性能优化版）"""
+        print(f"🚀 开始分页获取任务列表: page={params.page}, size={params.page_size}")
+        start_time = time.time()
+        
+        # 1. 分页查询任务
+        tasks, total = self.task_repo.get_paginated_tasks(params, user_id)
+        print(f"📊 分页查询完成: {len(tasks)}/{total} 任务，耗时: {(time.time() - start_time)*1000:.1f}ms")
+        
+        if not tasks:
+            return PaginatedResponse.create([], total, params.page, params.page_size)
+        
+        # 2. 批量统计问题数量
+        batch_start = time.time()
+        task_ids = [task.id for task in tasks]
+        issue_stats = self.task_repo.batch_count_issues(task_ids)
+        print(f"📊 批量统计问题数量，耗时: {(time.time() - batch_start)*1000:.1f}ms")
+        
+        # 3. 构建响应对象
+        result = []
+        for task in tasks:
+            # 关联数据已预加载，无需额外查询
+            file_info = task.file_info
+            ai_model = task.ai_model
+            user_info = task.user
+            
+            # 从批量统计结果中获取问题数量
+            issue_stat = issue_stats.get(task.id, {"issue_count": 0, "processed_issues": 0})
+            
+            result.append(TaskResponse(
+                id=task.id,
+                title=task.title or (file_info.original_name if file_info else "未知文件"),
+                status=task.status,
+                progress=task.progress,
+                file_name=file_info.original_name if file_info else "未知文件",
+                file_size=file_info.file_size if file_info else 0,
+                file_type=file_info.file_type if file_info else "unknown",
+                created_at=task.created_at,
+                completed_at=task.completed_at,
+                issue_count=issue_stat["issue_count"],
+                processed_issues=issue_stat["processed_issues"],
+                ai_model_name=ai_model.label if ai_model else "未知模型",
+                user_name=user_info.display_name if user_info else "未知用户",
+                processing_time=task.processing_time,
+                error_message=task.error_message
+            ))
+        
+        print(f"✅ 分页任务获取完成，总耗时: {(time.time() - start_time)*1000:.1f}ms")
+        return PaginatedResponse.create(result, total, params.page, params.page_size)
+    
     def get_all(self) -> List[TaskResponse]:
         """获取所有任务（基础接口方法）"""
         return self.get_all_tasks()
@@ -305,8 +356,8 @@ class TaskService(ITaskService):
         return result
     
     def get_task_detail(self, task_id: int) -> TaskDetail:
-        """获取任务详情（性能优化版）"""
-        print(f"🚀 开始获取任务详情: {task_id}（使用性能优化查询）...")
+        """获取任务详情（懒加载模式，不包含问题列表）"""
+        print(f"🚀 开始获取任务详情: {task_id}（懒加载模式）...")
         start_time = time.time()
         
         # 1. 使用JOIN查询预加载关联数据，避免N+1查询
@@ -317,11 +368,43 @@ class TaskService(ITaskService):
             print(f"❌ 任务 {task_id} 不存在")
             raise HTTPException(404, "任务不存在")
         
-        # 2. 并行获取问题和统计数据
-        issues_start = time.time()
-        issues = self.issue_repo.get_by_task_id(task_id)
+        # 2. 获取问题统计摘要而非完整问题列表
+        stats_start = time.time()
+        
+        # 统计总问题数和已处理问题数
+        total_issues = self.task_repo.count_issues(task_id)
         processed_issues = self.task_repo.count_processed_issues(task_id)
-        print(f"📊 问题查询耗时: {(time.time() - issues_start)*1000:.1f}ms")
+        
+        # 按严重程度统计
+        from sqlalchemy import func
+        from app.models import Issue
+        severity_stats = dict(self.db.query(Issue.severity, func.count(Issue.id))
+                            .filter(Issue.task_id == task_id)
+                            .group_by(Issue.severity).all())
+        
+        # 按问题类型统计
+        type_stats = dict(self.db.query(Issue.issue_type, func.count(Issue.id))
+                         .filter(Issue.task_id == task_id)
+                         .group_by(Issue.issue_type).all())
+        
+        # 按反馈状态统计
+        feedback_stats = {
+            'processed': processed_issues,
+            'unprocessed': total_issues - processed_issues,
+            'accept': self.db.query(Issue).filter(Issue.task_id == task_id, Issue.feedback_type == 'accept').count(),
+            'reject': self.db.query(Issue).filter(Issue.task_id == task_id, Issue.feedback_type == 'reject').count(),
+        }
+        
+        issue_summary = {
+            'total': total_issues,
+            'processed': processed_issues,
+            'unprocessed': total_issues - processed_issues,
+            'by_severity': severity_stats,
+            'by_type': type_stats,
+            'by_feedback': feedback_stats,
+        }
+        
+        print(f"📊 问题统计耗时: {(time.time() - stats_start)*1000:.1f}ms")
         
         # 3. 关联数据已预加载，无需额外查询
         file_info = task.file_info
@@ -329,16 +412,37 @@ class TaskService(ITaskService):
         user_info = task.user
         
         task_resp = TaskResponse.from_task_with_relations(
-            task, file_info, ai_model, user_info, len(issues), processed_issues
+            task, file_info, ai_model, user_info, total_issues, processed_issues
         )
         
         total_time = time.time() - start_time
-        print(f"✅ 任务详情获取完成，总耗时: {total_time*1000:.1f}ms")
+        print(f"✅ 任务详情获取完成（懒加载），总耗时: {total_time*1000:.1f}ms")
         
         return TaskDetail(
             task=task_resp,
-            issues=[IssueResponse.model_validate(issue) for issue in issues]
+            issue_summary=issue_summary
         )
+    
+    def get_task_issues_paginated(self, task_id: int, params: PaginationParams) -> PaginatedResponse['IssueResponse']:
+        """分页获取任务的问题列表"""
+        print(f"🚀 开始分页获取任务 {task_id} 的问题: page={params.page}, size={params.page_size}")
+        start_time = time.time()
+        
+        # 验证任务是否存在
+        task = self.task_repo.get_by_id(task_id)
+        if not task:
+            raise HTTPException(404, "任务不存在")
+        
+        # 分页查询问题
+        issues, total = self.issue_repo.get_paginated_issues_by_task_id(task_id, params)
+        
+        # 转换为响应对象
+        issue_responses = [IssueResponse.model_validate(issue) for issue in issues]
+        
+        total_time = time.time() - start_time
+        print(f"✅ 问题分页查询完成: {len(issue_responses)}/{total}，耗时: {total_time*1000:.1f}ms")
+        
+        return PaginatedResponse.create(issue_responses, total, params.page, params.page_size)
     
     def delete(self, entity_id: int) -> bool:
         """删除任务（基础接口方法）"""

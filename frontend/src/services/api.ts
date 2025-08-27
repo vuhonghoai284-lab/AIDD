@@ -6,6 +6,7 @@ export const submitFeedback = taskAPI.submitFeedback;
 export const downloadReport = taskAPI.downloadReport;
 export const retryTask = taskAPI.retryTask;
 export const getTasks = taskAPI.getTasks;
+export const getTasksPaginated = taskAPI.getTasksPaginated;
 export const createTask = taskAPI.createTask;
 export const deleteTask = taskAPI.deleteTask;
 export const getTaskAIOutputs = taskAPI.getTaskAIOutputs;

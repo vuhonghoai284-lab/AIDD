@@ -23,6 +23,27 @@ export interface Task {
   ai_model_id?: number; // 新增：AI模型ID
 }
 
+// 分页参数
+export interface PaginationParams {
+  page: number;
+  page_size: number;
+  search?: string;
+  status?: string;
+  sort_by?: string;
+  sort_order?: 'asc' | 'desc';
+}
+
+// 分页响应
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+  has_prev: boolean;
+  has_next: boolean;
+}
+
 export interface Issue {
   id: number;
   issue_type: string;

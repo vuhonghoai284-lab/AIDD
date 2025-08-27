@@ -3,7 +3,7 @@
  * 验证修复后的刷新机制不会影响用户操作
  */
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
 import TaskList from '../TaskList';
@@ -36,7 +36,7 @@ const mockTasks = [
   {
     id: 1,
     title: '测试任务1',
-    status: 'processing',
+    status: 'processing' as const,
     progress: 50,
     file_name: 'test1.pdf',
     file_size: 1024,
@@ -47,7 +47,7 @@ const mockTasks = [
   {
     id: 2,
     title: '测试任务2',
-    status: 'completed',
+    status: 'completed' as const,
     progress: 100,
     file_name: 'test2.pdf',
     file_size: 2048,
