@@ -262,7 +262,7 @@ class NewTaskProcessor:
             for issue in (issues or []):
                 repos['issue_repo'].create(
                     task_id=task_id,
-                    issue_type=issue.get('issue_type', '未知'),
+                    issue_type=issue.get('type', '未知'),  # 修复：使用正确的字段名 'type'
                     description=issue.get('description', ''),
                     location=issue.get('location', ''),
                     severity=issue.get('severity', '一般'),
