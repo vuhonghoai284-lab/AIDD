@@ -14,7 +14,7 @@ import {
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import { taskAPI } from '../api';
-import { TaskDetail as TaskDetailType, Issue, AIOutput } from '../types';
+import { TaskDetail as TaskDetailType, Issue, AIOutput, IssueSummary, AIOutputSummary } from '../types';
 import TaskLogs from '../components/TaskLogs';
 import { formatInputText, formatJSON, decodeUnicode, isLikelyJSON } from '../utils/textFormatter';
 import './TaskDetailEnhanced.css';
@@ -103,7 +103,12 @@ const TaskDetailEnhanced: React.FC = () => {
         search: undefined,
         severity: severityFilter !== 'all' ? severityFilter : undefined,
         issue_type: undefined,
-        feedback_status: statusFilter !== 'all' ? statusFilter : undefined,
+        feedback_status: statusFilter !== 'all' ? (
+          statusFilter === 'accepted' ? 'accept' :
+          statusFilter === 'rejected' ? 'reject' :
+          statusFilter === 'pending' ? 'unprocessed' :
+          statusFilter
+        ) : undefined,
         sort_by: 'id',
         sort_order: 'desc' as const
       };
@@ -446,14 +451,15 @@ const TaskDetailEnhanced: React.FC = () => {
   const totalIssues = issuesTotal;
   const displayIssues = issues; // 当前页面显示的问题
 
-  // 统计信息 - 使用从API获取的统计数据或计算当前页面数据
-  const processedCount = issues.filter(i => i.feedback_type).length;
-  const acceptedCount = issues.filter(i => i.feedback_type === 'accept').length;
+  // 统计信息 - 优先使用从后端获取的完整统计数据
+  const issueSummary = taskDetail?.issue_summary;
+  const processedCount = issueSummary?.processed || issues.filter(i => i.feedback_type).length;
+  const acceptedCount = issueSummary?.by_feedback.accept || issues.filter(i => i.feedback_type === 'accept').length;
   const severityCounts = {
-    '致命': issues.filter(i => i.severity === '致命').length,
-    '严重': issues.filter(i => i.severity === '严重').length,
-    '一般': issues.filter(i => i.severity === '一般').length,
-    '提示': issues.filter(i => i.severity === '提示').length
+    '致命': issueSummary?.by_severity['致命'] || issues.filter(i => i.severity === '致命').length,
+    '严重': issueSummary?.by_severity['严重'] || issues.filter(i => i.severity === '严重').length,
+    '一般': issueSummary?.by_severity['一般'] || issues.filter(i => i.severity === '一般').length,
+    '提示': issueSummary?.by_severity['提示'] || issues.filter(i => i.severity === '提示').length
   };
 
   return (
@@ -561,18 +567,18 @@ const TaskDetailEnhanced: React.FC = () => {
                             }}
                             size="small"
                           >
-                            <Radio.Button value="all">全部</Radio.Button>
+                            <Radio.Button value="all">全部 ({totalIssues})</Radio.Button>
                             <Radio.Button value="致命">
-                              <Tag color="error">致命</Tag>
+                              <Tag color="error">致命 ({severityCounts['致命']})</Tag>
                             </Radio.Button>
                             <Radio.Button value="严重">
-                              <Tag color="warning">严重</Tag>
+                              <Tag color="warning">严重 ({severityCounts['严重']})</Tag>
                             </Radio.Button>
                             <Radio.Button value="一般">
-                              <Tag color="processing">一般</Tag>
+                              <Tag color="processing">一般 ({severityCounts['一般']})</Tag>
                             </Radio.Button>
                             <Radio.Button value="提示">
-                              <Tag color="success">提示</Tag>
+                              <Tag color="success">提示 ({severityCounts['提示']})</Tag>
                             </Radio.Button>
                           </Radio.Group>
                         </Space>
@@ -587,15 +593,15 @@ const TaskDetailEnhanced: React.FC = () => {
                             }}
                             size="small"
                           >
-                            <Radio.Button value="all">全部</Radio.Button>
+                            <Radio.Button value="all">全部 ({totalIssues})</Radio.Button>
                             <Radio.Button value="accepted">
-                              <CheckOutlined style={{ color: '#52c41a' }} /> 已接受
+                              <CheckOutlined style={{ color: '#52c41a' }} /> 已接受 ({acceptedCount})
                             </Radio.Button>
                             <Radio.Button value="rejected">
-                              <CloseOutlined style={{ color: '#ff4d4f' }} /> 已拒绝
+                              <CloseOutlined style={{ color: '#ff4d4f' }} /> 已拒绝 ({processedCount - acceptedCount})
                             </Radio.Button>
                             <Radio.Button value="pending">
-                              <QuestionCircleOutlined /> 未处理
+                              <QuestionCircleOutlined /> 未处理 ({issueSummary?.unprocessed || (totalIssues - processedCount)})
                             </Radio.Button>
                           </Radio.Group>
                         </Space>
@@ -1128,7 +1134,7 @@ const TaskDetailEnhanced: React.FC = () => {
             tab={
               <Space>
                 <RobotOutlined />
-                <span>AI输出 ({aiOutputsLoaded ? aiOutputsTotal : '..'})</span>
+                <span>AI输出 ({taskDetail?.ai_output_summary?.total || (aiOutputsLoaded ? aiOutputsTotal : 0)})</span>
               </Space>
             } 
             key="ai-outputs"

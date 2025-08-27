@@ -406,7 +406,25 @@ class TaskService(ITaskService):
         
         print(f"📊 问题统计耗时: {(time.time() - stats_start)*1000:.1f}ms")
         
-        # 3. 关联数据已预加载，无需额外查询
+        # 3. 统计AI输出数量
+        ai_outputs_start = time.time()
+        
+        from app.models import AIOutput
+        total_ai_outputs = self.db.query(AIOutput).filter(AIOutput.task_id == task_id).count()
+        successful_ai_outputs = self.db.query(AIOutput).filter(
+            AIOutput.task_id == task_id,
+            AIOutput.status == 'success'
+        ).count()
+        
+        ai_output_summary = {
+            'total': total_ai_outputs,
+            'successful': successful_ai_outputs,
+            'failed': total_ai_outputs - successful_ai_outputs
+        }
+        
+        print(f"📊 AI输出统计耗时: {(time.time() - ai_outputs_start)*1000:.1f}ms")
+        
+        # 4. 关联数据已预加载，无需额外查询
         file_info = task.file_info
         ai_model = task.ai_model  
         user_info = task.user
@@ -420,7 +438,8 @@ class TaskService(ITaskService):
         
         return TaskDetail(
             task=task_resp,
-            issue_summary=issue_summary
+            issue_summary=issue_summary,
+            ai_output_summary=ai_output_summary
         )
     
     def get_task_issues_paginated(self, task_id: int, params: PaginationParams) -> PaginatedResponse['IssueResponse']:

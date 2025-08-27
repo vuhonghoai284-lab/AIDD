@@ -60,9 +60,31 @@ export interface Issue {
   feedback_comment?: string;
 }
 
+export interface IssueSummary {
+  total: number;
+  processed: number;
+  unprocessed: number;
+  by_severity: Record<string, number>;
+  by_type: Record<string, number>;
+  by_feedback: {
+    processed: number;
+    unprocessed: number;
+    accept: number;
+    reject: number;
+  };
+}
+
+export interface AIOutputSummary {
+  total: number;
+  successful: number;
+  failed: number;
+}
+
 export interface TaskDetail {
   task: Task;
   issues: Issue[];
+  issue_summary?: IssueSummary;
+  ai_output_summary?: AIOutputSummary;
 }
 
 export interface AIOutput {
