@@ -46,20 +46,17 @@ def get_engine_config():
             'isolation_level': 'READ_COMMITTED'  # 设置隔离级别
         }
     else:
-        # SQLite配置（默认） - 优化大量任务并发处理
+        # SQLite配置（默认） - 使用StaticPool提升并发性能
+        from sqlalchemy.pool import StaticPool
         return {
             'connect_args': {
                 "check_same_thread": False,
                 "timeout": 10,  # 减少锁等待时间
                 "isolation_level": None
             },
-            'pool_pre_ping': True,
-            'echo': False,
-            # SQLite也配置连接池来管理会话资源
-            'pool_size': 20,
-            'max_overflow': 25,
-            'pool_timeout': 5,
-            'pool_recycle': 1800
+            'poolclass': StaticPool,  # SQLite使用StaticPool而不是QueuePool
+            'pool_pre_ping': False,   # StaticPool不需要pre_ping
+            'echo': False
         }
 
 # 创建同步数据库引擎
@@ -180,13 +177,25 @@ def _log_connection_pool_status(operation: str, previous_info: dict = None) -> d
     """记录数据库连接池状态"""
     try:
         pool = engine.pool
+        pool_type = pool.__class__.__name__
+        
         current_info = {
             'checked_in': pool.checkedin(),
             'checked_out': pool.checkedout(), 
-            'overflow': pool.overflow(),
-            'size': pool.size(),
+            'pool_type': pool_type,
             'timestamp': time.time()
         }
+        
+        # 不同连接池类型有不同的方法
+        try:
+            current_info['overflow'] = pool.overflow()
+        except AttributeError:
+            current_info['overflow'] = 0
+            
+        try:
+            current_info['size'] = pool.size()
+        except AttributeError:
+            current_info['size'] = 1  # StaticPool固定为1
         
         # 计算变化量
         if previous_info:

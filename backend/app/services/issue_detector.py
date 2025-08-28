@@ -229,7 +229,7 @@ class IssueDetector:
                     
                     self.logger.info(f"✅ 章节 '{section_title}' 检测完成，发现 {len(issues)} 个问题 (耗时: {processing_time:.2f}s)")
                     
-                    # 保存成功结果到数据库
+                    # 保存成功结果到数据库 (只添加，不提交)
                     if self.db and task_id:
                         try:
                             # 验证task_id是否有效，避免外键约束失败
@@ -252,7 +252,7 @@ class IssueDetector:
                                     status="success"
                                 )
                                 self.db.add(ai_output)
-                                self.db.commit()
+                                # 移除即时提交，改为批量提交
                             else:
                                 self.logger.warning(f"⚠️ task_id {task_id} 不存在，跳过AI输出记录保存")
                         except Exception as db_error:
@@ -297,7 +297,7 @@ class IssueDetector:
                                     error_message=str(e)
                                 )
                                 self.db.add(ai_output)
-                                self.db.commit()
+                                # 移除即时提交，改为批量提交
                             else:
                                 self.logger.warning(f"⚠️ task_id {task_id} 不存在，跳过AI输出记录保存")
                         except Exception as db_error:
@@ -337,7 +337,7 @@ class IssueDetector:
                                 processing_time=processing_time
                             )
                             self.db.add(ai_output)
-                            self.db.commit()
+                            # 移除即时提交，改为批量提交
                         else:
                             self.logger.warning(f"⚠️ task_id {task_id} 不存在，跳过AI输出记录保存")
                     except Exception as db_error:
@@ -366,6 +366,21 @@ class IssueDetector:
                 all_issues.extend(result)
             elif isinstance(result, Exception):
                 self.logger.warning(f"⚠️ 某个章节检测出现异常: {str(result)}")
+        
+        # 批量提交所有数据库操作（解决锁竞争问题）
+        if self.db:
+            try:
+                commit_start = time.time()
+                self.db.commit()
+                commit_time = (time.time() - commit_start) * 1000
+                self.logger.info(f"📝 批量提交AI输出记录完成，耗时: {commit_time:.1f}ms")
+            except Exception as commit_error:
+                self.logger.error(f"❌ 批量提交AI输出记录失败: {commit_error}")
+                try:
+                    self.db.rollback()
+                    self.logger.info("🔄 数据库回滚完成")
+                except Exception as rollback_error:
+                    self.logger.error(f"❌ 数据库回滚失败: {rollback_error}")
         
         # 更新进度：完成
         if progress_callback:

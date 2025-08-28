@@ -145,6 +145,16 @@ class NewTaskProcessor:
             
             await self._log(task_id, "INFO", "处理结果保存完成", "报告生成", 95, db)
             
+            # 统一提交所有数据库操作（包括AI输出和日志）
+            try:
+                commit_start = time.time()
+                db.commit()
+                commit_time = (time.time() - commit_start) * 1000
+                print(f"📝 任务{task_id}统一数据库提交完成，耗时: {commit_time:.1f}ms")
+            except Exception as commit_error:
+                print(f"❌ 任务{task_id}数据库提交失败: {commit_error}")
+                db.rollback()
+            
             # 完成任务
             # 使用任务实际开始时间计算耗时，避免时区转换问题
             processing_time = time.time() - self.start_time if self.start_time else 0
@@ -312,7 +322,7 @@ class NewTaskProcessor:
                         progress=progress
                     )
                     db.add(log)
-                    db.commit()
+                    # 移除即时提交，减少数据库锁竞争
                 else:
                     self.logger.warning(f"⚠️ task_id {task_id} 不存在，跳过任务日志保存")
             except Exception as e:
