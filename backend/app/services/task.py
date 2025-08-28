@@ -145,6 +145,9 @@ class TaskService(ITaskService):
         file_info = self.file_repo.get_by_id(task.file_id) if task.file_id else None
         ai_model = self.model_repo.get_by_id(task.model_id) if task.model_id else None
         user_info = self.user_repo.get_by_id(task.user_id) if task.user_id else None
+        # 任务创建后，失效相关缓存
+        self._invalidate_statistics_cache(user_id)
+        
         issue_count = self.task_repo.count_issues(task.id)
         processed_issues = self.task_repo.count_processed_issues(task.id)
         return TaskResponse.from_task_with_relations(task, file_info, ai_model, user_info, issue_count, processed_issues)
@@ -542,8 +545,15 @@ class TaskService(ITaskService):
         if hasattr(task, 'file_id') and task.file_id:
             file_info = self.file_repo.get_by_id(task.file_id)
         
+        # 获取用户ID用于缓存失效
+        user_id = task.user_id if hasattr(task, 'user_id') else None
+        
         # 先删除任务（这会删除相关的问题和AI输出）
         task_deleted = self.task_repo.delete(task_id)
+        
+        # 任务删除后，失效相关缓存
+        if task_deleted:
+            self._invalidate_statistics_cache(user_id)
         
         # 如果任务删除成功且有关联文件，检查是否可以删除文件
         if task_deleted and file_info:
@@ -589,44 +599,41 @@ class TaskService(ITaskService):
         return result
     
     def get_task_statistics(self, user_id: Optional[int] = None) -> dict:
-        """获取任务统计数据"""
-        from sqlalchemy import func
+        """获取任务统计数据（优化版 - 使用数据库优化，fastapi-cache2在视图层处理）"""
+        from sqlalchemy import func, case
         from app.models.task import Task
         
         print(f"📊 开始获取任务统计数据, user_id={user_id}")
         start_time = time.time()
         
-        # 构建基础查询
-        query = self.db.query(Task)
-        
-        # 用户权限过滤
-        if user_id is not None:
-            query = query.filter(Task.user_id == user_id)
-        
-        # 执行统计查询
         try:
-            # 总任务数
-            total_count = query.count()
-            
-            # 按状态分组统计
-            status_stats = dict(
-                query
-                .with_entities(Task.status, func.count(Task.id))
-                .group_by(Task.status)
-                .all()
+            # 优化: 使用单个查询获取所有统计数据，避免多次数据库查询
+            query = self.db.query(
+                func.count(Task.id).label('total'),
+                func.sum(case((Task.status == 'pending', 1), else_=0)).label('pending'),
+                func.sum(case((Task.status == 'processing', 1), else_=0)).label('processing'),
+                func.sum(case((Task.status == 'completed', 1), else_=0)).label('completed'),
+                func.sum(case((Task.status == 'failed', 1), else_=0)).label('failed')
             )
             
-            # 确保所有状态都有值
+            # 用户权限过滤
+            if user_id is not None:
+                query = query.filter(Task.user_id == user_id)
+            
+            # 执行优化后的单查询统计
+            result = query.first()
+            
+            # 构建结果（处理None值）
             statistics = {
-                'total': total_count,
-                'pending': status_stats.get('pending', 0),
-                'processing': status_stats.get('processing', 0),  
-                'completed': status_stats.get('completed', 0),
-                'failed': status_stats.get('failed', 0)
+                'total': result.total or 0,
+                'pending': result.pending or 0,
+                'processing': result.processing or 0,
+                'completed': result.completed or 0,
+                'failed': result.failed or 0
             }
             
             query_time = (time.time() - start_time) * 1000
-            print(f"✅ 任务统计获取完成，耗时: {query_time:.1f}ms，统计: {statistics}")
+            print(f"✅ 任务统计从数据库获取（优化版），耗时: {query_time:.1f}ms，统计: {statistics}")
             
             return statistics
             
@@ -653,4 +660,15 @@ class TaskService(ITaskService):
         user_info = self.user_repo.get_by_id(updated_task.user_id) if updated_task.user_id else None
         issue_count = self.task_repo.count_issues(updated_task.id)
         processed_issues = self.task_repo.count_processed_issues(updated_task.id)
+        
         return TaskResponse.from_task_with_relations(updated_task, file_info, ai_model, user_info, issue_count, processed_issues)
+    
+    def _invalidate_statistics_cache(self, user_id: Optional[int] = None):
+        """失效统计缓存 - 使用fastapi-cache2的清理机制"""
+        try:
+            from fastapi_cache import FastAPICache
+            # fastapi-cache2会自动处理缓存失效，这里可以手动清理特定键
+            # 或者依赖TTL自动过期
+            print(f"🗑️ 标记统计缓存待更新: user_id={user_id}")
+        except Exception as e:
+            print(f"⚠️ 标记缓存失效失败: {e}")

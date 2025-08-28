@@ -253,6 +253,16 @@ class Settings:
         })
     
     @property
+    def cache_config(self) -> Dict[str, Any]:
+        """缓存配置"""
+        return self.config.get('cache', {
+            'strategy': 'memory',
+            'default_ttl': 30,
+            'memory': {'max_entries': 1000, 'cleanup_interval': 60},
+            'redis': {'host': 'localhost', 'port': 6379, 'password': '', 'database': 0}
+        })
+    
+    @property
     def task_processing_config(self) -> Dict[str, Any]:
         """任务处理配置"""
         return self.config.get('task_processing', {})

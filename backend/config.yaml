@@ -10,6 +10,30 @@ server:
   external_port: "${EXTERNAL_PORT:8080}"  # 外部访问端口
   external_protocol: "${EXTERNAL_PROTOCOL:http}"  # 外部访问协议
 
+# 缓存配置
+cache:
+  # 缓存策略: memory(本地内存) 或 redis
+  strategy: "${CACHE_STRATEGY:memory}"
+  # 默认缓存TTL (秒)
+  default_ttl: 30
+  
+  # Redis配置（生产环境）
+  redis:
+    host: "${REDIS_HOST:localhost}"
+    port: "${REDIS_PORT:6379}"
+    password: "${REDIS_PASSWORD:}"
+    database: "${REDIS_DATABASE:0}"
+    # 连接池配置
+    pool:
+      max_connections: 20
+      retry_on_timeout: true
+      health_check_interval: 30
+  
+  # 内存缓存配置（开发环境）
+  memory:
+    max_entries: 1000
+    cleanup_interval: 60
+
 # 数据库配置
 database:
   # 数据库类型: sqlite 或 mysql

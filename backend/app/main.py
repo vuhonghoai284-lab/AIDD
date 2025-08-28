@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.database import engine, get_db, Base
+from app.services.cache_service import init_cache, close_cache
 from app.views import system_view, auth_view, task_view, user_view, ai_output_view, issue_view, task_log_view, analytics_view, task_share_view
 
 # 导入所有模型以确保它们被注册到Base.metadata
@@ -54,6 +55,13 @@ def setup_startup_event(app: FastAPI):
         from app.services.task_recovery_service import task_recovery_service
         from app.services.background_task_service import background_task_service
         
+        # 初始化缓存
+        try:
+            init_cache()
+            print("✓ 缓存系统已初始化")
+        except Exception as e:
+            print(f"✗ 缓存初始化失败: {e}")
+        
         # 初始化AI模型配置到数据库
         db = next(get_db())
         try:
@@ -88,6 +96,12 @@ def setup_startup_event(app: FastAPI):
             print("✓ 后台任务服务已停止")
         except Exception as e:
             print(f"✗ 后台任务服务停止失败: {e}")
+        
+        # 关闭缓存连接
+        try:
+            close_cache()
+        except Exception as e:
+            print(f"✗ 缓存关闭失败: {e}")
 
 # 设置启动事件
 setup_startup_event(app)

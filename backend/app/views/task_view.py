@@ -3,6 +3,7 @@
 """
 from fastapi import APIRouter, Depends, UploadFile, File, Form, BackgroundTasks, HTTPException
 from fastapi.responses import StreamingResponse
+from fastapi_cache.decorator import cache
 from sqlalchemy.orm import Session
 from typing import Optional, List
 
@@ -629,12 +630,13 @@ class TaskView(BaseView):
         from app.core.database import get_db_monitor_status
         return get_db_monitor_status()
     
+    @cache(expire=30, key_builder=lambda func, *args, **kwargs: f"task_statistics:{kwargs.get('current_user').id if not kwargs.get('current_user').is_admin else 'global'}")
     def get_task_statistics(
         self,
         current_user: User = Depends(BaseView.get_current_user),
         db: Session = Depends(get_db)
     ) -> dict:
-        """获取任务统计数据"""
+        """获取任务统计数据（使用fastapi-cache2缓存30秒）"""
         service = TaskService(db)
         # 管理员可以查看所有任务统计，普通用户只能查看自己的任务统计
         if current_user.is_admin:

@@ -18,6 +18,7 @@ interface UseTaskListReturn {
   loading: boolean;
   loadingMore: boolean;
   isBackgroundRefreshing: boolean;
+  statisticsLoading: boolean;
   currentPage: number;
   totalTasks: number;
   hasNextPage: boolean;
@@ -30,6 +31,7 @@ interface UseTaskListReturn {
   loadMoreTasks: () => Promise<void>;
   refreshTasks: () => Promise<void>;
   backgroundRefresh: () => Promise<void>;
+  refreshStatistics: () => Promise<void>;
   // Stats
   statistics: TaskStatistics;
 }
@@ -149,6 +151,7 @@ export function useTaskList(options: UseTaskListOptions = {}): UseTaskListReturn
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [isBackgroundRefreshing, setIsBackgroundRefreshing] = useState(false);
+  const [statisticsLoading, setStatisticsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalTasks, setTotalTasks] = useState(0);
   const [hasNextPage, setHasNextPage] = useState(false);
@@ -304,11 +307,28 @@ export function useTaskList(options: UseTaskListOptions = {}): UseTaskListReturn
     
     try {
       console.log('🌙 开始后台静默刷新');
-      await loadTasks({
-        showLoading: false,
-        forceRefresh: true,
-        resetPage: true
+      
+      // 并行刷新任务列表和统计数据，避免串行等待
+      const promises = [
+        loadTasks({
+          showLoading: false,
+          forceRefresh: true,
+          resetPage: true
+        }),
+        loadRealStatistics(false) // 后台刷新统计数据，不显示loading
+      ];
+      
+      // 使用allSettled避免一个请求失败影响另一个
+      const results = await Promise.allSettled(promises);
+      
+      // 记录失败的请求
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          const name = index === 0 ? '任务列表' : '统计数据';
+          console.warn(`⚠️ 后台刷新${name}失败:`, result.reason);
+        }
       });
+      
     } catch (error) {
       console.warn('⚠️ 后台刷新失败:', error);
     } finally {
@@ -317,8 +337,8 @@ export function useTaskList(options: UseTaskListOptions = {}): UseTaskListReturn
     }
   }, [loadTasks]);
 
-  // 获取真实统计数据
-  const loadRealStatistics = useCallback(async () => {
+  // 获取真实统计数据（异步，防止阻塞页面）
+  const loadRealStatistics = useCallback(async (showLoading: boolean = false) => {
     // 检查是否有认证token
     const token = localStorage.getItem('token');
     if (!token) {
@@ -326,15 +346,44 @@ export function useTaskList(options: UseTaskListOptions = {}): UseTaskListReturn
       return;
     }
     
+    if (showLoading) {
+      setStatisticsLoading(true);
+    }
+    
     try {
-      const stats = await taskAPI.getTaskStatistics();
+      console.log('📊 开始异步获取统计数据...');
+      
+      // 使用Promise.race添加超时控制，防止请求阻塞
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Statistics request timeout')), 10000)
+      );
+      
+      const statsPromise = taskAPI.getTaskStatistics();
+      const stats = await Promise.race([statsPromise, timeoutPromise]);
+      
       setRealStatistics(stats);
       console.log('📊 统计数据已更新:', stats);
-    } catch (error) {
+    } catch (error: any) {
       console.warn('⚠️ 获取统计数据失败:', error);
+      
+      // 只在超时或网络错误时显示用户友好提示
+      if (error.message?.includes('timeout') || error.message?.includes('Network')) {
+        // 静默失败，保持现有数据
+        console.log('📊 统计数据获取超时，保持现有数据');
+      }
       // 不显示错误消息，避免过多提示
+    } finally {
+      if (showLoading) {
+        setStatisticsLoading(false);
+      }
     }
   }, []);
+  
+  // 刷新统计数据（用户主动操作）
+  const refreshStatistics = useCallback(async () => {
+    console.log('🔄 用户主动刷新统计数据');
+    await loadRealStatistics(true);
+  }, [loadRealStatistics]);
 
   // 搜索和过滤变更时的处理 - 使用防抖后的搜索文本
   useEffect(() => {
@@ -389,10 +438,15 @@ export function useTaskList(options: UseTaskListOptions = {}): UseTaskListReturn
     };
   }, []);
 
-  // 初始化时加载统计数据
+  // 初始化时异步加载统计数据（非阻塞）
   useEffect(() => {
-    console.log('🔄 初始化加载统计数据');
-    loadRealStatistics();
+    console.log('🔄 初始化异步加载统计数据');
+    // 使用setTimeout确保不阻塞主线程渲染
+    const timeoutId = setTimeout(() => {
+      loadRealStatistics(false); // 初始化时不显示loading，避免闪烁
+    }, 100);
+    
+    return () => clearTimeout(timeoutId);
   }, [loadRealStatistics]);
 
   return {
@@ -400,6 +454,7 @@ export function useTaskList(options: UseTaskListOptions = {}): UseTaskListReturn
     loading,
     loadingMore,
     isBackgroundRefreshing,
+    statisticsLoading,
     currentPage,
     totalTasks,
     hasNextPage,
@@ -411,6 +466,7 @@ export function useTaskList(options: UseTaskListOptions = {}): UseTaskListReturn
     loadMoreTasks,
     refreshTasks,
     backgroundRefresh,
+    refreshStatistics,
     statistics
   };
 }
