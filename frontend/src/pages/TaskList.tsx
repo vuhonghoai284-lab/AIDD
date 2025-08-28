@@ -948,6 +948,16 @@ const TaskList: React.FC = () => {
               )}
             </div>
           )}
+          
+          {/* 无限滚动触发器 */}
+          <div ref={loadMoreTriggerRef} style={{ height: '20px', margin: '10px 0' }}>
+            {loadingMore && (
+              <div style={{ textAlign: 'center', padding: '10px' }}>
+                <Spin size="small" />
+                <span style={{ marginLeft: '8px' }}>加载更多...</span>
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         tasks.length > 0 ? (
@@ -1020,6 +1030,16 @@ const TaskList: React.FC = () => {
                 )}
               </div>
             )}
+            
+            {/* 卡片视图的无限滚动触发器 */}
+            <div ref={loadMoreTriggerRef} style={{ height: '20px', margin: '10px 0' }}>
+              {loadingMore && (
+                <div style={{ textAlign: 'center', padding: '10px' }}>
+                  <Spin size="small" />
+                  <span style={{ marginLeft: '8px' }}>加载更多...</span>
+                </div>
+              )}
+            </div>
           </>
         ) : (
           <div className="empty-state">

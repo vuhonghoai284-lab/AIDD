@@ -11,5 +11,6 @@ export const createTask = taskAPI.createTask;
 export const deleteTask = taskAPI.deleteTask;
 export const getTaskAIOutputs = taskAPI.getTaskAIOutputs;
 export const getAIOutputDetail = taskAPI.getAIOutputDetail;
+export const getTaskStatistics = taskAPI.getTaskStatistics;
 
 export default taskAPI;
