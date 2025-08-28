@@ -2,6 +2,7 @@
 用户相关视图
 """
 from fastapi import APIRouter, Depends
+from fastapi_cache.decorator import cache
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -10,6 +11,14 @@ from app.models.user import User
 from app.repositories.user import UserRepository
 from app.dto.user import UserResponse
 from app.views.base import BaseView
+
+
+def build_user_me_cache_key(func, *args, **kwargs):
+    """构建/users/me缓存键"""
+    current_user = kwargs.get('current_user')
+    if current_user and hasattr(current_user, 'id'):
+        return f"user_me:{current_user.id}"
+    return "user_me:anonymous"
 
 
 class UserView(BaseView):
@@ -25,12 +34,22 @@ class UserView(BaseView):
         self.router.add_api_route("/users/me", self.get_current_user_info, methods=["GET"], response_model=UserResponse)
         self.router.add_api_route("/users", self.get_users, methods=["GET"], response_model=List[UserResponse])
     
+    @cache(expire=300, key_builder=build_user_me_cache_key)
     def get_current_user_info(
         self,
         current_user: User = Depends(BaseView.get_current_user)
     ) -> UserResponse:
-        """获取当前用户信息"""
-        return UserResponse.from_orm(current_user)
+        """获取当前用户信息（缓存5分钟）"""
+        import time
+        start_time = time.time()
+        
+        response = UserResponse.from_orm(current_user)
+        
+        elapsed_time = (time.time() - start_time) * 1000
+        if elapsed_time > 10:  # 超过10ms记录
+            print(f"📄 /users/me响应构建耗时: {elapsed_time:.1f}ms, user_id={current_user.id}")
+        
+        return response
     
     def get_users(
         self,

@@ -156,18 +156,36 @@ def get_db() -> Generator[Session, None, None]:
     finally:
         # 记录会话使用时间
         session_time = (time.time() - session_start) * 1000
+        
+        # 强制会话清理 - 解决会话泄漏问题
+        try:
+            # 检查是否有未提交的事务
+            if hasattr(db, 'in_transaction') and callable(db.in_transaction):
+                if db.in_transaction():
+                    print(f"⚠️ 检测到未完成事务，强制回滚: {session_id}")
+                    db.rollback()
+            
+            # 强制关闭会话连接
+            if hasattr(db, 'is_active') and db.is_active:
+                db.close()
+            elif hasattr(db, 'close'):
+                db.close()
+                
+            # 对于长时间会话，额外清理
+            if session_time > 10000:  # 超过10秒
+                print(f"🔄 检测到长时间会话，执行深度清理: {session_time:.1f}ms")
+                # 强制垃圾回收
+                import gc
+                gc.collect()
+                
+        except Exception as cleanup_error:
+            print(f"❌ 数据库会话清理失败: {cleanup_error}")
+        
+        # 性能日志
         if session_time > 5000:  # 超过5秒记录警告
-            print(f"⚠️ FastAPI数据库会话使用时间过长: {session_time:.1f}ms")
+            print(f"⚠️ FastAPI数据库会话使用时间过长: {session_time:.1f}ms [已强制清理]")
         elif session_time > 1000:  # 超过1秒记录信息
             print(f"ℹ️ FastAPI数据库会话使用时间: {session_time:.1f}ms")
-        
-        # 安全关闭会话
-        try:
-            if db.is_active:
-                db.close()
-        except Exception:
-            # 忽略关闭异常，避免状态冲突
-            pass
         
         monitor.log_session_close(session_id, "FastAPI请求")
         _log_connection_pool_status("释放FastAPI会话", connection_info)

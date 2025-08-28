@@ -134,7 +134,9 @@ class AuthService(IAuthService):
         }
     
     def verify_token(self, token: str) -> Optional[User]:
-        """验证令牌（带缓存优化）"""
+        """验证令牌（带缓存优化版）"""
+        start_time = time.time()
+        
         try:
             # 首先验证JWT令牌
             payload = jwt.decode(token, self.SECRET_KEY, algorithms=[self.ALGORITHM])
@@ -143,22 +145,45 @@ class AuthService(IAuthService):
             if user_id is None:
                 return None
             
-            # 检查令牌是否即将过期（如果过期时间小于5分钟，重新查询数据库）
+            user_id_int = int(user_id)
+            
+            # 检查令牌是否即将过期
             exp = payload.get("exp", 0)
             current_time = time.time()
             time_until_expiry = exp - current_time
             
-            # 如果令牌即将过期，直接查询数据库确保用户信息最新
-            if time_until_expiry < 300:  # 5分钟
-                user = self.user_repo.get_by_id(int(user_id))
-                return user
+            # 尝试从缓存获取用户信息（不管是否即将过期都先试试缓存）
+            from app.services.user_cache_service import get_user_cache_service
+            cache_service = get_user_cache_service()
+            cached_user_data = cache_service.get_user_from_cache(user_id_int)
             
-            # 对于有效期充足的令牌，可以考虑添加用户信息缓存
-            # 这里暂时还是查询数据库以确保数据一致性
-            user = self.user_repo.get_by_id(int(user_id))
+            if cached_user_data and cache_service.is_cache_fresh(cached_user_data):
+                # 缓存命中且新鲜，直接使用
+                elapsed_time = (time.time() - start_time) * 1000
+                print(f"⚡ Token验证缓存命中，耗时: {elapsed_time:.1f}ms, user_id={user_id_int}")
+                return cache_service.recreate_user_from_cache(cached_user_data)
+            
+            # 缓存未命中或过期，查询数据库
+            user = self.user_repo.get_by_id(user_id_int)
+            
+            if user:
+                # 将查询结果缓存（除非令牌即将过期）
+                if time_until_expiry >= 300:  # 令牌还有5分钟以上有效期才缓存
+                    cache_service.cache_user(user)
+                
+                elapsed_time = (time.time() - start_time) * 1000
+                if elapsed_time > 100:  # 超过100ms记录日志
+                    print(f"🔍 Token验证数据库查询，耗时: {elapsed_time:.1f}ms, user_id={user_id_int}")
+            
             return user
             
         except jwt.PyJWTError:
+            elapsed_time = (time.time() - start_time) * 1000
+            print(f"❌ Token验证失败（JWT错误），耗时: {elapsed_time:.1f}ms")
+            return None
+        except Exception as e:
+            elapsed_time = (time.time() - start_time) * 1000
+            print(f"❌ Token验证异常: {e}，耗时: {elapsed_time:.1f}ms")
             return None
     
     async def exchange_code_for_token(self, code: str) -> ThirdPartyTokenResponse:
