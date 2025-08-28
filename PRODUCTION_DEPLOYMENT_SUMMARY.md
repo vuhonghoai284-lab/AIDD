@@ -29,13 +29,15 @@ CREATE TABLE task_shares (
 
 ## 🚀 快速部署方案
 
-### 方案一：自动化脚本（推荐）
+### SQLite环境（开发/测试）
+
+**方案一：自动化脚本（推荐）**
 ```bash
 # 在项目根目录执行
 ./deploy_task_sharing.sh
 ```
 
-### 方案二：手动执行
+**方案二：手动执行**
 ```bash
 # 1. 数据库迁移
 cd backend
@@ -45,29 +47,86 @@ python migration_task_sharing.py
 # 根据你的部署方式重启后端和前端服务
 ```
 
+### MySQL环境（生产环境）
+
+**方案一：自动化脚本（推荐）**
+```bash
+# 1. 配置环境变量
+export MYSQL_HOST=your_mysql_host
+export MYSQL_PORT=3306
+export MYSQL_USERNAME=your_username
+export MYSQL_PASSWORD=your_password
+export MYSQL_DATABASE=your_database
+
+# 2. 安装MySQL依赖
+pip install pymysql
+
+# 3. 执行部署脚本
+./deploy_task_sharing_mysql.sh
+```
+
+**方案二：手动执行**
+```bash
+# 1. 配置环境变量（同上）
+# 2. 安装MySQL依赖
+pip install pymysql
+
+# 3. 数据库迁移
+cd backend
+python migration_task_sharing_mysql.py
+
+# 4. 重启服务
+# 根据你的部署方式重启后端和前端服务
+```
+
 ## 📋 部署检查清单
 
 ### 执行前
 - [ ] 数据库已备份
-- [ ] 应用处于维护模式（可选）
+- [ ] 应用处于维护模式（可选）  
 - [ ] 确认磁盘空间充足
+- [ ] **MySQL环境**：确认pymysql已安装
+- [ ] **MySQL环境**：确认数据库用户有DDL权限
+- [ ] **MySQL环境**：确认环境变量配置正确
 
 ### 执行后  
 - [ ] 迁移脚本执行成功，无错误日志
 - [ ] 新表 `task_shares` 已创建
 - [ ] `issues` 表新字段已添加
+- [ ] **MySQL环境**：外键约束正常工作
+- [ ] **MySQL环境**：索引已正确创建
 - [ ] 应用服务正常启动
 - [ ] 分享功能测试通过
 
 ## 🔍 验证方法
 
 ### 数据库验证
+
+**SQLite环境：**
 ```sql
 -- 检查新表
 SELECT name FROM sqlite_master WHERE type='table' AND name='task_shares';
 
 -- 检查新字段
 PRAGMA table_info(issues);
+```
+
+**MySQL环境：**
+```sql
+-- 检查新表
+SHOW TABLES LIKE 'task_shares';
+
+-- 检查表结构
+DESCRIBE task_shares;
+
+-- 检查新字段
+DESCRIBE issues;
+
+-- 检查外键约束
+SELECT CONSTRAINT_NAME, REFERENCED_TABLE_NAME 
+FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE 
+WHERE TABLE_NAME = 'task_shares' 
+AND REFERENCED_TABLE_NAME IS NOT NULL;
 ```
 
 ### 功能验证

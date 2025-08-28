@@ -22,22 +22,45 @@
 
 ⚠️ **重要提醒：执行前请备份数据库**
 
+#### SQLite环境（开发/测试）
 ```bash
 # 1. 进入后端目录
 cd backend
 
-# 2. 执行迁移脚本（会自动备份数据库）
+# 2. 执行SQLite迁移脚本
 python migration_task_sharing.py
 
 # 3. 验证迁移结果
 # 脚本会自动验证表结构和索引创建情况
 ```
 
+#### MySQL环境（生产环境）
+```bash
+# 1. 配置MySQL连接环境变量
+export MYSQL_HOST=your_mysql_host
+export MYSQL_PORT=3306
+export MYSQL_USERNAME=your_username
+export MYSQL_PASSWORD=your_password
+export MYSQL_DATABASE=your_database
+
+# 2. 安装MySQL Python驱动
+pip install pymysql
+
+# 3. 进入后端目录
+cd backend
+
+# 4. 执行MySQL迁移脚本
+python migration_task_sharing_mysql.py
+
+# 5. 验证迁移结果
+# 脚本会自动验证表结构、索引和外键约束
+```
+
 ### 迁移脚本功能
-- ✅ 自动备份数据库
+- ✅ 自动备份数据库（MySQL支持mysqldump，SQLite支持内置备份）
 - ✅ 事务保护（失败时自动回滚）
 - ✅ 重复执行安全（检查已存在的表和字段）
-- ✅ 创建必要的索引
+- ✅ 创建必要的索引和外键约束（MySQL）
 - ✅ 迁移结果验证
 
 ## 📋 部署前检查清单
@@ -46,11 +69,21 @@ python migration_task_sharing.py
 - [ ] 数据库已备份
 - [ ] 应用已停止或处于维护模式
 - [ ] 确认Python环境和依赖包完整
+- [ ] MySQL环境：确认pymysql已安装
+- [ ] MySQL环境：确认数据库用户有DDL权限
 
 ### 2. 数据库迁移
+**SQLite环境：**
 - [ ] 执行 `python migration_task_sharing.py`
 - [ ] 验证迁移日志无错误
 - [ ] 确认 `task_shares` 表已创建
+- [ ] 确认 `issues` 表新字段已添加
+
+**MySQL环境：**
+- [ ] 配置正确的环境变量
+- [ ] 执行 `python migration_task_sharing_mysql.py`
+- [ ] 验证迁移日志无错误
+- [ ] 确认 `task_shares` 表已创建（包含索引和外键）
 - [ ] 确认 `issues` 表新字段已添加
 
 ### 3. 应用配置
@@ -67,6 +100,8 @@ python migration_task_sharing.py
 ## 🔍 验证步骤
 
 ### 数据库验证
+
+#### SQLite验证
 ```sql
 -- 检查 task_shares 表
 SELECT name FROM sqlite_master WHERE type='table' AND name='task_shares';
@@ -79,6 +114,32 @@ PRAGMA table_info(issues);
 
 -- 检查索引
 SELECT name FROM sqlite_master WHERE type='index' AND name LIKE '%task_shares%';
+```
+
+#### MySQL验证
+```sql
+-- 检查 task_shares 表
+SHOW TABLES LIKE 'task_shares';
+
+-- 检查表结构
+DESCRIBE task_shares;
+
+-- 检查 issues 表新字段
+DESCRIBE issues;
+
+-- 检查索引
+SHOW INDEX FROM task_shares;
+
+-- 检查外键约束
+SELECT 
+    CONSTRAINT_NAME,
+    COLUMN_NAME,
+    REFERENCED_TABLE_NAME,
+    REFERENCED_COLUMN_NAME
+FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE 
+WHERE TABLE_NAME = 'task_shares' 
+    AND TABLE_SCHEMA = DATABASE()
+    AND REFERENCED_TABLE_NAME IS NOT NULL;
 ```
 
 ### API端点验证
