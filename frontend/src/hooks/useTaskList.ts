@@ -319,6 +319,13 @@ export function useTaskList(options: UseTaskListOptions = {}): UseTaskListReturn
 
   // 获取真实统计数据
   const loadRealStatistics = useCallback(async () => {
+    // 检查是否有认证token
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.log('⚠️ 未登录，跳过统计数据获取');
+      return;
+    }
+    
     try {
       const stats = await taskAPI.getTaskStatistics();
       setRealStatistics(stats);
