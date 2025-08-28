@@ -120,7 +120,15 @@ export const TaskShareModal: React.FC<TaskShareModalProps> = ({
       visible={visible}
       onCancel={handleCancel}
       footer={null}
-      width={600}
+      width={680}
+      styles={{
+        body: {
+          maxHeight: '75vh',
+          overflowY: 'auto',
+          padding: '20px 24px 16px 24px'
+        }
+      }}
+      maskClosable={false}
       destroyOnClose
     >
       <div style={{ marginBottom: 16 }}>
@@ -133,7 +141,8 @@ export const TaskShareModal: React.FC<TaskShareModalProps> = ({
         description="分享后，被分享用户将能够根据设置的权限级别查看和操作此任务。您可以随时修改权限或撤销分享。"
         type="info"
         icon={<InfoCircleOutlined />}
-        style={{ marginBottom: 24 }}
+        style={{ marginBottom: 20, fontSize: '12px' }}
+        showIcon
       />
 
       <Form
@@ -143,10 +152,12 @@ export const TaskShareModal: React.FC<TaskShareModalProps> = ({
         initialValues={{
           permission_level: 'read_only'
         }}
+        style={{ marginTop: 0 }}
       >
         <Form.Item
           name="shared_user_ids"
           label="选择要分享的用户"
+          style={{ marginBottom: 20 }}
           rules={[
             { required: true, message: '请至少选择一个用户' },
             { type: 'array', min: 1, message: '请至少选择一个用户' }
@@ -163,19 +174,22 @@ export const TaskShareModal: React.FC<TaskShareModalProps> = ({
         <Form.Item
           name="permission_level"
           label="权限级别"
+          style={{ marginBottom: 20 }}
           rules={[{ required: true, message: '请选择权限级别' }]}
         >
           <Select 
             onChange={setPermissionLevel}
             placeholder="选择权限级别"
+            dropdownStyle={{ zIndex: 10001 }}
+            getPopupContainer={triggerNode => triggerNode.parentNode}
           >
             {PERMISSION_OPTIONS.map(option => (
               <Select.Option key={option.value} value={option.value}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Tag color={option.color}>{option.label}</Tag>
+                <div style={{ padding: '2px 0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                    <Tag color={option.color} style={{ margin: 0, fontSize: '11px' }}>{option.label}</Tag>
                   </div>
-                  <div style={{ fontSize: '12px', color: '#666', marginTop: 2 }}>
+                  <div style={{ fontSize: '10px', color: '#666', lineHeight: 1.2 }}>
                     {option.description}
                   </div>
                 </div>
@@ -186,34 +200,41 @@ export const TaskShareModal: React.FC<TaskShareModalProps> = ({
 
         {selectedPermission && (
           <div style={{ 
-            marginBottom: 16, 
-            padding: 12, 
-            backgroundColor: '#f6f6f6', 
-            borderRadius: 6,
-            border: '1px solid #d9d9d9'
+            marginBottom: 18, 
+            padding: '6px 10px', 
+            backgroundColor: '#f8f9fa', 
+            borderRadius: 4,
+            border: '1px solid #e9ecef'
           }}>
-            <Text strong>已选权限: </Text>
-            <Tag color={selectedPermission.color}>{selectedPermission.label}</Tag>
-            <br />
-            <Text type="secondary" style={{ fontSize: '12px' }}>
-              {selectedPermission.description}
-            </Text>
+            <Space size="small" align="center" style={{ width: '100%' }}>
+              <Text strong style={{ fontSize: '12px' }}>已选权限:</Text>
+              <Tag color={selectedPermission.color} style={{ margin: 0, fontSize: '11px' }}>
+                {selectedPermission.label}
+              </Tag>
+            </Space>
+            <div style={{ marginTop: 2 }}>
+              <Text type="secondary" style={{ fontSize: '10px', lineHeight: 1.2 }}>
+                {selectedPermission.description}
+              </Text>
+            </div>
           </div>
         )}
 
         <Form.Item
           name="share_comment"
           label="分享备注（可选）"
+          style={{ marginBottom: 24 }}
         >
           <TextArea
             placeholder="添加分享说明或备注信息..."
-            rows={3}
+            rows={2}
             maxLength={500}
             showCount
+            style={{ fontSize: '13px', resize: 'none' }}
           />
         </Form.Item>
 
-        <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+        <Form.Item style={{ marginBottom: 0, textAlign: 'right', marginTop: 8 }}>
           <Space>
             <Button onClick={handleCancel}>
               取消

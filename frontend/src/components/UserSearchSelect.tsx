@@ -134,20 +134,22 @@ export const UserSearchSelect: React.FC<UserSearchSelectProps> = ({
       filterOption={false}
       onSearch={handleSearch}
       onChange={handleChange}
+      dropdownStyle={{ zIndex: 10001 }}
+      getPopupContainer={triggerNode => triggerNode.parentNode}
       notFoundContent={
         loading ? (
-          <div style={{ textAlign: 'center', padding: 16 }}>
+          <div style={{ textAlign: 'center', padding: 12 }}>
             <Spin size="small" />
-            <div style={{ marginTop: 8 }}>搜索中...</div>
+            <div style={{ marginTop: 6, fontSize: '12px' }}>搜索中...</div>
           </div>
         ) : searchValue && searchValue.length >= 2 ? (
           <Empty 
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             description="未找到匹配用户"
-            style={{ padding: 16 }}
+            style={{ padding: 12 }}
           />
         ) : searchValue ? (
-          <div style={{ textAlign: 'center', padding: 16, color: '#999' }}>
+          <div style={{ textAlign: 'center', padding: 12, color: '#999', fontSize: '12px' }}>
             请输入至少2个字符进行搜索
           </div>
         ) : null
