@@ -96,6 +96,18 @@ export const taskAPI = {
     return response.data;
   },
 
+  // 获取任务统计数据
+  getTaskStatistics: async () => {
+    const response = await api.get<{
+      total: number;
+      pending: number;
+      processing: number;
+      completed: number;
+      failed: number;
+    }>('/tasks/statistics');
+    return response.data;
+  },
+
   // 获取任务详情
   getTaskDetail: async (taskId: number) => {
     const response = await api.get<TaskDetail>(`/tasks/${taskId}`);

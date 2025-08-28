@@ -588,6 +588,60 @@ class TaskService(ITaskService):
         print(f"✅ 任务查询完成，耗时: {total_time*1000:.1f}ms")
         return result
     
+    def get_task_statistics(self, user_id: Optional[int] = None) -> dict:
+        """获取任务统计数据"""
+        from sqlalchemy import func
+        from app.models.task import Task
+        
+        print(f"📊 开始获取任务统计数据, user_id={user_id}")
+        start_time = time.time()
+        
+        # 构建基础查询
+        query = self.db.query(Task)
+        
+        # 用户权限过滤
+        if user_id is not None:
+            query = query.filter(Task.user_id == user_id)
+        
+        # 执行统计查询
+        try:
+            # 总任务数
+            total_count = query.count()
+            
+            # 按状态分组统计
+            status_stats = dict(
+                query
+                .with_entities(Task.status, func.count(Task.id))
+                .group_by(Task.status)
+                .all()
+            )
+            
+            # 确保所有状态都有值
+            statistics = {
+                'total': total_count,
+                'pending': status_stats.get('pending', 0),
+                'processing': status_stats.get('processing', 0),  
+                'completed': status_stats.get('completed', 0),
+                'failed': status_stats.get('failed', 0)
+            }
+            
+            query_time = (time.time() - start_time) * 1000
+            print(f"✅ 任务统计获取完成，耗时: {query_time:.1f}ms，统计: {statistics}")
+            
+            return statistics
+            
+        except Exception as e:
+            query_time = (time.time() - start_time) * 1000
+            print(f"❌ 获取任务统计失败，耗时: {query_time:.1f}ms，错误: {e}")
+            # 返回默认统计数据
+            return {
+                'total': 0,
+                'pending': 0,
+                'processing': 0,
+                'completed': 0,
+                'failed': 0
+            }
+    
     def update(self, entity_id: int, **kwargs) -> Optional[TaskResponse]:
         """更新任务"""
         updated_task = self.task_repo.update(entity_id, **kwargs)

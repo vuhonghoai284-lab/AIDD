@@ -152,6 +152,13 @@ export function useTaskList(options: UseTaskListOptions = {}): UseTaskListReturn
   const [currentPage, setCurrentPage] = useState(1);
   const [totalTasks, setTotalTasks] = useState(0);
   const [hasNextPage, setHasNextPage] = useState(false);
+  const [realStatistics, setRealStatistics] = useState<TaskStatistics>({
+    total: 0,
+    pending: 0,
+    processing: 0,
+    completed: 0,
+    failed: 0
+  });
   
   // 搜索和过滤状态
   const [searchText, setSearchText] = useState(initialSearch);
@@ -165,16 +172,10 @@ export function useTaskList(options: UseTaskListOptions = {}): UseTaskListReturn
   const requestManager = useRef(RequestManager.getInstance());
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // 统计数据 - 使用useMemo优化
+  // 统计数据 - 使用真实的数据库统计，而非当前页面数据
   const statistics = useMemo(() => {
-    return {
-      total: tasks.length,
-      pending: tasks.filter(t => t.status === 'pending').length,
-      processing: tasks.filter(t => t.status === 'processing').length,
-      completed: tasks.filter(t => t.status === 'completed').length,
-      failed: tasks.filter(t => t.status === 'failed').length,
-    };
-  }, [tasks]);
+    return realStatistics;
+  }, [realStatistics]);
 
   // 处理中任务数量 - 用于动态调整刷新频率
   const processingTaskCount = useMemo(() => {
@@ -316,6 +317,18 @@ export function useTaskList(options: UseTaskListOptions = {}): UseTaskListReturn
     }
   }, [loadTasks]);
 
+  // 获取真实统计数据
+  const loadRealStatistics = useCallback(async () => {
+    try {
+      const stats = await taskAPI.getTaskStatistics();
+      setRealStatistics(stats);
+      console.log('📊 统计数据已更新:', stats);
+    } catch (error) {
+      console.warn('⚠️ 获取统计数据失败:', error);
+      // 不显示错误消息，避免过多提示
+    }
+  }, []);
+
   // 搜索和过滤变更时的处理 - 使用防抖后的搜索文本
   useEffect(() => {
     console.log('🔍 搜索或过滤条件变更，重新加载数据');
@@ -368,6 +381,12 @@ export function useTaskList(options: UseTaskListOptions = {}): UseTaskListReturn
       }
     };
   }, []);
+
+  // 初始化时加载统计数据
+  useEffect(() => {
+    console.log('🔄 初始化加载统计数据');
+    loadRealStatistics();
+  }, [loadRealStatistics]);
 
   return {
     tasks,
