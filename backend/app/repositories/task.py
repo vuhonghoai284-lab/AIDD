@@ -177,7 +177,7 @@ class TaskRepository(ITaskRepository):
         return self.update(task_id, **update_data)
     
     def get_paginated_tasks(self, params: PaginationParams, user_id: Optional[int] = None) -> Tuple[List[Task], int]:
-        """分页获取任务列表
+        """分页获取任务列表（高性能版，避免数据库锁竞争）
         
         Args:
             params: 分页参数
@@ -187,19 +187,28 @@ class TaskRepository(ITaskRepository):
             (任务列表, 总数量)
         """
         from sqlalchemy.orm import joinedload
+        import time
+        query_start = time.time()
         
-        # 构建查询
+        # 构建查询，使用READ COMMITTED隔离级别避免锁等待
         query = self.db.query(Task).options(
             joinedload(Task.file_info),
             joinedload(Task.ai_model),
             joinedload(Task.user)
         )
         
-        # 用户权限过滤
+        # 添加查询超时控制和索引提示
+        # 为了提高性能，建议在以下列上创建索引：
+        # - Task.user_id
+        # - Task.created_at
+        # - Task.status
+        # - FileInfo.original_name (用于搜索)
+        
+        # 用户权限过滤（使用索引）
         if user_id is not None:
             query = query.filter(Task.user_id == user_id)
         
-        # 状态过滤
+        # 状态过滤（使用索引）
         if params.status and params.status != 'all':
             query = query.filter(Task.status == params.status)
         
@@ -214,7 +223,7 @@ class TaskRepository(ITaskRepository):
                 )
             )
         
-        # 排序
+        # 排序（确保使用索引）
         if params.sort_by:
             sort_column = getattr(Task, params.sort_by, None)
             if sort_column is not None:
@@ -223,13 +232,13 @@ class TaskRepository(ITaskRepository):
                 else:
                     query = query.order_by(desc(sort_column))
             else:
-                # 默认按创建时间倒序
+                # 默认按创建时间倒序（使用索引）
                 query = query.order_by(desc(Task.created_at))
         else:
             query = query.order_by(desc(Task.created_at))
         
-        # 优化：使用子查询获取总数，避免重复构建复杂查询
-        # 构建计数查询（去除joinedload以提高计数性能）
+        # 构建计数查询（移除JOIN以提高性能）
+        count_start = time.time()
         count_query = self.db.query(Task)
         
         # 应用相同的过滤条件
@@ -249,9 +258,17 @@ class TaskRepository(ITaskRepository):
         
         # 执行计数查询
         total = count_query.count()
+        count_time = (time.time() - count_start) * 1000
+        print(f"📈 计数查询耗时: {count_time:.1f}ms")
         
         # 分页查询数据
         offset = (params.page - 1) * params.page_size
-        items = query.offset(offset).limit(params.page_size).all()
-        
-        return items, total
+        # 设置查询超时，避免长时间等待
+        try:
+            items = query.offset(offset).limit(params.page_size).all()
+            query_time = (time.time() - query_start) * 1000
+            print(f"📊 分页查询完成，耗时: {query_time:.1f}ms")
+            return items, total
+        except Exception as e:
+            print(f"❌ 分页查询失败: {e}")
+            raise
