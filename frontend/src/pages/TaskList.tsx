@@ -11,11 +11,12 @@ import {
   FileMarkdownOutlined, FileUnknownOutlined, SearchOutlined,
   FilterOutlined, CheckCircleOutlined, CloseCircleOutlined,
   ClockCircleOutlined, SyncOutlined, ExclamationCircleOutlined,
-  BarChartOutlined
+  BarChartOutlined, ShareAltOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { taskAPI } from '../api';
 import { Task, PaginationParams, PaginatedResponse } from '../types';
+import { TaskShareModal } from '../components/TaskShareModal';
 import './TaskList.css';
 
 // 移除全局请求去重机制，改为组件级别的并发控制
@@ -34,6 +35,11 @@ const TaskList: React.FC = () => {
   const [isBackgroundRefreshing, setIsBackgroundRefreshing] = useState(false);
   const [lastRefreshTime, setLastRefreshTime] = useState(0);
   const [isRequestPending, setIsRequestPending] = useState(false);
+  
+  // 分享模态框状态
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [shareTaskId, setShareTaskId] = useState<number | undefined>();
+  const [shareTaskTitle, setShareTaskTitle] = useState<string | undefined>();
   
   // 分页相关状态
   const [currentPage, setCurrentPage] = useState(1);
@@ -341,6 +347,21 @@ const TaskList: React.FC = () => {
         message.error('下载文件失败');
       }
     }
+  }, []);
+
+  const handleShare = useCallback((taskId: number, taskTitle?: string) => {
+    setShareTaskId(taskId);
+    setShareTaskTitle(taskTitle);
+    setShareModalVisible(true);
+  }, []);
+
+  const handleShareSuccess = useCallback(() => {
+    setShareModalVisible(false);
+    setShareTaskId(undefined);
+    setShareTaskTitle(undefined);
+    message.success('任务分享成功！');
+    // 可以选择刷新任务列表以显示分享状态
+    setTimeout(() => loadTasks(false, true, true, false, false), 500);
   }, []);
 
   const getStatusTag = (status: string) => {
@@ -691,6 +712,12 @@ const TaskList: React.FC = () => {
             icon: <ReloadOutlined />,
             label: '重试任务',
             onClick: () => handleRetry(record.id)
+          }] : []),
+          ...(record.status === 'completed' ? [{
+            key: 'share',
+            icon: <ShareAltOutlined />,
+            label: '分享任务',
+            onClick: () => handleShare(record.id, record.title || record.file_name)
           }] : []),
           { type: 'divider' as const },
           {
@@ -1215,6 +1242,15 @@ const TaskList: React.FC = () => {
           </div>
         )
       )}
+      
+      {/* 任务分享模态框 */}
+      <TaskShareModal
+        visible={shareModalVisible}
+        taskId={shareTaskId}
+        taskTitle={shareTaskTitle}
+        onCancel={() => setShareModalVisible(false)}
+        onSuccess={handleShareSuccess}
+      />
     </div>
   );
 };

@@ -2,6 +2,7 @@
 用户数据仓库
 """
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, and_
 from typing import Optional, List
 from app.models.user import User
 from app.dto.user import UserCreate, UserUpdate
@@ -89,3 +90,24 @@ class UserRepository(IUserRepository):
         self.db.delete(db_user)
         self.db.commit()
         return True
+    
+    def search_users(self, query: str, exclude_user_id: Optional[int] = None, limit: int = 20) -> List[User]:
+        """搜索用户"""
+        search_query = self.db.query(User)
+        
+        # 按用户名、显示名称或邮箱搜索
+        search_pattern = f"%{query}%"
+        search_query = search_query.filter(
+            or_(
+                User.uid.ilike(search_pattern),
+                User.display_name.ilike(search_pattern),
+                User.email.ilike(search_pattern)
+            )
+        )
+        
+        # 排除指定用户
+        if exclude_user_id:
+            search_query = search_query.filter(User.id != exclude_user_id)
+        
+        # 按显示名称排序并限制结果数量
+        return search_query.order_by(User.display_name).limit(limit).all()

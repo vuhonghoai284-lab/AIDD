@@ -4,8 +4,10 @@
 from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc
+from datetime import datetime
 
 from app.models import Issue
+from app.models.user import User
 from app.dto.pagination import PaginationParams
 
 
@@ -57,7 +59,8 @@ class IssueRepository:
         """获取任务的所有问题"""
         return self.db.query(Issue).filter(Issue.task_id == task_id).all()
     
-    def update_feedback(self, issue_id: int, feedback_type: Optional[str], comment: Optional[str] = None) -> Optional[Issue]:
+    def update_feedback(self, issue_id: int, feedback_type: Optional[str], comment: Optional[str] = None, 
+                       user: Optional[User] = None) -> Optional[Issue]:
         """更新问题反馈"""
         issue = self.get_by_id(issue_id)
         if issue:
@@ -68,24 +71,41 @@ class IssueRepository:
             else:
                 issue.feedback_type = feedback_type
                 issue.feedback_comment = comment
+            
+            # 记录操作人信息
+            if user:
+                issue.feedback_user_id = user.id
+                issue.feedback_user_name = user.display_name
+                issue.feedback_updated_at = datetime.utcnow()
+            
             self.db.commit()
             self.db.refresh(issue)
         return issue
     
-    def update_comment_only(self, issue_id: int, comment: Optional[str]) -> Optional[Issue]:
+    def update_comment_only(self, issue_id: int, comment: Optional[str], user: Optional[User] = None) -> Optional[Issue]:
         """只更新评论，不改变反馈类型"""
         issue = self.get_by_id(issue_id)
         if issue:
             issue.feedback_comment = comment
+            # 记录操作人信息
+            if user:
+                issue.feedback_user_id = user.id
+                issue.feedback_user_name = user.display_name
+                issue.feedback_updated_at = datetime.utcnow()
             self.db.commit()
             self.db.refresh(issue)
         return issue
     
-    def update_satisfaction_rating(self, issue_id: int, rating: float) -> Optional[Issue]:
+    def update_satisfaction_rating(self, issue_id: int, rating: float, user: Optional[User] = None) -> Optional[Issue]:
         """更新满意度评分"""
         issue = self.get_by_id(issue_id)
         if issue:
             issue.satisfaction_rating = rating
+            # 记录操作人信息
+            if user:
+                issue.feedback_user_id = user.id
+                issue.feedback_user_name = user.display_name
+                issue.feedback_updated_at = datetime.utcnow()
             self.db.commit()
             self.db.refresh(issue)
         return issue

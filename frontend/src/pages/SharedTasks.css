@@ -1,0 +1,162 @@
+.shared-tasks-page {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.page-header {
+  margin-bottom: 32px;
+  text-align: center;
+}
+
+.page-header .ant-typography-title {
+  margin-bottom: 8px;
+  color: #1890ff;
+}
+
+.tasks-stats {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.shared-tasks-list {
+  background: white;
+}
+
+.shared-task-item {
+  padding: 16px !important;
+  border-bottom: 1px solid #f0f0f0;
+  transition: all 0.3s ease;
+}
+
+.shared-task-item:hover {
+  background-color: #fafafa;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.shared-task-item:last-child {
+  border-bottom: none;
+}
+
+.task-title {
+  margin-bottom: 8px;
+}
+
+.task-title .ant-typography {
+  font-size: 16px;
+}
+
+.task-meta {
+  margin-top: 8px;
+}
+
+.task-meta .anticon {
+  margin-right: 4px;
+}
+
+.share-comment {
+  padding: 8px 12px;
+  background: #f6f6f6;
+  border-left: 3px solid #1890ff;
+  border-radius: 4px;
+  margin: 8px 0;
+}
+
+.permission-info {
+  margin-top: 8px;
+}
+
+.permission-info .ant-tag {
+  margin: 0;
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .shared-tasks-page {
+    padding: 16px;
+  }
+  
+  .page-header {
+    margin-bottom: 24px;
+  }
+  
+  .tasks-stats {
+    margin-bottom: 16px;
+  }
+  
+  .tasks-stats .ant-space {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  
+  .shared-task-item {
+    padding: 12px !important;
+  }
+  
+  .task-title .ant-typography {
+    font-size: 14px;
+  }
+  
+  .task-meta .ant-space-item {
+    margin-bottom: 4px;
+  }
+}
+
+/* 深色主题支持 */
+[data-theme='dark'] .shared-tasks-page {
+  background: #141414;
+}
+
+[data-theme='dark'] .tasks-stats {
+  background: #1f1f1f;
+  border: 1px solid #303030;
+}
+
+[data-theme='dark'] .shared-task-item:hover {
+  background-color: #1f1f1f;
+}
+
+[data-theme='dark'] .share-comment {
+  background: #1f1f1f;
+  border-left-color: #1890ff;
+}
+
+/* 动画效果 */
+.shared-task-item {
+  animation: fadeInUp 0.4s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 标签样式优化 */
+.ant-tag {
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.ant-list-item-action {
+  margin-left: 24px;
+}
+
+@media (max-width: 576px) {
+  .ant-list-item-action {
+    margin-left: 0;
+    margin-top: 12px;
+  }
+}

@@ -1,7 +1,7 @@
 """
 问题数据模型
 """
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, Float
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, Float, DateTime
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -26,6 +26,10 @@ class Issue(Base):
     feedback_type = Column(String(50), index=True)  # 添加索引优化已处理问题统计
     feedback_comment = Column(Text)
     satisfaction_rating = Column(Float)  # 满意度评分 1-5星
+    # 反馈操作人信息
+    feedback_user_id = Column(Integer, ForeignKey("users.id"), index=True)  # 反馈操作用户ID
+    feedback_user_name = Column(String(100))  # 反馈操作用户名称
+    feedback_updated_at = Column(DateTime)  # 最后反馈时间
     created_at = Column(String(50))
     updated_at = Column(String(50))
     

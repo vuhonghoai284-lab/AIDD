@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
 import { Layout, Menu, Dropdown, message } from 'antd';
-import { FileAddOutlined, UnorderedListOutlined, UserOutlined, BarChartOutlined } from '@ant-design/icons';
+import { FileAddOutlined, UnorderedListOutlined, UserOutlined, BarChartOutlined, ShareAltOutlined } from '@ant-design/icons';
 import { flushSync } from 'react-dom';
 import TaskCreate from './pages/TaskCreate';
 import TaskList from './pages/TaskList';
 import TaskDetailEnhanced from './pages/TaskDetailEnhanced';
 import Analytics from './pages/Analytics';
+import { SharedTasks } from './pages/SharedTasks';
 import LoginPage from './pages/LoginPage';
 import CallbackHandler from './pages/CallbackHandler';
 import { getCurrentUser, logout } from './services/authService';
@@ -131,6 +132,11 @@ const ThemedHeader: React.FC<{ user: User | null; onLogout: () => void }> = ({ u
               key: 'create',
               icon: <FileAddOutlined />,
               label: <Link to="/create">创建任务</Link>
+            },
+            {
+              key: 'shared',
+              icon: <ShareAltOutlined />,
+              label: <Link to="/shared">共享任务</Link>
             },
             ...(user?.is_admin ? [{
               key: 'analytics',
@@ -304,6 +310,14 @@ const AppContent: React.FC = () => {
                 element={
                   <ProtectedRoute user={user}>
                     <TaskDetailEnhanced />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/shared" 
+                element={
+                  <ProtectedRoute user={user}>
+                    <SharedTasks />
                   </ProtectedRoute>
                 } 
               />
