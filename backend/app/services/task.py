@@ -203,7 +203,9 @@ class TaskService(ITaskService):
                     raise
                 finally:
                     # 使用优化的会话关闭函数
-                    close_independent_db_session(db_session, f"批量创建任务-{file_data.get('file', {}).get('filename', 'unknown')}")
+                    file_obj = file_data.get('file')
+                    filename = getattr(file_obj, 'filename', 'unknown') if file_obj else 'unknown'
+                    close_independent_db_session(db_session, f"批量创建任务-{filename}")
         
         # 并发创建所有任务
         start_time = time.time()
@@ -218,9 +220,11 @@ class TaskService(ITaskService):
         
         for i, result in enumerate(tasks):
             if isinstance(result, Exception):
+                file_obj = files_data[i].get('file')
+                filename = getattr(file_obj, 'filename', 'unknown') if file_obj else 'unknown'
                 failed_tasks.append({
                     'index': i,
-                    'file': files_data[i].get('file', {}).get('filename', 'unknown'),
+                    'file': filename,
                     'error': str(result)
                 })
             else:
