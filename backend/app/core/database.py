@@ -119,7 +119,8 @@ def get_db() -> Generator[Session, None, None]:
     try:
         # 添加连接健康检查，确保会话可用
         try:
-            db.execute("SELECT 1")
+            from sqlalchemy import text
+            db.execute(text("SELECT 1"))
         except Exception as conn_error:
             print(f"⚠️ 数据库连接异常，重新创建会话: {conn_error}")
             monitor.log_session_error(session_id, f"连接异常: {conn_error}")

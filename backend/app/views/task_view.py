@@ -44,6 +44,7 @@ class TaskView(BaseView):
         self.router.add_api_route("/schedule-pending-tasks", self.schedule_pending_tasks, methods=["POST"])
         self.router.add_api_route("/{task_id}/issues", self.get_task_issues, methods=["GET"], response_model=PaginatedResponse[IssueResponse])
         self.router.add_api_route("/db-monitor", self.get_db_monitor_status, methods=["GET"])
+        self.router.add_api_route("/statistics", self.get_task_statistics, methods=["GET"])
         print("🛠️  TaskView 路由已设置：")
         for route in self.router.routes:
             print(f"   {route.methods} {route.path}")
@@ -117,6 +118,11 @@ class TaskView(BaseView):
                 db, current_user, requested_tasks=len(files), raise_exception=True
             )
         except ConcurrencyLimitExceeded as e:
+            # 获取当前状态信息用于错误处理
+            _, status_info = concurrency_service.check_concurrency_limits(
+                db, current_user, requested_tasks=0, raise_exception=False
+            )
+            
             # 提供批量任务的特殊错误处理
             if e.limit_type == 'system':
                 available_slots = status_info['system']['available_slots']
@@ -632,6 +638,19 @@ class TaskView(BaseView):
         
         from app.core.database import get_db_monitor_status
         return get_db_monitor_status()
+    
+    def get_task_statistics(
+        self,
+        current_user: User = Depends(BaseView.get_current_user),
+        db: Session = Depends(get_db)
+    ) -> dict:
+        """获取任务统计数据"""
+        service = TaskService(db)
+        # 管理员可以查看所有任务统计，普通用户只能查看自己的任务统计
+        if current_user.is_admin:
+            return service.get_task_statistics(user_id=None)
+        else:
+            return service.get_task_statistics(user_id=current_user.id)
 
 
 # 创建视图实例并导出router
