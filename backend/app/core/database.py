@@ -30,13 +30,15 @@ def get_engine_config():
             'connect_args': {
                 'charset': mysql_config.get('charset', 'utf8mb4'),
                 'autocommit': False,
-                'connect_timeout': 30,
-                'read_timeout': 30,
-                'write_timeout': 30,
+                'connect_timeout': 10,  # 减少连接超时，快速失败
+                'read_timeout': 15,     # 减少读取超时
+                'write_timeout': 15,    # 减少写入超时
+                # MySQL性能优化参数
+                'init_command': "SET SESSION innodb_lock_wait_timeout = 5, lock_wait_timeout = 5",
             },
             'pool_size': pool_config.get('pool_size', 25),
             'max_overflow': pool_config.get('max_overflow', 30),
-            'pool_timeout': pool_config.get('pool_timeout', 30),
+            'pool_timeout': pool_config.get('pool_timeout', 10),  # 减少池获取超时
             'pool_recycle': pool_config.get('pool_recycle', 1800),  # 30分钟回收连接
             'pool_pre_ping': pool_config.get('pool_pre_ping', True),
             'pool_reset_on_return': pool_config.get('pool_reset_on_return', 'rollback'),
@@ -108,6 +110,8 @@ def get_db() -> Generator[Session, None, None]:
     获取数据库会话（优化版，支持批量操作和锁竞争处理）
     用作FastAPI的依赖注入
     """
+    from sqlalchemy import text
+    
     session_id = f"fastapi_{uuid.uuid4().hex[:8]}"
     monitor = get_monitor()
     monitor.log_session_create(session_id, "FastAPI请求")
@@ -119,7 +123,6 @@ def get_db() -> Generator[Session, None, None]:
     try:
         # 添加连接健康检查，确保会话可用
         try:
-            from sqlalchemy import text
             db.execute(text("SELECT 1"))
         except Exception as conn_error:
             print(f"⚠️ 数据库连接异常，重新创建会话: {conn_error}")

@@ -216,23 +216,13 @@ class TaskView(BaseView):
             sort_order=sort_order
         )
         
-        # 使用异步方式执行数据库查询，避免阻塞请求
-        import asyncio
-        from concurrent.futures import ThreadPoolExecutor
-        
-        def sync_get_paginated():
-            """同步执行分页查询，在线程池中运行"""
-            service = TaskService(db)
-            # 管理员可以查看所有任务，普通用户只能查看自己的任务
-            if current_user.is_admin:
-                return service.get_paginated_tasks(params, user_id=None)
-            else:
-                return service.get_paginated_tasks(params, user_id=current_user.id)
-        
-        # 在线程池中执行数据库查询，避免阻塞事件循环
-        loop = asyncio.get_event_loop()
-        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="paginated_query") as executor:
-            result = await loop.run_in_executor(executor, sync_get_paginated)
+        # 直接使用当前数据库会话进行查询（避免线程安全问题）
+        service = TaskService(db)
+        # 管理员可以查看所有任务，普通用户只能查看自己的任务
+        if current_user.is_admin:
+            result = service.get_paginated_tasks(params, user_id=None)
+        else:
+            result = service.get_paginated_tasks(params, user_id=current_user.id)
         
         total_time = (time.time() - start_time) * 1000
         print(f"✅ TaskView.get_tasks_paginated 处理完成: 耗时 {total_time:.1f}ms, 返回 {len(result.items)} 个任务")
