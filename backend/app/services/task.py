@@ -177,8 +177,8 @@ class TaskService(ITaskService):
         async def create_single_task(file_data: dict) -> TaskResponse:
             """创建单个任务（使用独立数据库会话，避免锁竞争）"""
             async with semaphore:
-                from app.core.database import get_independent_db_session
-                # 使用独立会话函数，包含SQLite优化设置
+                from app.core.database import get_independent_db_session, close_independent_db_session
+                # 使用独立会话函数，包含SQLite优化设置和连接池监控
                 db_session = get_independent_db_session()
                 try:
                     # 创建独立的TaskService实例
@@ -199,11 +199,8 @@ class TaskService(ITaskService):
                         pass
                     raise
                 finally:
-                    # 确保数据库会话正确关闭
-                    try:
-                        db_session.close()
-                    except:
-                        pass
+                    # 使用优化的会话关闭函数
+                    close_independent_db_session(db_session, f"批量创建任务-{file_data.get('file', {}).get('filename', 'unknown')}")
         
         # 并发创建所有任务
         start_time = time.time()
@@ -279,8 +276,18 @@ class TaskService(ITaskService):
         return result
     
     def get_paginated_tasks(self, params: PaginationParams, user_id: Optional[int] = None) -> PaginatedResponse[TaskResponse]:
-        """分页获取任务列表（高性能版）"""
+        """分页获取任务列表（高性能版，带缓存）"""
         print(f"🚀 开始分页获取任务列表: page={params.page}, size={params.page_size}, user_id={user_id}")
+        
+        # 尝试从缓存获取数据
+        from app.services.task_cache_service import get_task_cache_service
+        cache_service = get_task_cache_service()
+        cached_result = cache_service.get_cached_tasks(params, user_id)
+        
+        if cached_result:
+            print(f"✅ 使用缓存数据，跳过数据库查询")
+            return cached_result
+        
         start_time = time.time()
         
         # 检查数据库会话状态
@@ -356,7 +363,12 @@ class TaskService(ITaskService):
                 print(f"   - 任务数量: {len(tasks)}")
                 print(f"   - 处理中任务: {pending_processing_count}")
             
-            return PaginatedResponse.create(result, total, params.page, params.page_size)
+            paginated_response = PaginatedResponse.create(result, total, params.page, params.page_size)
+            
+            # 缓存查询结果
+            cache_service.cache_tasks(params, user_id, paginated_response)
+            
+            return paginated_response
             
         except Exception as e:
             total_time = (time.time() - start_time) * 1000

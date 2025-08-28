@@ -11,7 +11,7 @@ from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.core.database import SessionLocal
+from app.core.database import get_independent_db_session, close_independent_db_session
 from app.repositories.task import TaskRepository
 from app.repositories.issue import IssueRepository
 from app.repositories.ai_output import AIOutputRepository
@@ -38,8 +38,9 @@ class NewTaskProcessor:
         self.logger.setLevel(logging.INFO)
         
     def _create_db_session(self) -> Session:
-        """为每个任务处理创建独立的数据库会话"""
-        return SessionLocal()
+        """为每个任务处理创建独立的数据库会话（带监控）"""
+        print(f"🔗 任务处理器创建独立数据库会话")
+        return get_independent_db_session()
         
     def _initialize_repositories(self, db: Session):
         """使用给定的数据库会话初始化所有仓库"""
@@ -184,10 +185,10 @@ class NewTaskProcessor:
             await manager.send_status(task_id, "failed")
             raise
         finally:
-            # 确保数据库会话被正确关闭
+            # 确保数据库会话被正确关闭（带监控）
             if db:
                 try:
-                    db.close()
+                    close_independent_db_session(db, f"任务{task_id}处理完成")
                 except Exception as close_error:
                     self.logger.error(f"关闭数据库会话时出错: {close_error}")
     

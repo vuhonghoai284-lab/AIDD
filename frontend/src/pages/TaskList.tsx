@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { usePageVisibility } from '../hooks/usePageVisibility';
+import { useTaskList } from '../hooks/useTaskList';
+import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import { 
   Card, Table, Button, Tag, Progress, Space, message, Popconfirm, 
   Badge, Tooltip, Dropdown, Menu, Input, Select, Row, Col, Statistic,
@@ -25,273 +27,62 @@ const { Text } = Typography;
 const { Option } = Select;
 
 const TaskList: React.FC = () => {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
+  // 使用优化的任务列表Hook
+  const {
+    tasks,
+    loading,
+    loadingMore,
+    isBackgroundRefreshing,
+    currentPage,
+    totalTasks,
+    hasNextPage,
+    searchText,
+    statusFilter,
+    setSearchText,
+    setStatusFilter,
+    loadTasks,
+    loadMoreTasks,
+    refreshTasks,
+    backgroundRefresh,
+    statistics
+  } = useTaskList({
+    pageSize: 20,
+    initialSearch: '',
+    initialStatus: 'all'
+  });
+
+  // 其他UI状态
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
-  const [searchText, setSearchText] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
-  const [isBackgroundRefreshing, setIsBackgroundRefreshing] = useState(false);
-  const [lastRefreshTime, setLastRefreshTime] = useState(0);
-  const [isRequestPending, setIsRequestPending] = useState(false);
   
   // 分享模态框状态
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [shareTaskId, setShareTaskId] = useState<number | undefined>();
   const [shareTaskTitle, setShareTaskTitle] = useState<string | undefined>();
   
-  // 分页相关状态
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
-  const [totalTasks, setTotalTasks] = useState(0);
-  const [hasNextPage, setHasNextPage] = useState(false);
-  const [sortBy, setSortBy] = useState('created_at');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  
-  // 无限滚动相关
-  const tableContainerRef = useRef<HTMLDivElement>(null);
-  const observerRef = useRef<IntersectionObserver | null>(null);
-  const loadMoreTriggerRef = useRef<HTMLDivElement>(null);
-  
   const navigate = useNavigate();
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const pageSize = 20; // 与useTaskList中的pageSize保持一致
   
-  // 页面可见性检测，用于优化后台API调用
-  const isPageVisible = usePageVisibility();
-
-  const loadTasks = useCallback(async (
-    showLoading: boolean = true, 
-    forceRefresh: boolean = false,
-    resetPage: boolean = true,
-    loadMore: boolean = false,
-    isSearchClear: boolean = false  // 新参数：是否为搜索清空操作
-  ) => {
-    const now = Date.now();
-    
-    // 防止并发请求
-    if (isRequestPending) {
-      console.log('请求正在进行中，跳过此次请求');
-      return;
-    }
-    
-    // 防止频繁刷新，但允许强制刷新、加载更多和搜索清空操作
-    if (!forceRefresh && !loadMore && !isSearchClear && now - lastRefreshTime < 2000) {
-      console.log('请求过于频繁，跳过此次请求');
-      return;
-    }
-    
-    setIsRequestPending(true);
-    
-    if (showLoading) {
-      setLoading(true);
-    }
-    if (loadMore) {
-      setLoadingMore(true);
-    }
-    
-    try {
-      const page = loadMore ? currentPage + 1 : (resetPage ? 1 : currentPage);
-      
-      const params: PaginationParams = {
-        page,
-        page_size: pageSize,
-        search: searchText || undefined,
-        status: statusFilter !== 'all' ? statusFilter : undefined,
-        sort_by: sortBy,
-        sort_order: sortOrder
-      };
-      
-      const response: PaginatedResponse<Task> = await taskAPI.getTasksPaginated(params);
-      
-      if (loadMore) {
-        // 加载更多：追加到现有列表
-        setTasks(prev => [...prev, ...response.items]);
-        setCurrentPage(page);
-      } else {
-        // 新的搜索或刷新：替换列表
-        setTasks(response.items);
-        setCurrentPage(page);
-      }
-      
-      setTotalTasks(response.total);
-      setHasNextPage(response.has_next);
-      setLastRefreshTime(now);
-      
-      console.log(`任务列表加载成功，第${page}页，获取到 ${response.items.length} 个任务，共 ${response.total} 个`);
-    } catch (error) {
-      console.error('加载任务列表失败:', error);
-      message.error('加载任务列表失败');
-    } finally {
-      setIsRequestPending(false);
-      if (showLoading) {
-        setLoading(false);
-      }
-      if (loadMore) {
-        setLoadingMore(false);
-      }
-    }
-  }, [currentPage, pageSize, searchText, statusFilter, sortBy, sortOrder]);
-
-  // 后台静默刷新函数
-  const backgroundRefresh = useCallback(async () => {
-    // 防止并发请求
-    if (isRequestPending) {
-      console.log('后台刷新：请求正在进行中，跳过');
-      return;
-    }
-    
-    const now = Date.now();
-    // 防止频繁刷新
-    if (now - lastRefreshTime < 3000) {
-      console.log('后台刷新：请求过于频繁，跳过');
-      return;
-    }
-    
-    setIsBackgroundRefreshing(true);
-    
-    try {
-      // 只刷新第一页的数据
-      await loadTasks(false, true, true, false, false);
-      console.log('后台刷新成功');
-    } catch (error) {
-      console.warn('后台刷新失败:', error);
-    } finally {
-      setTimeout(() => setIsBackgroundRefreshing(false), 1000);
-    }
-  }, [loadTasks]);
-
-  // 加载更多数据
-  const loadMoreTasks = useCallback(async () => {
-    if (!hasNextPage || isRequestPending || loadingMore) {
-      return;
-    }
-    
-    console.log('触发加载更多任务');
-    await loadTasks(false, false, false, true, false);
-  }, [hasNextPage, isRequestPending, loadingMore, loadTasks]);
-  
-  // 无限滚动设置
-  useEffect(() => {
-    if (!loadMoreTriggerRef.current) return;
-    
-    const target = loadMoreTriggerRef.current;
-    
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const [entry] = entries;
-        if (entry.isIntersecting && hasNextPage && !loadingMore) {
-          console.log('无限滚动触发器进入视口，加载更多数据');
-          loadMoreTasks();
-        }
-      },
-      {
-        root: null,
-        rootMargin: '100px',
-        threshold: 0.1,
-      }
-    );
-    
-    observer.observe(target);
-    observerRef.current = observer;
-    
-    return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-      }
-    };
-  }, [hasNextPage, loadingMore, loadMoreTasks]);
-  
-  useEffect(() => {
-    // 立即加载任务
-    loadTasks(true, true, true, false, false);
-    
-    // 监听页面可见性变化，在页面重新可见时刷新数据
-    let visibilityTimeout: NodeJS.Timeout | null = null;
-    const handleVisibilityChange = () => {
-      if (!document.hidden && !isRequestPending) {
-        if (visibilityTimeout) {
-          clearTimeout(visibilityTimeout);
-        }
-        visibilityTimeout = setTimeout(() => {
-          loadTasks(false, true, true, false, false);
-        }, 2000);
-      }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      if (visibilityTimeout) {
-        clearTimeout(visibilityTimeout);
-      }
-    };
-  }, []);
-
-  // 使用 useMemo 来计算处理中的任务数量，避免每次渲染时重新计算
-  const processingTaskCount = useMemo(() => {
-    return tasks.filter(t => t.status === 'processing' || t.status === 'pending').length;
-  }, [tasks]);
-
-  useEffect(() => {
-    // 智能刷新：根据任务状态动态调整刷新频率，且仅在页面可见时运行
-    const hasProcessingTasks = processingTaskCount > 0;
-    const interval = hasProcessingTasks ? 8000 : 20000; // 进一步增加刷新间隔，降低请求频率
-    
-    console.log(`任务列表定时器设置: 处理中任务${processingTaskCount}个, 刷新间隔${interval}ms, 页面可见:${isPageVisible}`);
-    
-    // 仅在页面可见时启动定时器
-    if (!isPageVisible) {
-      console.log('页面不可见，跳过定时器设置');
-      return;
-    }
-    
-    const timer = setInterval(() => {
-      // 双重检查页面可见性和请求状态
-      if (document.hidden || isRequestPending) {
-        console.log(`定时器跳过刷新: 页面隐藏=${document.hidden}, 请求进行中=${isRequestPending}`);
-        return;
-      }
-      console.log('定时器触发后台刷新');
-      backgroundRefresh();
-    }, interval);
-    
-    // 清理定时器
-    return () => {
-      console.log('清理定时器');
-      clearInterval(timer);
-    };
-  }, [backgroundRefresh, processingTaskCount, isPageVisible]); // 使用计算后的值作为依赖
-
-  // 搜索和过滤变更时重新加载数据
-  useEffect(() => {
-    // 如果搜索文本为空，立即执行以快速恢复列表
-    // 如果有搜索文本，使用防抖避免频繁请求
-    const delay = searchText.trim() === '' ? 50 : 300;
-    const isSearchClear = searchText.trim() === '';
-    
-    const timeoutId = setTimeout(() => {
-      loadTasks(true, false, true, false, isSearchClear);
-    }, delay);
-    
-    return () => clearTimeout(timeoutId);
-  }, [searchText, statusFilter, loadTasks]);
-  
-  // 由于使用了服务端分页和过滤，这里不再需要客户端过滤
-  const filteredTasks = useMemo(() => {
-    return tasks;
-  }, [tasks]);
+  // 使用优化的无限滚动Hook
+  const loadMoreTriggerRef = useInfiniteScroll({
+    hasNextPage,
+    loading: loadingMore,
+    onLoadMore: loadMoreTasks,
+    rootMargin: '50px', // 减小触发区域
+    debounceMs: 1000 // 增加防抖时间
+  });
 
   const handleDelete = useCallback(async (taskId: number) => {
     try {
       await taskAPI.deleteTask(taskId);
       message.success('任务已删除');
       // 刷新当前页数据
-      setTimeout(() => loadTasks(false, true, true, false, false), 500);
+      setTimeout(() => refreshTasks(), 500);
     } catch (error) {
       message.error('删除任务失败');
     }
-  }, [backgroundRefresh]);
+  }, [refreshTasks]);
 
   const handleBatchDelete = useCallback(async () => {
     if (selectedRowKeys.length === 0) {
@@ -307,22 +98,22 @@ const TaskList: React.FC = () => {
       message.success(`成功删除 ${selectedRowKeys.length} 个任务`);
       setSelectedRowKeys([]);
       // 刷新当前页数据
-      setTimeout(() => loadTasks(false, true, true, false, false), 1000);
+      setTimeout(() => refreshTasks(), 1000);
     } catch (error) {
       message.error('批量删除失败');
     }
-  }, [selectedRowKeys, backgroundRefresh]);
+  }, [selectedRowKeys, refreshTasks]);
 
   const handleRetry = useCallback(async (taskId: number) => {
     try {
       await taskAPI.retryTask(taskId);
       message.success('任务已重新启动');
       // 刷新当前页数据
-      setTimeout(() => loadTasks(false, true, true, false, false), 500);
+      setTimeout(() => refreshTasks(), 500);
     } catch (error) {
       message.error('重试失败');
     }
-  }, [backgroundRefresh]);
+  }, [refreshTasks]);
 
   const handleDownloadReport = useCallback(async (taskId: number) => {
     try {
@@ -361,8 +152,8 @@ const TaskList: React.FC = () => {
     setShareTaskTitle(undefined);
     message.success('任务分享成功！');
     // 可以选择刷新任务列表以显示分享状态
-    setTimeout(() => loadTasks(false, true, true, false, false), 500);
-  }, []);
+    setTimeout(() => refreshTasks(), 500);
+  }, [refreshTasks]);
 
   const getStatusTag = (status: string) => {
     const statusMap: { [key: string]: { color: string; text: string; icon: React.ReactNode } } = {
@@ -404,16 +195,7 @@ const TaskList: React.FC = () => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  // 使用 useMemo 优化统计数据计算，避免每次渲染时重新计算
-  const statistics = useMemo(() => {
-    return {
-      total: tasks.length,
-      pending: tasks.filter(t => t.status === 'pending').length,
-      processing: tasks.filter(t => t.status === 'processing').length,
-      completed: tasks.filter(t => t.status === 'completed').length,
-      failed: tasks.filter(t => t.status === 'failed').length,
-    };
-  }, [tasks]);
+  // 统计数据已由useTaskList Hook提供
 
   const formatTime = (seconds?: number) => {
     if (!seconds) return '-';
@@ -1030,7 +812,7 @@ const TaskList: React.FC = () => {
               icon={<ReloadOutlined />}
               onClick={() => {
                 console.log('手动刷新按钮被点击');
-                loadTasks(true, true, true, false, false); // 手动刷新显示loading，强制刷新
+                refreshTasks(); // 手动刷新显示loading，强制刷新
               }}
               loading={loading}
             >
@@ -1079,7 +861,7 @@ const TaskList: React.FC = () => {
             className="task-table"
             rowSelection={rowSelection}
             columns={columns}
-            dataSource={filteredTasks}
+            dataSource={tasks}
             rowKey="id"
             loading={loading}
             pagination={false} // 关闭内置分页，使用无限滚动
@@ -1127,7 +909,7 @@ const TaskList: React.FC = () => {
           )}
           
           {/* 数据统计信息和分页导航 */}
-          {!loading && filteredTasks.length > 0 && (
+          {!loading && tasks.length > 0 && (
             <div style={{ 
               textAlign: 'center', 
               padding: '20px', 
@@ -1138,7 +920,7 @@ const TaskList: React.FC = () => {
                 fontSize: '12px',
                 marginBottom: '16px'
               }}>
-                已显示 {filteredTasks.length} / {totalTasks} 条记录
+                已显示 {tasks.length} / {totalTasks} 条记录
               </div>
               
               {/* 传统分页导航（可选） */}
@@ -1148,11 +930,17 @@ const TaskList: React.FC = () => {
                   pageSize={pageSize}
                   total={totalTasks}
                   showSizeChanger={false}
-                  showQuickJumper={false}
+                  showQuickJumper={true}
                   showTotal={(total: number, range: [number, number]) => `${range[0]}-${range[1]} / ${total} 条`}
                   onChange={(page: number) => {
-                    setCurrentPage(page);
-                    loadTasks(true, false, true, false, false);
+                    console.log('分页跳转到第', page, '页');
+                    // 跳转到指定页面，这将重新加载数据
+                    loadTasks({
+                      showLoading: true,
+                      forceRefresh: true,
+                      resetPage: false, // 不重置页面，使用指定页面
+                      targetPage: page
+                    });
                   }}
                   size="small"
                   style={{ marginTop: '8px' }}
@@ -1162,10 +950,10 @@ const TaskList: React.FC = () => {
           )}
         </div>
       ) : (
-        filteredTasks.length > 0 ? (
+        tasks.length > 0 ? (
           <>
             <div className="task-cards-grid">
-              {filteredTasks.map(renderTaskCard)}
+              {tasks.map(renderTaskCard)}
             </div>
             
             {/* 卡片视图的加载更多 */}
@@ -1204,7 +992,7 @@ const TaskList: React.FC = () => {
                   fontSize: '12px',
                   marginBottom: '16px'
                 }}>
-                  已显示 {filteredTasks.length} / {totalTasks} 条记录
+                  已显示 {tasks.length} / {totalTasks} 条记录
                 </div>
                 
                 {/* 传统分页导航（可选） */}
@@ -1214,11 +1002,17 @@ const TaskList: React.FC = () => {
                     pageSize={pageSize}
                     total={totalTasks}
                     showSizeChanger={false}
-                    showQuickJumper={false}
+                    showQuickJumper={true}
                     showTotal={(total: number, range: [number, number]) => `${range[0]}-${range[1]} / ${total} 条`}
                     onChange={(page: number) => {
-                      setCurrentPage(page);
-                      loadTasks(true, false, true, false, false);
+                      console.log('分页跳转到第', page, '页');
+                      // 跳转到指定页面，这将重新加载数据
+                      loadTasks({
+                        showLoading: true,
+                        forceRefresh: true,
+                        resetPage: false, // 不重置页面，使用指定页面
+                        targetPage: page
+                      });
                     }}
                     size="small"
                     style={{ marginTop: '8px' }}

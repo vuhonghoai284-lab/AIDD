@@ -43,6 +43,7 @@ class TaskView(BaseView):
         self.router.add_api_route("/recover-timeout-tasks", self.recover_timeout_tasks, methods=["POST"])
         self.router.add_api_route("/schedule-pending-tasks", self.schedule_pending_tasks, methods=["POST"])
         self.router.add_api_route("/{task_id}/issues", self.get_task_issues, methods=["GET"], response_model=PaginatedResponse[IssueResponse])
+        self.router.add_api_route("/db-monitor", self.get_db_monitor_status, methods=["GET"])
         print("🛠️  TaskView 路由已设置：")
         for route in self.router.routes:
             print(f"   {route.methods} {route.path}")
@@ -183,7 +184,7 @@ class TaskView(BaseView):
         else:
             return service.get_user_tasks(current_user.id)
     
-    def get_tasks_paginated(
+    async def get_tasks_paginated(
         self,
         page: int = 1,
         page_size: int = 20,
@@ -209,12 +210,23 @@ class TaskView(BaseView):
             sort_order=sort_order
         )
         
-        service = TaskService(db)
-        # 管理员可以查看所有任务，普通用户只能查看自己的任务
-        if current_user.is_admin:
-            result = service.get_paginated_tasks(params, user_id=None)
-        else:
-            result = service.get_paginated_tasks(params, user_id=current_user.id)
+        # 使用异步方式执行数据库查询，避免阻塞请求
+        import asyncio
+        from concurrent.futures import ThreadPoolExecutor
+        
+        def sync_get_paginated():
+            """同步执行分页查询，在线程池中运行"""
+            service = TaskService(db)
+            # 管理员可以查看所有任务，普通用户只能查看自己的任务
+            if current_user.is_admin:
+                return service.get_paginated_tasks(params, user_id=None)
+            else:
+                return service.get_paginated_tasks(params, user_id=current_user.id)
+        
+        # 在线程池中执行数据库查询，避免阻塞事件循环
+        loop = asyncio.get_event_loop()
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="paginated_query") as executor:
+            result = await loop.run_in_executor(executor, sync_get_paginated)
         
         total_time = (time.time() - start_time) * 1000
         print(f"✅ TaskView.get_tasks_paginated 处理完成: 耗时 {total_time:.1f}ms, 返回 {len(result.items)} 个任务")
@@ -608,6 +620,18 @@ class TaskView(BaseView):
         self.check_task_access_with_permission_service(task_id, current_user, db, 'read')
         
         return service.get_task_issues_paginated(task_id, params)
+    
+    def get_db_monitor_status(
+        self,
+        current_user: User = Depends(BaseView.get_current_user),
+        db: Session = Depends(get_db)
+    ) -> dict:
+        """获取数据库连接监控状态（管理员功能）"""
+        if not (current_user.is_admin or current_user.is_system_admin):
+            raise HTTPException(403, "权限不足，仅管理员可查看数据库监控状态")
+        
+        from app.core.database import get_db_monitor_status
+        return get_db_monitor_status()
 
 
 # 创建视图实例并导出router
