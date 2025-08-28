@@ -57,7 +57,8 @@ const TaskList: React.FC = () => {
     showLoading: boolean = true, 
     forceRefresh: boolean = false,
     resetPage: boolean = true,
-    loadMore: boolean = false
+    loadMore: boolean = false,
+    isSearchClear: boolean = false  // 新参数：是否为搜索清空操作
   ) => {
     const now = Date.now();
     
@@ -67,8 +68,8 @@ const TaskList: React.FC = () => {
       return;
     }
     
-    // 防止频繁刷新，但允许强制刷新和加载更多
-    if (!forceRefresh && !loadMore && now - lastRefreshTime < 2000) {
+    // 防止频繁刷新，但允许强制刷新、加载更多和搜索清空操作
+    if (!forceRefresh && !loadMore && !isSearchClear && now - lastRefreshTime < 2000) {
       console.log('请求过于频繁，跳过此次请求');
       return;
     }
@@ -144,7 +145,7 @@ const TaskList: React.FC = () => {
     
     try {
       // 只刷新第一页的数据
-      await loadTasks(false, true, true, false);
+      await loadTasks(false, true, true, false, false);
       console.log('后台刷新成功');
     } catch (error) {
       console.warn('后台刷新失败:', error);
@@ -160,7 +161,7 @@ const TaskList: React.FC = () => {
     }
     
     console.log('触发加载更多任务');
-    await loadTasks(false, false, false, true);
+    await loadTasks(false, false, false, true, false);
   }, [hasNextPage, isRequestPending, loadingMore, loadTasks]);
   
   // 无限滚动设置
@@ -196,7 +197,7 @@ const TaskList: React.FC = () => {
   
   useEffect(() => {
     // 立即加载任务
-    loadTasks(true, true, true, false);
+    loadTasks(true, true, true, false, false);
     
     // 监听页面可见性变化，在页面重新可见时刷新数据
     let visibilityTimeout: NodeJS.Timeout | null = null;
@@ -206,7 +207,7 @@ const TaskList: React.FC = () => {
           clearTimeout(visibilityTimeout);
         }
         visibilityTimeout = setTimeout(() => {
-          loadTasks(false, true, true, false);
+          loadTasks(false, true, true, false, false);
         }, 2000);
       }
     };
@@ -258,9 +259,14 @@ const TaskList: React.FC = () => {
 
   // 搜索和过滤变更时重新加载数据
   useEffect(() => {
+    // 如果搜索文本为空，立即执行以快速恢复列表
+    // 如果有搜索文本，使用防抖避免频繁请求
+    const delay = searchText.trim() === '' ? 50 : 300;
+    const isSearchClear = searchText.trim() === '';
+    
     const timeoutId = setTimeout(() => {
-      loadTasks(true, false, true, false);
-    }, 300); // 防抖300ms
+      loadTasks(true, false, true, false, isSearchClear);
+    }, delay);
     
     return () => clearTimeout(timeoutId);
   }, [searchText, statusFilter, loadTasks]);
@@ -275,7 +281,7 @@ const TaskList: React.FC = () => {
       await taskAPI.deleteTask(taskId);
       message.success('任务已删除');
       // 刷新当前页数据
-      setTimeout(() => loadTasks(false, true, true, false), 500);
+      setTimeout(() => loadTasks(false, true, true, false, false), 500);
     } catch (error) {
       message.error('删除任务失败');
     }
@@ -295,7 +301,7 @@ const TaskList: React.FC = () => {
       message.success(`成功删除 ${selectedRowKeys.length} 个任务`);
       setSelectedRowKeys([]);
       // 刷新当前页数据
-      setTimeout(() => loadTasks(false, true, true, false), 1000);
+      setTimeout(() => loadTasks(false, true, true, false, false), 1000);
     } catch (error) {
       message.error('批量删除失败');
     }
@@ -306,7 +312,7 @@ const TaskList: React.FC = () => {
       await taskAPI.retryTask(taskId);
       message.success('任务已重新启动');
       // 刷新当前页数据
-      setTimeout(() => loadTasks(false, true, true, false), 500);
+      setTimeout(() => loadTasks(false, true, true, false, false), 500);
     } catch (error) {
       message.error('重试失败');
     }
@@ -950,6 +956,10 @@ const TaskList: React.FC = () => {
               prefix={<SearchOutlined />}
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
+              onClear={() => {
+                console.log('🔍 搜索框已清空，恢复原有列表');
+                setSearchText('');
+              }}
               allowClear
             />
             <Select
@@ -993,7 +1003,7 @@ const TaskList: React.FC = () => {
               icon={<ReloadOutlined />}
               onClick={() => {
                 console.log('手动刷新按钮被点击');
-                loadTasks(true, true, true, false); // 手动刷新显示loading，强制刷新
+                loadTasks(true, true, true, false, false); // 手动刷新显示loading，强制刷新
               }}
               loading={loading}
             >
@@ -1115,7 +1125,7 @@ const TaskList: React.FC = () => {
                   showTotal={(total: number, range: [number, number]) => `${range[0]}-${range[1]} / ${total} 条`}
                   onChange={(page: number) => {
                     setCurrentPage(page);
-                    loadTasks(true, false, true, false);
+                    loadTasks(true, false, true, false, false);
                   }}
                   size="small"
                   style={{ marginTop: '8px' }}
@@ -1181,7 +1191,7 @@ const TaskList: React.FC = () => {
                     showTotal={(total: number, range: [number, number]) => `${range[0]}-${range[1]} / ${total} 条`}
                     onChange={(page: number) => {
                       setCurrentPage(page);
-                      loadTasks(true, false, true, false);
+                      loadTasks(true, false, true, false, false);
                     }}
                     size="small"
                     style={{ marginTop: '8px' }}
