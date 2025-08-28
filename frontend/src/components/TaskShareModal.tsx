@@ -120,10 +120,10 @@ export const TaskShareModal: React.FC<TaskShareModalProps> = ({
       visible={visible}
       onCancel={handleCancel}
       footer={null}
-      width={680}
+      width={720}
       styles={{
         body: {
-          maxHeight: '75vh',
+          maxHeight: '80vh',
           overflowY: 'auto',
           padding: '20px 24px 16px 24px'
         }
@@ -180,16 +180,48 @@ export const TaskShareModal: React.FC<TaskShareModalProps> = ({
           <Select 
             onChange={setPermissionLevel}
             placeholder="选择权限级别"
-            dropdownStyle={{ zIndex: 10001 }}
+            dropdownStyle={{ zIndex: 10001, maxHeight: '300px', overflow: 'auto' }}
             getPopupContainer={triggerNode => triggerNode.parentNode}
+            optionLabelProp="label"
           >
             {PERMISSION_OPTIONS.map(option => (
-              <Select.Option key={option.value} value={option.value}>
-                <div style={{ padding: '2px 0' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                    <Tag color={option.color} style={{ margin: 0, fontSize: '11px' }}>{option.label}</Tag>
+              <Select.Option 
+                key={option.value} 
+                value={option.value}
+                label={option.label}
+              >
+                <div style={{ 
+                  padding: '8px 0', 
+                  minHeight: '60px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center'
+                }}>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 6, 
+                    marginBottom: 4 
+                  }}>
+                    <Tag 
+                      color={option.color} 
+                      style={{ 
+                        margin: 0, 
+                        fontSize: '12px',
+                        padding: '2px 8px',
+                        borderRadius: '4px'
+                      }}
+                    >
+                      {option.label}
+                    </Tag>
                   </div>
-                  <div style={{ fontSize: '10px', color: '#666', lineHeight: 1.2 }}>
+                  <div style={{ 
+                    fontSize: '11px', 
+                    color: '#666', 
+                    lineHeight: '1.4',
+                    marginTop: '2px',
+                    wordBreak: 'break-all'
+                  }}>
                     {option.description}
                   </div>
                 </div>

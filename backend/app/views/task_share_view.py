@@ -231,7 +231,19 @@ async def search_users(
     # 搜索用户（排除当前用户）
     users = user_repo.search_users(query=q, exclude_user_id=current_user.id, limit=limit)
     
-    return [UserSearchResponse.from_attributes(user.__dict__) for user in users]
+    # 构建响应对象
+    response_users = []
+    for user in users:
+        response_users.append(UserSearchResponse(
+            id=user.id,
+            uid=user.uid,
+            display_name=user.display_name,
+            avatar_url=user.avatar_url,
+            is_admin=user.is_admin,
+            is_system_admin=user.is_system_admin
+        ))
+    
+    return response_users
 
 
 @router.get("/stats", response_model=TaskShareStatsResponse)
