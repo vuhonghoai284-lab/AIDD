@@ -175,18 +175,35 @@ class TaskService(ITaskService):
         semaphore = asyncio.Semaphore(max_concurrent)
         
         async def create_single_task(file_data: dict) -> TaskResponse:
-            """创建单个任务"""
+            """创建单个任务（使用独立数据库会话，避免锁竞争）"""
             async with semaphore:
+                from app.core.database import get_independent_db_session
+                # 使用独立会话函数，包含SQLite优化设置
+                db_session = get_independent_db_session()
                 try:
-                    return await self.create_task(
+                    # 创建独立的TaskService实例
+                    task_service = TaskService(db_session)
+                    result = await task_service.create_task(
                         file=file_data.get('file'),
                         title=file_data.get('title'),
                         model_index=file_data.get('model_index'),
                         user_id=user_id
                     )
+                    return result
                 except Exception as e:
                     print(f"❌ 创建任务失败: {e}")
+                    # 发生异常时回滚事务
+                    try:
+                        db_session.rollback()
+                    except:
+                        pass
                     raise
+                finally:
+                    # 确保数据库会话正确关闭
+                    try:
+                        db_session.close()
+                    except:
+                        pass
         
         # 并发创建所有任务
         start_time = time.time()
@@ -262,43 +279,89 @@ class TaskService(ITaskService):
         return result
     
     def get_paginated_tasks(self, params: PaginationParams, user_id: Optional[int] = None) -> PaginatedResponse[TaskResponse]:
-        """分页获取任务列表（性能优化版）"""
-        print(f"🚀 开始分页获取任务列表: page={params.page}, size={params.page_size}")
+        """分页获取任务列表（高性能版）"""
+        print(f"🚀 开始分页获取任务列表: page={params.page}, size={params.page_size}, user_id={user_id}")
         start_time = time.time()
         
-        # 1. 分页查询任务
-        tasks, total = self.task_repo.get_paginated_tasks(params, user_id)
-        print(f"📊 分页查询完成: {len(tasks)}/{total} 任务，耗时: {(time.time() - start_time)*1000:.1f}ms")
+        # 检查数据库会话状态
+        if not self.db.is_active:
+            print("⚠️ 数据库会话已失效，重新获取")
+            from app.core.database import SessionLocal
+            self.db = SessionLocal()
+            # 重新初始化所有仓库
+            self.task_repo = TaskRepository(self.db)
+            self.issue_repo = IssueRepository(self.db)
+            self.ai_output_repo = AIOutputRepository(self.db)
+            self.file_repo = FileInfoRepository(self.db)
+            self.model_repo = AIModelRepository(self.db)
+            self.user_repo = UserRepository(self.db)
         
-        if not tasks:
-            return PaginatedResponse.create([], total, params.page, params.page_size)
-        
-        # 2. 批量统计问题数量
-        batch_start = time.time()
-        task_ids = [task.id for task in tasks]
-        issue_stats = self.task_repo.batch_count_issues(task_ids)
-        print(f"📊 批量统计问题数量，耗时: {(time.time() - batch_start)*1000:.1f}ms")
-        
-        # 3. 构建响应对象
-        result = []
-        for task in tasks:
-            # 关联数据已预加载，无需额外查询
-            file_info = task.file_info
-            ai_model = task.ai_model
-            user_info = task.user
+        try:
+            # 1. 分页查询任务（设置查询超时）
+            query_start = time.time()
+            tasks, total = self.task_repo.get_paginated_tasks(params, user_id)
+            query_time = (time.time() - query_start) * 1000
+            print(f"📊 分页查询完成: {len(tasks)}/{total} 任务，耗时: {query_time:.1f}ms")
             
-            # 从批量统计结果中获取问题数量
-            issue_stat = issue_stats.get(task.id, {"issue_count": 0, "processed_issues": 0})
+            # 如果查询时间过长，记录警告
+            if query_time > 5000:  # 5秒
+                print(f"⚠️ 分页查询耗时异常: {query_time:.1f}ms，可能存在数据库锁竞争")
             
-            # 使用from_task_with_relations方法确保所有字段正确设置
-            task_resp = TaskResponse.from_task_with_relations(
-                task, file_info, ai_model, user_info, 
-                issue_stat["issue_count"], issue_stat["processed_issues"]
-            )
-            result.append(task_resp)
-        
-        print(f"✅ 分页任务获取完成，总耗时: {(time.time() - start_time)*1000:.1f}ms")
-        return PaginatedResponse.create(result, total, params.page, params.page_size)
+            if not tasks:
+                return PaginatedResponse.create([], total, params.page, params.page_size)
+            
+            # 2. 批量统计问题数量（优化版）
+            batch_start = time.time()
+            task_ids = [task.id for task in tasks]
+            
+            # 检查是否有大量未完成的任务（可能影响问题统计性能）
+            pending_processing_count = sum(1 for task in tasks if task.status in ['pending', 'processing'])
+            if pending_processing_count > 5:
+                print(f"⚠️ 检测到 {pending_processing_count} 个正在处理的任务，可能影响查询性能")
+            
+            issue_stats = self.task_repo.batch_count_issues(task_ids)
+            batch_time = (time.time() - batch_start) * 1000
+            print(f"📊 批量统计问题数量，耗时: {batch_time:.1f}ms")
+            
+            # 3. 构建响应对象
+            response_start = time.time()
+            result = []
+            for task in tasks:
+                # 关联数据已预加载，无需额外查询
+                file_info = task.file_info
+                ai_model = task.ai_model
+                user_info = task.user
+                
+                # 从批量统计结果中获取问题数量
+                issue_stat = issue_stats.get(task.id, {"issue_count": 0, "processed_issues": 0})
+                
+                # 使用from_task_with_relations方法确保所有字段正确设置
+                task_resp = TaskResponse.from_task_with_relations(
+                    task, file_info, ai_model, user_info, 
+                    issue_stat["issue_count"], issue_stat["processed_issues"]
+                )
+                result.append(task_resp)
+            
+            response_time = (time.time() - response_start) * 1000
+            total_time = (time.time() - start_time) * 1000
+            print(f"📄 响应构建耗时: {response_time:.1f}ms")
+            print(f"✅ 分页任务获取完成，总耗时: {total_time:.1f}ms")
+            
+            # 如果总耗时超过10秒，记录详细性能信息
+            if total_time > 10000:
+                print(f"🚨 分页查询性能警告：总耗时 {total_time:.1f}ms")
+                print(f"   - 查询耗时: {query_time:.1f}ms")
+                print(f"   - 统计耗时: {batch_time:.1f}ms") 
+                print(f"   - 构建耗时: {response_time:.1f}ms")
+                print(f"   - 任务数量: {len(tasks)}")
+                print(f"   - 处理中任务: {pending_processing_count}")
+            
+            return PaginatedResponse.create(result, total, params.page, params.page_size)
+            
+        except Exception as e:
+            total_time = (time.time() - start_time) * 1000
+            print(f"❌ 分页查询异常，耗时: {total_time:.1f}ms，错误: {e}")
+            raise
     
     def get_all(self) -> List[TaskResponse]:
         """获取所有任务（基础接口方法）"""

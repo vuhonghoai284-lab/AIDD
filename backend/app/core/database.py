@@ -96,11 +96,35 @@ Base = declarative_base()
 
 def get_db() -> Generator[Session, None, None]:
     """
-    获取数据库会话
+    获取数据库会话（优化版，支持批量操作和锁竞争处理）
     用作FastAPI的依赖注入
     """
     db = SessionLocal()
     try:
+        # 添加连接健康检查，确保会话可用
+        try:
+            db.execute("SELECT 1")
+        except Exception as conn_error:
+            print(f"⚠️ 数据库连接异常，重新创建会话: {conn_error}")
+            db.close()
+            db = SessionLocal()
+        
+        # 为SQLite设置WAL模式和优化参数，减少锁竞争
+        if 'sqlite' in str(engine.url):
+            try:
+                from sqlalchemy import text
+                # 启用WAL模式，提高并发性能
+                db.execute(text("PRAGMA journal_mode=WAL"))
+                # 设置合适的同步模式
+                db.execute(text("PRAGMA synchronous=NORMAL"))
+                # 增加缓存大小
+                db.execute(text("PRAGMA cache_size=-2000"))  # 2MB缓存
+                # 设置锁超时
+                db.execute(text("PRAGMA busy_timeout=10000"))  # 10秒超时
+                db.commit()
+            except Exception as pragma_error:
+                print(f"⚠️ SQLite PRAGMA设置失败: {pragma_error}")
+        
         yield db
     except Exception as e:
         # 发生异常时回滚事务
@@ -117,6 +141,28 @@ def get_db() -> Generator[Session, None, None]:
         except Exception:
             # 忽略关闭异常，避免状态冲突
             pass
+
+
+def get_independent_db_session() -> Session:
+    """
+    获取独立的数据库会话，用于批量操作和后台任务
+    调用者负责关闭会话
+    """
+    db = SessionLocal()
+    
+    # 为SQLite设置优化参数
+    if 'sqlite' in str(engine.url):
+        try:
+            from sqlalchemy import text
+            db.execute(text("PRAGMA journal_mode=WAL"))
+            db.execute(text("PRAGMA synchronous=NORMAL")) 
+            db.execute(text("PRAGMA cache_size=-2000"))
+            db.execute(text("PRAGMA busy_timeout=10000"))
+            db.commit()
+        except Exception as e:
+            print(f"⚠️ SQLite会话优化失败: {e}")
+    
+    return db
 
 
 async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
