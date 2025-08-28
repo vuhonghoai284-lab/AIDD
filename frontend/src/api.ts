@@ -486,4 +486,10 @@ export const taskShareAPI = {
     const response = await api.get('/task-share/stats');
     return response.data;
   },
+
+  // 获取任务统计数据
+  getTaskStatistics: async () => {
+    const response = await api.get('/tasks/statistics');
+    return response.data;
+  },
 };
