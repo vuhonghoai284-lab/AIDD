@@ -338,10 +338,9 @@ class TaskView(BaseView):
         report_service = ReportService(db)
         
         # 检查下载权限
-        permission_check = report_service.check_download_permission(
+        permission_check = report_service.check_download_permission_with_user(
             task_id=task_id,
-            user_id=current_user.id,
-            is_admin=current_user.is_admin or current_user.is_system_admin
+            user=current_user
         )
         
         if not permission_check["can_download"]:
@@ -372,11 +371,28 @@ class TaskView(BaseView):
             print(f"📄 报告生成成功: {filename}")
             
             # 返回文件流
+            def iter_excel():
+                yield excel_data.read()
+            
+            # 处理中文文件名编码
+            import urllib.parse
+            import os
+            
+            # URL编码文件名用于UTF-8支持
+            encoded_filename = urllib.parse.quote(filename, safe='')
+            
+            # 创建ASCII备选文件名（去除非ASCII字符，保持扩展名）
+            file_base, file_ext = os.path.splitext(filename)
+            ascii_filename = ''.join(c for c in file_base if ord(c) < 128)
+            if not ascii_filename:
+                ascii_filename = f"quality_report_{task_id}"
+            ascii_filename = f"{ascii_filename}{file_ext}"
+            
             return StreamingResponse(
-                io=excel_data,
+                iter_excel(),
                 media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 headers={
-                    "Content-Disposition": f'attachment; filename="{filename}"'
+                    "Content-Disposition": f'attachment; filename="{ascii_filename}"; filename*=UTF-8\'\'{encoded_filename}'
                 }
             )
             
@@ -397,10 +413,9 @@ class TaskView(BaseView):
         report_service = ReportService(db)
         
         # 检查下载权限
-        permission_check = report_service.check_download_permission(
+        permission_check = report_service.check_download_permission_with_user(
             task_id=task_id,
-            user_id=current_user.id,
-            is_admin=current_user.is_admin or current_user.is_system_admin
+            user=current_user
         )
         
         print(f"📋 权限检查结果: {permission_check}")

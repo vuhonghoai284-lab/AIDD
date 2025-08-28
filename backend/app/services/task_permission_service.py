@@ -149,7 +149,7 @@ class TaskPermissionService:
                 'can_feedback': True,
                 'can_comment': True,
                 'can_rate': True,
-                'can_download': False
+                'can_download': True
             })
         else:  # read_only
             base_permissions.update({

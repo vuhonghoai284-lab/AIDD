@@ -17,6 +17,7 @@ except ImportError:
 from app.repositories.task import TaskRepository
 from app.repositories.issue import IssueRepository
 from app.models import Task, Issue
+from app.services.task_permission_service import TaskPermissionService
 
 
 class ReportService:
@@ -26,9 +27,52 @@ class ReportService:
         self.db = db
         self.task_repo = TaskRepository(db)
         self.issue_repo = IssueRepository(db)
+        self.permission_service = TaskPermissionService(db)
+    
+    def check_download_permission_with_user(self, task_id: int, user) -> dict:
+        """使用TaskPermissionService检查报告下载权限（推荐使用）
+        
+        Args:
+            task_id: 任务ID
+            user: 用户对象
+            
+        Returns:
+            dict: 包含can_download和reason的字典
+        """
+        # 获取任务信息
+        task = self.task_repo.get_by_id(task_id)
+        if not task:
+            return {"can_download": False, "reason": "任务不存在"}
+        
+        # 检查基础访问权限
+        if not self.permission_service.check_task_access(task_id, user, 'download'):
+            return {"can_download": False, "reason": "无权限下载此任务的报告"}
+        
+        # 检查任务状态
+        if task.status != "completed":
+            return {"can_download": False, "reason": "任务尚未完成，请等待任务处理完成"}
+        
+        # 检查问题处理状态
+        total_issues = self.task_repo.count_issues(task_id)
+        processed_issues = self.task_repo.count_processed_issues(task_id)
+        
+        if total_issues == 0:
+            return {"can_download": True, "reason": "任务无问题，可以下载"}
+        
+        if processed_issues < total_issues:
+            unprocessed_count = total_issues - processed_issues
+            return {
+                "can_download": False, 
+                "reason": f"请先处理完所有问题才能下载报告。还有 {unprocessed_count} 个问题需要处理（共 {total_issues} 个问题）",
+                "total_issues": total_issues,
+                "processed_issues": processed_issues,
+                "unprocessed_count": unprocessed_count
+            }
+        
+        return {"can_download": True, "reason": "所有问题已处理完成"}
     
     def check_download_permission(self, task_id: int, user_id: int, is_admin: bool = False) -> dict:
-        """检查报告下载权限
+        """检查报告下载权限（已废弃，建议使用 check_download_permission_with_user）
         
         Args:
             task_id: 任务ID
