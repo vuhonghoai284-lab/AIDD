@@ -232,7 +232,7 @@ class TaskView(BaseView):
         task_detail = service.get_task_detail(task_id)
         
         # 检查用户权限
-        self.check_task_access_permission(current_user, task_detail.task.user_id)
+        self.check_task_access_with_permission_service(task_id, current_user, db, 'read')
         
         return task_detail
     
@@ -253,7 +253,7 @@ class TaskView(BaseView):
             raise HTTPException(status_code=404, detail="任务不存在")
         
         # 检查用户权限
-        self.check_task_access_permission(current_user, task.user_id)
+        self.check_task_access_with_permission_service(task_id, current_user, db, 'delete')
         
         success = service.delete_task(task_id)
         return {"success": success}
@@ -274,7 +274,7 @@ class TaskView(BaseView):
             raise HTTPException(404, "任务不存在")
         
         # 检查用户权限
-        self.check_task_access_permission(current_user, task.user_id)
+        self.check_task_access_with_permission_service(task_id, current_user, db, 'write')
         
         # 检查任务状态是否可重试
         if task.status == 'pending':
@@ -451,7 +451,7 @@ class TaskView(BaseView):
                 raise HTTPException(404, "任务不存在")
             
             # 检查用户权限
-            self.check_task_access_permission(current_user, task.user_id)
+            self.check_task_access_with_permission_service(task_id, current_user, db, 'download')
             
             # 获取文件信息
             if not task.file_info:
@@ -590,7 +590,7 @@ class TaskView(BaseView):
         if not task:
             raise HTTPException(404, "任务不存在")
         
-        self.check_task_access_permission(current_user, task.user_id)
+        self.check_task_access_with_permission_service(task_id, current_user, db, 'read')
         
         return service.get_task_issues_paginated(task_id, params)
 

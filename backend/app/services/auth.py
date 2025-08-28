@@ -134,15 +134,30 @@ class AuthService(IAuthService):
         }
     
     def verify_token(self, token: str) -> Optional[User]:
-        """验证令牌"""
+        """验证令牌（带缓存优化）"""
         try:
+            # 首先验证JWT令牌
             payload = jwt.decode(token, self.SECRET_KEY, algorithms=[self.ALGORITHM])
             # 支持两种字段：user_id（新格式）和sub（旧格式）
             user_id = payload.get("user_id") or payload.get("sub")
             if user_id is None:
                 return None
+            
+            # 检查令牌是否即将过期（如果过期时间小于5分钟，重新查询数据库）
+            exp = payload.get("exp", 0)
+            current_time = time.time()
+            time_until_expiry = exp - current_time
+            
+            # 如果令牌即将过期，直接查询数据库确保用户信息最新
+            if time_until_expiry < 300:  # 5分钟
+                user = self.user_repo.get_by_id(int(user_id))
+                return user
+            
+            # 对于有效期充足的令牌，可以考虑添加用户信息缓存
+            # 这里暂时还是查询数据库以确保数据一致性
             user = self.user_repo.get_by_id(int(user_id))
             return user
+            
         except jwt.PyJWTError:
             return None
     

@@ -10,7 +10,7 @@ import Analytics from './pages/Analytics';
 import { SharedTasks } from './pages/SharedTasks';
 import LoginPage from './pages/LoginPage';
 import CallbackHandler from './pages/CallbackHandler';
-import { getCurrentUser, logout } from './services/authService';
+import { getCurrentUser, logout, clearUserCache } from './services/authService';
 import { User } from './types';
 import { ThemeProvider } from './components/ThemeProvider';
 import { useTheme } from './hooks/useTheme';
@@ -219,49 +219,56 @@ const AppContent: React.FC = () => {
     
     window.addEventListener('userLogin', handleUserLoginEvent as EventListener);
     
-    // 手动检查token变化的函数（增强版）
+    // 优化的token检查函数，减少不必要的API调用
     const checkTokenAndUser = async () => {
       const token = localStorage.getItem('token');
       const userString = localStorage.getItem('user');
       
-      // 优化检查逻辑，提供更详细的日志
+      // 如果有token和用户数据，且React状态中也有用户，跳过检查
+      if (token && userString && user) {
+        return;
+      }
+      
       if (token && userString) {
-        // 如果有token和用户数据
+        // 如果有token和用户数据但React状态为空，优先使用localStorage数据
         if (!user) {
-          // 但当前用户状态为空，需要更新
           try {
             const storedUser = JSON.parse(userString);
             setUser(storedUser);
+            console.log('🔄 从localStorage恢复用户状态');
           } catch (error) {
             console.warn('解析localStorage中的用户数据失败:', error);
+            // 只有在localStorage数据损坏时才从API获取
             try {
-              // 尝试从API获取用户信息
               const currentUser = await getCurrentUser();
               if (currentUser) {
                 setUser(currentUser);
+                localStorage.setItem('user', JSON.stringify(currentUser));
               }
             } catch (e) {
               console.error('获取用户信息失败:', e);
-              // 获取失败时清除可能无效的token
               localStorage.removeItem('token');
               localStorage.removeItem('user');
+              clearUserCache();
             }
           }
         }
       } else if (!token && user) {
         // 没有token但用户状态存在，需要登出
         setUser(null);
+        clearUserCache();
       } else if (token && !userString) {
-        // 有token但没有用户数据，可能是数据不完整
+        // 有token但没有用户数据，清除可能无效的token
         localStorage.removeItem('token');
+        clearUserCache();
       }
     };
 
     // 立即执行一次检查
     checkTokenAndUser();
 
-    // 定期检查token变化（用于同一页面内的登录，频率提高）
-    const checkTokenInterval = setInterval(checkTokenAndUser, 100);
+    // 定期检查token变化（降低频率避免过度请求）
+    const checkTokenInterval = setInterval(checkTokenAndUser, 5000); // 从100ms改为5秒
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);

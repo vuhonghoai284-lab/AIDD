@@ -157,18 +157,43 @@ export const loginWithSystem = async (username: string, password: string): Promi
   }
 };
 
+// 用户信息缓存机制，避免频繁请求
+let userCache: { user: User | null; timestamp: number } = { user: null, timestamp: 0 };
+const CACHE_DURATION = 30000; // 30秒缓存
+
 export const getCurrentUser = async (): Promise<User | null> => {
   try {
+    // 检查缓存是否有效
+    const now = Date.now();
+    if (userCache.user && (now - userCache.timestamp) < CACHE_DURATION) {
+      console.log('🟢 使用缓存的用户信息');
+      return userCache.user;
+    }
+    
+    console.log('🔄 从API获取用户信息');
     const response = await api.get('/users/me');
-    return response.data;
+    const user = response.data;
+    
+    // 更新缓存
+    userCache = { user, timestamp: now };
+    
+    return user;
   } catch (error) {
+    // 清除缓存
+    userCache = { user: null, timestamp: 0 };
     return null;
   }
+};
+
+// 清除用户缓存的方法
+export const clearUserCache = () => {
+  userCache = { user: null, timestamp: 0 };
 };
 
 export const logout = () => {
   localStorage.removeItem('user');
   localStorage.removeItem('token');
+  clearUserCache(); // 清除用户缓存
 };
 
 export default api;

@@ -17,7 +17,10 @@ class BaseView:
     
     @staticmethod
     def get_current_user(authorization: str = Header(None), db: Session = Depends(get_db)) -> User:
-        """获取当前登录用户"""
+        """获取当前登录用户（优化版本）"""
+        import time
+        start_time = time.time()
+        
         if not authorization:
             raise HTTPException(status_code=401, detail="缺少认证信息")
         
@@ -26,13 +29,28 @@ class BaseView:
         if scheme.lower() != "bearer":
             raise HTTPException(status_code=401, detail="无效的认证方案")
         
-        # 验证token
-        auth_service = AuthService(db)
-        user = auth_service.verify_token(token)
-        if not user:
-            raise HTTPException(status_code=401, detail="无效的认证令牌")
-        
-        return user
+        try:
+            # 验证token
+            auth_service = AuthService(db)
+            user = auth_service.verify_token(token)
+            if not user:
+                raise HTTPException(status_code=401, detail="无效的认证令牌")
+            
+            # 记录性能日志
+            elapsed_time = (time.time() - start_time) * 1000
+            if elapsed_time > 1000:  # 超过1秒记录警告
+                print(f"⚠️ 用户认证耗时过长: {elapsed_time:.1f}ms, 用户: {user.uid}")
+            elif elapsed_time > 100:  # 超过100ms记录信息
+                print(f"ℹ️ 用户认证耗时: {elapsed_time:.1f}ms, 用户: {user.uid}")
+            
+            return user
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            elapsed_time = (time.time() - start_time) * 1000
+            print(f"❌ 用户认证异常: {e}, 耗时: {elapsed_time:.1f}ms")
+            raise HTTPException(status_code=500, detail="认证服务异常")
     
     @staticmethod
     def get_current_user_optional(authorization: str = Header(None), db: Session = Depends(get_db)) -> Optional[User]:
@@ -58,6 +76,18 @@ class BaseView:
     
     @staticmethod
     def check_task_access_permission(user: User, task_user_id: Optional[int]):
-        """检查任务访问权限"""
+        """检查任务访问权限（已废弃，建议使用 check_task_access_with_permission_service）"""
         if not user.is_admin and task_user_id != user.id:
             raise HTTPException(status_code=403, detail="权限不足，无法访问此任务")
+    
+    @staticmethod
+    def check_task_access_with_permission_service(task_id: int, user: User, db: Session, required_permission: str = 'read'):
+        """使用权限服务检查任务访问权限"""
+        from app.services.task_permission_service import TaskPermissionService
+        
+        permission_service = TaskPermissionService(db)
+        if not permission_service.check_task_access(task_id, user, required_permission):
+            raise HTTPException(
+                status_code=403, 
+                detail=f"权限不足，无法{required_permission}此任务"
+            )
