@@ -423,3 +423,55 @@ export const analyticsAPI = {
     return response.data;
   },
 };
+
+// 任务分享API
+export const taskShareAPI = {
+  // 分享任务给其他用户
+  shareTask: async (taskId: number, shareData: {
+    shared_user_ids: number[];
+    permission_level: string;
+    share_comment?: string;
+  }) => {
+    const response = await api.post(`/task-share/${taskId}/share`, shareData);
+    return response.data;
+  },
+
+  // 获取任务的分享列表
+  getTaskShares: async (taskId: number, includeInactive: boolean = false) => {
+    const response = await api.get(`/task-share/${taskId}/shares?include_inactive=${includeInactive}`);
+    return response.data;
+  },
+
+  // 更新分享权限
+  updateSharePermission: async (shareId: number, updateData: {
+    permission_level: string;
+    share_comment?: string;
+  }) => {
+    const response = await api.put(`/task-share/shares/${shareId}`, updateData);
+    return response.data;
+  },
+
+  // 撤销任务分享
+  revokeTaskShare: async (shareId: number, permanently: boolean = false) => {
+    const response = await api.delete(`/task-share/shares/${shareId}?permanently=${permanently}`);
+    return response.data;
+  },
+
+  // 获取分享给我的任务列表
+  getSharedTasks: async (includeInactive: boolean = false) => {
+    const response = await api.get(`/task-share/shared-with-me?include_inactive=${includeInactive}`);
+    return response.data;
+  },
+
+  // 搜索用户
+  searchUsers: async (query: string, limit: number = 20) => {
+    const response = await api.get(`/task-share/users/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+    return response.data;
+  },
+
+  // 获取分享统计信息
+  getShareStats: async () => {
+    const response = await api.get('/task-share/stats');
+    return response.data;
+  },
+};

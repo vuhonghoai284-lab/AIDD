@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Modal, Form, Select, Input, Button, message, Typography, Tag, Space, Alert } from 'antd';
 import { ShareAltOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { UserSearchSelect } from './UserSearchSelect';
+import { taskShareAPI } from '../api';
 
 const { TextArea } = Input;
 const { Title, Text } = Typography;
@@ -41,6 +42,9 @@ const PERMISSION_OPTIONS = [
   }
 ];
 
+// 默认权限设置
+const DEFAULT_PERMISSION = 'feedback_only';
+
 export const TaskShareModal: React.FC<TaskShareModalProps> = ({
   visible,
   onCancel,
@@ -51,7 +55,7 @@ export const TaskShareModal: React.FC<TaskShareModalProps> = ({
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
-  const [permissionLevel, setPermissionLevel] = useState('read_only');
+  const [permissionLevel, setPermissionLevel] = useState(DEFAULT_PERMISSION);
 
   const handleSubmit = async (values: ShareRequest) => {
     if (!taskId) {
@@ -67,34 +71,21 @@ export const TaskShareModal: React.FC<TaskShareModalProps> = ({
     setLoading(true);
     
     try {
-      const response = await fetch(`/api/task-share/${taskId}/share`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(values)
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        message.success(`成功分享给 ${result.success_count} 个用户`);
-        
-        if (result.errors && result.errors.length > 0) {
-          message.warning(`部分用户分享失败: ${result.errors.join(', ')}`);
-        }
-        
-        form.resetFields();
-        setSelectedUsers([]);
-        setPermissionLevel('read_only');
-        onSuccess();
-      } else {
-        const error = await response.json();
-        message.error(error.detail || '分享失败');
+      const result = await taskShareAPI.shareTask(taskId, values);
+      message.success(`成功分享给 ${result.success_count} 个用户`);
+      
+      if (result.errors && result.errors.length > 0) {
+        message.warning(`部分用户分享失败: ${result.errors.join(', ')}`);
       }
-    } catch (error) {
+      
+      form.resetFields();
+      setSelectedUsers([]);
+      setPermissionLevel(DEFAULT_PERMISSION);
+      onSuccess();
+    } catch (error: any) {
       console.error('分享任务出错:', error);
-      message.error('分享任务出错，请稍后重试');
+      const errorMessage = error.response?.data?.detail || error.message || '分享失败，请稍后重试';
+      message.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -103,7 +94,7 @@ export const TaskShareModal: React.FC<TaskShareModalProps> = ({
   const handleCancel = () => {
     form.resetFields();
     setSelectedUsers([]);
-    setPermissionLevel('read_only');
+    setPermissionLevel(DEFAULT_PERMISSION);
     onCancel();
   };
 
@@ -150,7 +141,7 @@ export const TaskShareModal: React.FC<TaskShareModalProps> = ({
         layout="vertical"
         onFinish={handleSubmit}
         initialValues={{
-          permission_level: 'read_only'
+          permission_level: DEFAULT_PERMISSION
         }}
         style={{ marginTop: 0 }}
       >

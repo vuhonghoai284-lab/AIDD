@@ -24,6 +24,7 @@ import {
   ExclamationCircleOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import { taskShareAPI } from '../api';
 import './SharedTasks.css';
 
 const { Title, Text, Paragraph } = Typography;
@@ -84,21 +85,12 @@ export const SharedTasks: React.FC = () => {
 
   const fetchSharedTasks = async () => {
     try {
-      const response = await fetch('/api/task-share/shared-with-me', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setSharedTasks(data);
-      } else {
-        message.error('获取分享任务失败');
-      }
-    } catch (error) {
+      const data = await taskShareAPI.getSharedTasks();
+      setSharedTasks(data);
+    } catch (error: any) {
       console.error('获取分享任务出错:', error);
-      message.error('获取分享任务出错');
+      const errorMessage = error.response?.data?.detail || error.message || '获取分享任务失败';
+      message.error(errorMessage);
     } finally {
       setLoading(false);
     }

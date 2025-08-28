@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Select, Avatar, Spin, Empty } from 'antd';
 import { UserOutlined } from '@ant-design/icons';
 import { debounce } from 'lodash';
+import { taskShareAPI } from '../api';
 
 interface User {
   id: number;
@@ -43,24 +44,12 @@ export const UserSearchSelect: React.FC<UserSearchSelectProps> = ({
 
       setLoading(true);
       try {
-        const response = await fetch(
-          `/api/task-share/users/search?q=${encodeURIComponent(searchTerm)}&limit=50`,
-          {
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`
-            }
-          }
-        );
-
-        if (response.ok) {
-          const searchResults = await response.json();
-          setUsers(searchResults);
-        } else {
-          console.error('用户搜索失败:', response.statusText);
-          setUsers([]);
-        }
-      } catch (error) {
+        const searchResults = await taskShareAPI.searchUsers(searchTerm, 50);
+        setUsers(searchResults);
+      } catch (error: any) {
         console.error('用户搜索出错:', error);
+        const errorMessage = error.response?.data?.detail || error.message || '搜索失败';
+        console.error('用户搜索失败:', errorMessage);
         setUsers([]);
       } finally {
         setLoading(false);
