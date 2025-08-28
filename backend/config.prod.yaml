@@ -1,0 +1,182 @@
+# 生产环境配置文件 - MySQL数据库
+# 使用方法: CONFIG_FILE=config.prod.yaml python app/main.py
+
+# 服务器配置
+server:
+  host: "${SERVER_HOST:0.0.0.0}"
+  port: "${SERVER_PORT:8080}"
+  debug: false  # 生产环境关闭调试
+  reload: false
+  workers: "${WORKERS:4}"  # 生产环境增加工作进程数
+  external_host: "${EXTERNAL_HOST}"
+  external_port: "${EXTERNAL_PORT:443}"
+  external_protocol: "${EXTERNAL_PROTOCOL:https}"
+
+# 数据库配置 - MySQL生产环境
+database:
+  type: "mysql"
+  
+  # MySQL生产环境配置
+  mysql:
+    host: "${MYSQL_HOST}"
+    port: "${MYSQL_PORT:3306}"
+    username: "${MYSQL_USERNAME}"
+    password: "${MYSQL_PASSWORD}"
+    database: "${MYSQL_DATABASE:ai_doc_test}"
+    charset: "utf8mb4"
+    # 生产环境连接池配置
+    pool:
+      pool_size: 25  # 基础连接池大小
+      max_overflow: 30  # 最大溢出连接数
+      pool_timeout: 30  # 连接获取超时
+      pool_recycle: 1800  # 30分钟回收连接，避免MySQL超时
+      pool_pre_ping: true  # 连接健康检查
+      pool_reset_on_return: "rollback"  # 返回时重置连接状态
+      pool_recycle_queries: 10000  # 每个连接最大查询数
+
+# AI模型配置
+ai_models:
+  default_index: 0
+  models:
+    - label: "GPT-4o Mini (快速)"
+      provider: "openai"
+      config:
+        api_key: "${OPENAI_API_KEY}"
+        base_url: "${OPENAI_BASE_URL:https://api.openai.com/v1}"
+        model: "gpt-4o-mini"
+        temperature: 0.3
+        max_tokens: 8000
+        context_window: 128000
+        reserved_tokens: 2000
+        timeout: 12000
+        max_retries: 3
+      description: "适合快速处理，成本较低"
+
+# 文件设置  
+file_settings:
+  max_file_size: 10485760  # 10MB
+  allowed_extensions:
+    - pdf
+    - docx
+    - md
+    - txt
+
+# 目录配置 - 生产环境路径
+directories:
+  upload_dir: "${UPLOAD_DIR:/app/data/uploads}"
+  report_dir: "${REPORT_DIR:/app/data/reports}"
+  log_dir: "${LOG_DIR:/app/data/logs}"
+  temp_dir: "${TEMP_DIR:/app/data/temp}"
+
+# 日志配置 - 生产环境
+logging:
+  level: "${LOG_LEVEL:INFO}"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "${LOG_FILE:/app/data/logs/app.log}"
+  max_size: 52428800  # 50MB
+  backup_count: 10
+
+# 任务处理配置 - 生产环境优化
+task_processing:
+  concurrency_limits:
+    system_max_concurrent_tasks: 200  # 生产环境提高系统并发限制
+    default_user_max_concurrent_tasks: 10  # 普通用户并发限制
+    admin_max_concurrent_tasks: 100  # 管理员用户并发限制
+    vip_max_concurrent_tasks: 50  # VIP用户并发限制
+    
+    enable_user_level_control: true
+    enable_system_level_control: true
+    queue_overflow_strategy: "reject"
+    
+  task_timeout: 18000  # 30分钟超时（生产环境延长）
+  retry_failed_tasks: true
+  max_retry_attempts: 3
+  
+  document_processing:
+    max_document_chars: 2000000  # 生产环境支持更大文档（2M字符）
+    enable_intelligent_chunking: true
+    chunk_overlap_chars: 200
+    min_chunk_chars: 20000
+    max_chunks_per_document: 100  # 生产环境支持更多分块
+    
+    batch_size_small: 50000
+    batch_size_medium: 60000
+    batch_size_large: 80000
+    
+    small_doc_threshold: 100000
+    large_doc_threshold: 200000
+  
+  section_merge:
+    enabled: true
+    max_chars: 15000
+    min_chars: 500
+    preserve_structure: true
+  
+  task_processing:
+    processing_timeout: 3600  # 生产环境1小时超时
+    recovery_enabled: true
+    auto_retry_failed_tasks: false
+    max_concurrent_tasks: 50  # 生产环境提高并发数
+    zombie_detection_interval: 300
+
+# CORS配置 - 生产环境
+cors:
+  enabled: true
+  origins:
+    - "${FRONTEND_DOMAIN}"  # 生产环境前端域名
+    - "${FRONTEND_DOMAIN_2:}"  # 备用前端域名
+  allow_credentials: true
+  allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+  allow_headers: ["*"]
+  development_mode: false  # 生产环境关闭开发模式
+
+# 第三方登录配置 - 生产环境
+third_party_auth:
+  provider_type: "gitee"
+  client_id: "${GITEE_CLIENT_ID}"
+  client_secret: "${GITEE_CLIENT_SECRET}"
+  frontend_domain: "${FRONTEND_DOMAIN}"
+  redirect_path: "${OAUTH_REDIRECT_PATH:/third-login/callback}"
+  scope: "user_info"
+  
+  api_endpoints:
+    authorization_url: "https://gitee.com/oauth/authorize"
+    token_url: "https://gitee.com/oauth/token"
+    userinfo_url: "https://gitee.com/api/v5/user"
+  
+  request_timeout: 30
+  max_retries: 3
+
+# JWT配置 - 生产环境
+jwt:
+  secret_key: "${JWT_SECRET_KEY}"
+  algorithm: "HS256"
+  access_token_expire_minutes: "${JWT_EXPIRE_MINUTES:480}"  # 生产环境8小时有效期
+
+# 性能监控配置 - 生产环境
+performance:
+  enable_db_query_logging: "${ENABLE_DB_LOGGING:false}"
+  slow_query_threshold: 2.0  # 生产环境慢查询阈值
+  enable_api_timing: true
+  api_timeout_threshold: 60.0  # 生产环境API超时阈值
+  enable_memory_monitoring: true  # 生产环境启用内存监控
+  memory_warning_threshold: 2048  # 2GB内存警告阈值
+
+# 安全配置 - 生产环境
+security:
+  enable_rate_limiting: true  # 生产环境启用限流
+  rate_limit_per_minute: 300  # 每分钟最大请求数
+  scan_uploaded_files: true  # 生产环境启用文件安全扫描
+  max_filename_length: 255
+  mask_sensitive_logs: true
+  enable_audit_logging: true  # 生产环境启用审计日志
+
+# 环境变量映射
+env_mapping:
+  JWT_SECRET_KEY: "JWT_SECRET_KEY"
+  MYSQL_HOST: "MYSQL_HOST"
+  MYSQL_USERNAME: "MYSQL_USERNAME"
+  MYSQL_PASSWORD: "MYSQL_PASSWORD"
+  MYSQL_DATABASE: "MYSQL_DATABASE"
+  GITEE_CLIENT_ID: "GITEE_CLIENT_ID"
+  GITEE_CLIENT_SECRET: "GITEE_CLIENT_SECRET"

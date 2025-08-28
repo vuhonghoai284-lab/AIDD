@@ -27,13 +27,16 @@ database:
     password: "${MYSQL_PASSWORD}"
     database: "${MYSQL_DATABASE:ai_doc_test}"
     charset: "utf8mb4"
-    # 连接池配置
+    # 连接池配置 - 生产环境优化版本
     pool:
-      pool_size: 5
-      max_overflow: 10
+      pool_size: 25  # 增加基础连接池大小，匹配批量任务并发需求
+      max_overflow: 30  # 增加溢出连接数，处理峰值流量
       pool_timeout: 30
-      pool_recycle: 3600
+      pool_recycle: 1800  # 减少到30分钟，避免MySQL长连接超时
       pool_pre_ping: true
+      # 新增MySQL生产环境优化参数
+      pool_reset_on_return: "rollback"  # 返回时重置连接状态
+      pool_recycle_queries: 10000  # 每个连接执行查询数上限
 
 # AI模型配置（保持现有结构）
 ai_models:
