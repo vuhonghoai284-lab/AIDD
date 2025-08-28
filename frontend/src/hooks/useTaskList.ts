@@ -175,6 +175,7 @@ export function useTaskList(options: UseTaskListOptions = {}): UseTaskListReturn
   const lastRefreshTime = useRef(0);
   const requestManager = useRef(RequestManager.getInstance());
   const abortControllerRef = useRef<AbortController | null>(null);
+  const isPageJumpingRef = useRef(false); // 标志是否正在页码跳转
 
   // 统计数据 - 使用真实的数据库统计，而非当前页面数据
   const statistics = useMemo(() => {
@@ -386,28 +387,116 @@ export function useTaskList(options: UseTaskListOptions = {}): UseTaskListReturn
     await loadRealStatistics(true);
   }, [loadRealStatistics]);
 
-  // 页码跳转功能
+  // 页码跳转功能（独立实现，避免与搜索useEffect冲突）
   const goToPage = useCallback(async (page: number) => {
     console.log(`📄 跳转到第 ${page} 页`);
-    await loadTasks({
-      showLoading: true,
-      forceRefresh: false,
-      resetPage: false,
-      targetPage: page
-    });
-  }, [loadTasks]);
+    
+    isPageJumpingRef.current = true; // 设置页码跳转标志
+    
+    // 取消之前的请求
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+    
+    try {
+      setLoading(true);
+      
+      const params: PaginationParams = {
+        page,
+        page_size: pageSize,
+        search: debouncedSearchText.trim() || undefined,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        sort_by: 'created_at',
+        sort_order: 'desc'
+      };
 
-  // 搜索和过滤变更时的处理 - 使用防抖后的搜索文本
+      console.log('📡 页码跳转请求:', params);
+      const response = await requestManager.current.request(params, false);
+      
+      setTasks(response.items);
+      setCurrentPage(page);
+      setTotalTasks(response.total);
+      setHasNextPage(response.has_next);
+      lastRefreshTime.current = Date.now();
+
+      console.log(`✅ 页码跳转成功，第${page}页，获取到 ${response.items.length} 个任务，共 ${response.total} 个`);
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.log('🔄 页码跳转请求被取消');
+        return;
+      }
+      console.error('❌ 页码跳转失败:', error);
+    } finally {
+      setLoading(false);
+      abortControllerRef.current = null;
+      // 延迟清除标志，确保useEffect能检测到
+      setTimeout(() => {
+        isPageJumpingRef.current = false;
+      }, 500);
+    }
+  }, [pageSize, debouncedSearchText, statusFilter]);
+
+  // 搜索和过滤变更时的处理 - 使用防抖后的搜索文本（移除loadTasks依赖避免死循环）
   useEffect(() => {
+    // 如果正在页码跳转，跳过此次变更处理
+    if (isPageJumpingRef.current) {
+      console.log('🔍 页码跳转中，跳过搜索或过滤条件变更处理');
+      return;
+    }
+    
     console.log('🔍 搜索或过滤条件变更，重新加载数据');
     const isSearchClear = debouncedSearchText.trim() === '';
-    loadTasks({
-      showLoading: true,
-      forceRefresh: false,
-      resetPage: true,
-      isSearchClear
-    });
-  }, [debouncedSearchText, statusFilter, loadTasks]);
+    
+    // 直接调用加载逻辑，避免useCallback依赖导致的循环
+    const loadData = async () => {
+      const now = Date.now();
+      if (!isSearchClear && now - lastRefreshTime.current < 2000) {
+        console.log('🚦 防抖跳过请求，距离上次请求过近');
+        return;
+      }
+
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = new AbortController();
+
+      try {
+        setLoading(true);
+        
+        const params: PaginationParams = {
+          page: 1, // 搜索和过滤时重置到第1页
+          page_size: pageSize,
+          search: debouncedSearchText.trim() || undefined,
+          status: statusFilter !== 'all' ? statusFilter : undefined,
+          sort_by: 'created_at',
+          sort_order: 'desc'
+        };
+
+        console.log('📡 发起任务列表请求:', params);
+        const response = await requestManager.current.request(params, false);
+        
+        setTasks(response.items);
+        setCurrentPage(1);
+        setTotalTasks(response.total);
+        setHasNextPage(response.has_next);
+        lastRefreshTime.current = now;
+
+        console.log(`✅ 任务列表加载成功，第1页，获取到 ${response.items.length} 个任务，共 ${response.total} 个`);
+      } catch (error: any) {
+        if (error.name === 'AbortError') {
+          console.log('🔄 请求被取消');
+          return;
+        }
+        console.error('❌ 加载任务列表失败:', error);
+      } finally {
+        setLoading(false);
+        abortControllerRef.current = null;
+      }
+    };
+    
+    loadData();
+  }, [debouncedSearchText, statusFilter, pageSize]);
 
   // 智能后台刷新定时器
   useEffect(() => {

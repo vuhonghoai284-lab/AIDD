@@ -71,9 +71,33 @@ logging:
 
 # 任务处理配置
 task_processing:
-  max_concurrent_tasks: 3  # 最大并发任务数
-  task_timeout: 12000  # 任务超时时间（秒）
-  retry_failed_tasks: true  # 是否重试失败的任务
+  # 并发限制配置
+  concurrency_limits:
+    # 系统级并发限制
+    system_max_concurrent_tasks: 20  # 系统同时处理的最大任务数
+    
+    # 用户级并发限制（可通过数据库动态调整）
+    default_user_max_concurrent_tasks: 3  # 普通用户默认并发限制
+    admin_max_concurrent_tasks: 10  # 管理员用户默认并发限制
+    vip_max_concurrent_tasks: 10  # VIP用户并发限制（预留扩展）
+    
+    # 并发控制策略
+    enable_user_level_control: true  # 启用用户级并发控制
+    enable_system_level_control: true  # 启用系统级并发控制
+    queue_overflow_strategy: "queue"  # 超限处理策略：reject(拒绝) | queue(排队)
+    
+  # 任务执行配置
+  task_timeout: 12000  # 单个任务超时时间（秒）
+  retry_failed_tasks: true  # 是否自动重试失败的任务
+  max_retry_attempts: 3  # 最大重试次数
+  
+  # 任务处理和恢复配置
+  task_processing:
+    processing_timeout: 1800  # 任务处理超时时间（秒），默认30分钟
+    recovery_enabled: true    # 是否启用任务恢复机制
+    auto_retry_failed_tasks: false  # 是否自动重试失败的任务
+    max_concurrent_tasks: 5   # 系统最大并发任务数
+    zombie_detection_interval: 300  # 僵尸任务检测间隔（秒），默认5分钟
   
 # CORS配置
 cors:

@@ -183,7 +183,9 @@ def comprehensive_mocks_session():
         # Mock AuthService.verify_token
         def mock_verify_token_method(self, token: str):
             from app.models.user import User
-            token_map = {
+            
+            # 预定义的有效token
+            valid_tokens = {
                 "test_admin_token": {
                     "id": 1, "uid": "sys_admin", "display_name": "系统管理员", 
                     "email": "admin@test.com", "is_admin": True, "is_system_admin": True
@@ -194,8 +196,9 @@ def comprehensive_mocks_session():
                 }
             }
             
-            if token in token_map:
-                user_data = token_map[token]
+            # 检查预定义的token
+            if token in valid_tokens:
+                user_data = valid_tokens[token]
                 return User(
                     id=user_data["id"],
                     uid=user_data["uid"],
@@ -205,22 +208,105 @@ def comprehensive_mocks_session():
                     is_system_admin=user_data["is_system_admin"]
                 )
             
-            # 动态生成mock用户
-            user_id = abs(hash(token)) % 10000 + 100
-            return User(
-                id=user_id,
-                uid=f"mock_user_{user_id}",
-                display_name=f"Mock用户{user_id}",
-                email=f"mock{user_id}@test.com",
-                is_admin=False,
-                is_system_admin=False
+            # 检查是否是login_user方法生成的token格式
+            if token.startswith("mock_token_"):
+                # 从token中提取用户ID和UID
+                try:
+                    parts = token.split('_')
+                    if len(parts) >= 3:
+                        user_id = int(parts[2])
+                        # 根据用户ID查找对应的用户信息
+                        if user_id == 2121:  # sys_admin的预期ID
+                            return User(
+                                id=user_id,
+                                uid="sys_admin",
+                                display_name="系统管理员",
+                                email="admin@example.com",
+                                is_admin=True,
+                                is_system_admin=True
+                            )
+                        else:
+                            # 其他mock token用户
+                            return User(
+                                id=user_id,
+                                uid=f"mock_user_{user_id}",
+                                display_name=f"Mock用户{user_id}",
+                                email=f"mock{user_id}@test.com",
+                                is_admin=False,
+                                is_system_admin=False
+                            )
+                except ValueError:
+                    pass
+            
+            # 无效token返回None
+            return None
+        
+        # Mock AuthService的多个方法
+        async def mock_exchange_code_for_token_method(self, code: str):
+            from app.dto.user import ThirdPartyTokenResponse
+            return ThirdPartyTokenResponse(
+                access_token=f"mock_access_token_{abs(hash(code)) % 1000}",
+                refresh_token=f"mock_refresh_{abs(hash(code)) % 1000}",
+                scope="read write",
+                expires_in=3600
             )
         
-        # 应用Mock
-        auth_patch = patch('app.services.auth.AuthService.verify_token', mock_verify_token_method)
-        auth_patch.start()
-        patches.append(auth_patch)
-        print("✅ 会话级Mock已设置: AuthService.verify_token")
+        async def mock_get_third_party_user_info_method(self, access_token: str):
+            from app.dto.user import ThirdPartyUserInfoResponse
+            user_id = abs(hash(access_token)) % 1000 + 1000
+            return ThirdPartyUserInfoResponse(
+                uid=f'third_party_user_{user_id}',
+                display_name=f'第三方用户{user_id}',
+                email=f'user{user_id}@thirdparty.com',
+                avatar_url=f'https://avatar.example.com/{user_id}'
+            )
+        
+        def mock_get_authorization_url_method(self, state: str = "12345"):
+            return "https://gitee.com/oauth/authorize?client_id=test&response_type=code&redirect_uri=http://localhost:3000/callback&scope=user_info&state=12345"
+        
+        def mock_login_user_method(self, uid: str, display_name: str = None, email: str = None, 
+                                 avatar_url: str = None, is_admin: bool = False, 
+                                 is_system_admin: bool = False):
+            from app.models.user import User
+            
+            # 为系统管理员使用固定ID
+            if uid == "sys_admin":
+                user_id = 2121  # 固定ID用于测试
+            else:
+                user_id = abs(hash(uid)) % 10000 + 100
+                
+            mock_user = User(
+                id=user_id,
+                uid=uid,
+                display_name=display_name or f"用户{user_id}",
+                email=email or f"{uid}@test.com",
+                is_admin=is_admin,
+                is_system_admin=is_system_admin
+            )
+            
+            # 生成mock token
+            mock_token = f"mock_token_{user_id}_{abs(hash(uid)) % 1000}"
+            
+            return {
+                "user": mock_user,
+                "access_token": mock_token,
+                "token_type": "bearer"
+            }
+        
+        # 应用所有Mock
+        patches_config = [
+            ('app.services.auth.AuthService.verify_token', mock_verify_token_method),
+            ('app.services.auth.AuthService.exchange_code_for_token', mock_exchange_code_for_token_method),
+            ('app.services.auth.AuthService.get_third_party_user_info', mock_get_third_party_user_info_method),
+            ('app.services.auth.AuthService.get_authorization_url', mock_get_authorization_url_method),
+            ('app.services.auth.AuthService.login_user', mock_login_user_method),
+        ]
+        
+        for patch_target, mock_method in patches_config:
+            auth_patch = patch(patch_target, mock_method)
+            auth_patch.start()
+            patches.append(auth_patch)
+            print(f"✅ 会话级Mock已设置: {patch_target}")
         
         yield
         
