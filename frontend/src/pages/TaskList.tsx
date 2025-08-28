@@ -5,7 +5,7 @@ import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 import { 
   Card, Table, Button, Tag, Progress, Space, message, Popconfirm, 
   Badge, Tooltip, Dropdown, Menu, Input, Select, Row, Col, Statistic,
-  Empty, Typography, Segmented, Pagination
+  Empty, Typography, Segmented, Pagination, Spin
 } from 'antd';
 import { 
   PlusOutlined, ReloadOutlined, DeleteOutlined, EyeOutlined,
@@ -44,6 +44,7 @@ const TaskList: React.FC = () => {
     loadMoreTasks,
     refreshTasks,
     backgroundRefresh,
+    goToPage,
     statistics
   } = useTaskList({
     pageSize: 20,
@@ -53,6 +54,7 @@ const TaskList: React.FC = () => {
 
   // 其他UI状态
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
+  const [paginationMode, setPaginationMode] = useState<'infinite' | 'pagination'>('pagination'); // 默认使用分页模式
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   
   // 分享模态框状态
@@ -64,9 +66,9 @@ const TaskList: React.FC = () => {
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const pageSize = 20; // 与useTaskList中的pageSize保持一致
   
-  // 使用优化的无限滚动Hook
+  // 使用优化的无限滚动Hook（仅在无限滚动模式时启用）
   const loadMoreTriggerRef = useInfiniteScroll({
-    hasNextPage,
+    hasNextPage: paginationMode === 'infinite' ? hasNextPage : false, // 分页模式时禁用无限滚动
     loading: loadingMore,
     onLoadMore: loadMoreTasks,
     rootMargin: '50px', // 减小触发区域
@@ -807,6 +809,23 @@ const TaskList: React.FC = () => {
               value={viewMode}
               onChange={(value) => setViewMode(value as 'table' | 'card')}
             />
+            <Segmented
+              className="pagination-mode-segmented"
+              options={[
+                { value: 'pagination', label: '分页' },
+                { value: 'infinite', label: '滚动' },
+              ]}
+              value={paginationMode}
+              onChange={(value) => {
+                console.log('🔄 切换分页模式:', value);
+                setPaginationMode(value as 'infinite' | 'pagination');
+                // 切换模式时重新加载第1页数据
+                setTimeout(() => {
+                  refreshTasks();
+                }, 100);
+              }}
+              style={{ marginLeft: '8px' }}
+            />
             <Button
               className="action-button"
               icon={<ReloadOutlined />}
@@ -883,8 +902,8 @@ const TaskList: React.FC = () => {
             }}
           />
           
-          {/* 无限滚动加载更多触发器 */}
-          {hasNextPage && (
+          {/* 无限滚动加载更多触发器（仅无限滚动模式） */}
+          {paginationMode === 'infinite' && hasNextPage && (
             <div 
               ref={loadMoreTriggerRef}
               style={{ 
@@ -923,8 +942,8 @@ const TaskList: React.FC = () => {
                 已显示 {tasks.length} / {totalTasks} 条记录
               </div>
               
-              {/* 传统分页导航（可选） */}
-              {totalTasks > pageSize && (
+              {/* 传统分页导航（仅分页模式时显示） */}
+              {paginationMode === 'pagination' && totalTasks > pageSize && (
                 <Pagination
                   current={currentPage}
                   pageSize={pageSize}
@@ -934,13 +953,7 @@ const TaskList: React.FC = () => {
                   showTotal={(total: number, range: [number, number]) => `${range[0]}-${range[1]} / ${total} 条`}
                   onChange={(page: number) => {
                     console.log('分页跳转到第', page, '页');
-                    // 跳转到指定页面，这将重新加载数据
-                    loadTasks({
-                      showLoading: true,
-                      forceRefresh: true,
-                      resetPage: false, // 不重置页面，使用指定页面
-                      targetPage: page
-                    });
+                    goToPage(page);
                   }}
                   size="small"
                   style={{ marginTop: '8px' }}
@@ -949,15 +962,17 @@ const TaskList: React.FC = () => {
             </div>
           )}
           
-          {/* 无限滚动触发器 */}
-          <div ref={loadMoreTriggerRef} style={{ height: '20px', margin: '10px 0' }}>
-            {loadingMore && (
-              <div style={{ textAlign: 'center', padding: '10px' }}>
-                <Spin size="small" />
-                <span style={{ marginLeft: '8px' }}>加载更多...</span>
-              </div>
-            )}
-          </div>
+          {/* 无限滚动触发器（仅无限滚动模式） */}
+          {paginationMode === 'infinite' && (
+            <div ref={loadMoreTriggerRef} style={{ height: '20px', margin: '10px 0' }}>
+              {loadingMore && (
+                <div style={{ textAlign: 'center', padding: '10px' }}>
+                  <Spin size="small" />
+                  <span style={{ marginLeft: '8px' }}>加载更多...</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         tasks.length > 0 ? (
@@ -966,8 +981,8 @@ const TaskList: React.FC = () => {
               {tasks.map(renderTaskCard)}
             </div>
             
-            {/* 卡片视图的加载更多 */}
-            {hasNextPage && (
+            {/* 卡片视图的加载更多（仅无限滚动模式） */}
+            {paginationMode === 'infinite' && hasNextPage && (
               <div 
                 ref={loadMoreTriggerRef}
                 style={{ 
@@ -1005,8 +1020,8 @@ const TaskList: React.FC = () => {
                   已显示 {tasks.length} / {totalTasks} 条记录
                 </div>
                 
-                {/* 传统分页导航（可选） */}
-                {totalTasks > pageSize && (
+                {/* 传统分页导航（仅分页模式时显示） */}
+                {paginationMode === 'pagination' && totalTasks > pageSize && (
                   <Pagination
                     current={currentPage}
                     pageSize={pageSize}
@@ -1016,13 +1031,7 @@ const TaskList: React.FC = () => {
                     showTotal={(total: number, range: [number, number]) => `${range[0]}-${range[1]} / ${total} 条`}
                     onChange={(page: number) => {
                       console.log('分页跳转到第', page, '页');
-                      // 跳转到指定页面，这将重新加载数据
-                      loadTasks({
-                        showLoading: true,
-                        forceRefresh: true,
-                        resetPage: false, // 不重置页面，使用指定页面
-                        targetPage: page
-                      });
+                      goToPage(page);
                     }}
                     size="small"
                     style={{ marginTop: '8px' }}
@@ -1031,15 +1040,17 @@ const TaskList: React.FC = () => {
               </div>
             )}
             
-            {/* 卡片视图的无限滚动触发器 */}
-            <div ref={loadMoreTriggerRef} style={{ height: '20px', margin: '10px 0' }}>
-              {loadingMore && (
-                <div style={{ textAlign: 'center', padding: '10px' }}>
-                  <Spin size="small" />
-                  <span style={{ marginLeft: '8px' }}>加载更多...</span>
-                </div>
-              )}
-            </div>
+            {/* 卡片视图的无限滚动触发器（仅无限滚动模式） */}
+            {paginationMode === 'infinite' && (
+              <div ref={loadMoreTriggerRef} style={{ height: '20px', margin: '10px 0' }}>
+                {loadingMore && (
+                  <div style={{ textAlign: 'center', padding: '10px' }}>
+                    <Spin size="small" />
+                    <span style={{ marginLeft: '8px' }}>加载更多...</span>
+                  </div>
+                )}
+              </div>
+            )}
           </>
         ) : (
           <div className="empty-state">

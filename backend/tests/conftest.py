@@ -16,7 +16,8 @@ from unittest.mock import patch, MagicMock
 try:
     from . import mock_dependencies
 except ImportError:
-    import mock_dependencies
+    # 如果mock_dependencies不存在，跳过导入
+    pass
 
 # 设置测试环境
 os.environ.update({
@@ -170,34 +171,115 @@ def large_file():
     """大文件"""
     return ("large.md", b"# Large File\n" + b"Content " * 1000, "text/markdown")
 
-# 全面Mock系统
-@pytest.fixture(autouse=True)
+# 全面Mock系统 - 会话级自动应用
+@pytest.fixture(autouse=True, scope="session")
+def comprehensive_mocks_session():
+    """会话级Mock系统"""
+    from unittest.mock import patch
+    
+    patches = []
+    
+    try:
+        # Mock AuthService.verify_token
+        def mock_verify_token_method(self, token: str):
+            from app.models.user import User
+            token_map = {
+                "test_admin_token": {
+                    "id": 1, "uid": "sys_admin", "display_name": "系统管理员", 
+                    "email": "admin@test.com", "is_admin": True, "is_system_admin": True
+                },
+                "test_user_token": {
+                    "id": 2, "uid": "test_user", "display_name": "测试用户",
+                    "email": "user@test.com", "is_admin": False, "is_system_admin": False
+                }
+            }
+            
+            if token in token_map:
+                user_data = token_map[token]
+                return User(
+                    id=user_data["id"],
+                    uid=user_data["uid"],
+                    display_name=user_data["display_name"],
+                    email=user_data["email"],
+                    is_admin=user_data["is_admin"],
+                    is_system_admin=user_data["is_system_admin"]
+                )
+            
+            # 动态生成mock用户
+            user_id = abs(hash(token)) % 10000 + 100
+            return User(
+                id=user_id,
+                uid=f"mock_user_{user_id}",
+                display_name=f"Mock用户{user_id}",
+                email=f"mock{user_id}@test.com",
+                is_admin=False,
+                is_system_admin=False
+            )
+        
+        # 应用Mock
+        auth_patch = patch('app.services.auth.AuthService.verify_token', mock_verify_token_method)
+        auth_patch.start()
+        patches.append(auth_patch)
+        print("✅ 会话级Mock已设置: AuthService.verify_token")
+        
+        yield
+        
+    finally:
+        # 清理所有patches
+        for patch_obj in patches:
+            patch_obj.stop()
+        print("🧹 会话级Mock已清理")
+
+# 函数级Mock系统
+@pytest.fixture(autouse=True, scope="function") 
 def comprehensive_mocks(monkeypatch):
-    """全面的mock系统"""
+    """函数级mock系统"""
     
     # 1. 认证系统Mock
-    def mock_verify_token(token: str):
+    def mock_verify_token_standalone(token: str):
+        """独立的Mock验证令牌函数，返回User对象"""
+        from app.models.user import User
+        
+        # 预定义的测试令牌映射
         token_map = {
             "test_admin_token": {
-                "user_id": 1, "username": "sys_admin", "is_admin": True, 
-                "display_name": "系统管理员"
+                "id": 1, "uid": "sys_admin", "display_name": "系统管理员", 
+                "email": "admin@test.com", "is_admin": True, "is_system_admin": True
             },
             "test_user_token": {
-                "user_id": 2, "username": "test_user", "is_admin": False,
-                "display_name": "测试用户"
+                "id": 2, "uid": "test_user", "display_name": "测试用户",
+                "email": "user@test.com", "is_admin": False, "is_system_admin": False
             }
         }
+        
         if token in token_map:
-            return token_map[token]
+            user_data = token_map[token]
+            # 创建User对象
+            user = User(
+                id=user_data["id"],
+                uid=user_data["uid"],
+                display_name=user_data["display_name"],
+                email=user_data["email"],
+                is_admin=user_data["is_admin"],
+                is_system_admin=user_data["is_system_admin"]
+            )
+            return user
         
         # 动态生成mock用户
         user_id = abs(hash(token)) % 10000 + 100
-        return {
-            "user_id": user_id,
-            "username": f"mock_user_{user_id}",
-            "is_admin": False,
-            "display_name": f"Mock用户{user_id}"
-        }
+        user = User(
+            id=user_id,
+            uid=f"mock_user_{user_id}",
+            display_name=f"Mock用户{user_id}",
+            email=f"mock{user_id}@test.com",
+            is_admin=False,
+            is_system_admin=False
+        )
+        return user
+    
+    def mock_verify_token_method(self, token: str):
+        """AuthService方法的Mock版本"""
+        return mock_verify_token_standalone(token)
     
     # 2. 第三方认证Mock
     def mock_exchange_code_for_token(self, code: str):
@@ -306,7 +388,8 @@ def mock_generate_report(self, task_id, user):
     mock_configs = [
         ("app.services.auth.ThirdPartyAuthService.get_user_info", mock_get_user_info),
         ("app.services.report_generator.ReportGenerator.generate_excel_report", mock_generate_report),
-        ("app.core.auth.verify_token", mock_verify_token),
+        ("app.core.auth.verify_token", mock_verify_token_standalone),
+        ("app.services.auth.AuthService.verify_token", mock_verify_token_method),  # 添加AuthService的mock
         ("app.services.auth.ThirdPartyAuthService.exchange_code_for_token", mock_exchange_code_for_token),
         ("app.services.auth.ThirdPartyAuthService.login_with_token", mock_login_with_token),
         ("app.services.new_task_processor.NewTaskProcessor.process_task", mock_async_process_task),
@@ -316,8 +399,10 @@ def mock_generate_report(self, task_id, user):
     for attr_path, mock_func in mock_configs:
         try:
             monkeypatch.setattr(attr_path, mock_func)
+            print(f"✅ Mock已设置: {attr_path}")
         except (ImportError, AttributeError) as e:
             # 静默忽略无法mock的模块
+            print(f"⚠️ 无法Mock: {attr_path} - {e}")
             pass
     
     

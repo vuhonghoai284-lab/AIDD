@@ -46,6 +46,7 @@ class Task(Base):
     user = relationship("User", back_populates="tasks")
     file_info = relationship("FileInfo", back_populates="tasks")
     ai_model = relationship("AIModel", back_populates="tasks")
+    queue_items = relationship("TaskQueue", back_populates="task", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Task(id={self.id}, title='{self.title}', status='{self.status}')>"

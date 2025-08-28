@@ -158,7 +158,36 @@ const TaskCreate: React.FC = () => {
       }, 1500);
       
     } catch (error: any) {
-      // 批量创建失败时，降级到前端并发创建
+      console.error('Batch create error:', error);
+      
+      // 处理429并发限制错误
+      if (error.response?.status === 429) {
+        const errorDetail = error.response.data?.detail;
+        let errorMessage = '并发限制已达上限';
+        
+        if (typeof errorDetail === 'object' && errorDetail?.message) {
+          errorMessage = errorDetail.message;
+        } else if (typeof errorDetail === 'string') {
+          errorMessage = errorDetail;
+        }
+        
+        message.error({
+          content: `批量创建失败: ${errorMessage}`,
+          duration: 5
+        });
+        
+        // 重置文件状态
+        const resetTasks = uploadedFiles.map(task => ({
+          ...task,
+          status: 'pending' as const,
+          progress: 0,
+          error: undefined
+        }));
+        setUploadedFiles(resetTasks);
+        return;
+      }
+      
+      // 其他错误降级到前端并发创建
       message.warning('批量创建失败，正在使用逐个创建...');
       await handleConcurrentCreateTasks(pendingFiles);
     }
@@ -194,14 +223,24 @@ const TaskCreate: React.FC = () => {
         return { success: true, fileName: pendingFile.file.name };
       } catch (error: any) {
         tasks[taskIndex].status = 'error';
-        tasks[taskIndex].error = error.response?.data?.detail || '创建任务失败';
+        
+        // 处理后端返回的错误格式（可能是对象或字符串）
+        let errorMessage = '创建任务失败';
+        const errorDetail = error.response?.data?.detail;
+        if (typeof errorDetail === 'string') {
+          errorMessage = errorDetail;
+        } else if (typeof errorDetail === 'object' && errorDetail?.message) {
+          errorMessage = errorDetail.message;
+        }
+        
+        tasks[taskIndex].error = errorMessage;
         tasks[taskIndex].progress = 0;
         
         completedCount++;
         setCreationProgress({ current: completedCount, total: pendingFiles.length });
         setUploadedFiles([...tasks]);
         
-        message.error(`${pendingFile.file.name} 创建任务失败: ${tasks[taskIndex].error}`);
+        message.error(`${pendingFile.file.name} 创建任务失败: ${errorMessage}`);
         return { success: false, fileName: pendingFile.file.name };
       }
     });
@@ -339,7 +378,7 @@ const TaskCreate: React.FC = () => {
                   key={index}
                   size="small"
                   style={{ marginBottom: 8 }}
-                  bodyStyle={{ padding: '12px 16px' }}
+                  styles={{ body: { padding: '12px 16px' } }}
                 >
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

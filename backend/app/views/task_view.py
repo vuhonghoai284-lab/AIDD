@@ -11,7 +11,7 @@ from app.core.database import get_db
 from app.models.user import User
 from app.services.task import TaskService
 from app.services.report_service import ReportService
-from app.services.concurrency_service import concurrency_service, ConcurrencyLimitExceeded
+from app.services.enhanced_concurrency_service import get_enhanced_concurrency_service, ConcurrencyLimitExceeded
 from app.dto.task import TaskResponse, TaskDetail
 from app.dto.issue import FeedbackRequest, IssueResponse
 from app.dto.pagination import PaginationParams, PaginatedResponse
@@ -51,6 +51,8 @@ class TaskView(BaseView):
         self.router.add_api_route("/recover-timeout-tasks", self.recover_timeout_tasks, methods=["POST"])
         self.router.add_api_route("/schedule-pending-tasks", self.schedule_pending_tasks, methods=["POST"])
         self.router.add_api_route("/db-monitor", self.get_db_monitor_status, methods=["GET"])
+        self.router.add_api_route("/queue-status", self.get_queue_status, methods=["GET"])
+        self.router.add_api_route("/user/{user_id}/queue-status", self.get_user_queue_status, methods=["GET"])
         self.router.add_api_route("/{task_id}", self.get_task_detail, methods=["GET"], response_model=TaskDetail)
         self.router.add_api_route("/{task_id}", self.delete_task, methods=["DELETE"])
         self.router.add_api_route("/{task_id}/retry", self.retry_task, methods=["POST"])
@@ -74,7 +76,7 @@ class TaskView(BaseView):
         """创建任务"""
         # 检查并发限制
         try:
-            allowed, status_info = concurrency_service.check_concurrency_limits(
+            allowed, status_info = await get_enhanced_concurrency_service().check_concurrency_limits(
                 db, current_user, requested_tasks=1, raise_exception=True
             )
         except ConcurrencyLimitExceeded as e:
@@ -127,12 +129,12 @@ class TaskView(BaseView):
         
         # 检查并发限制（批量任务需要检查请求的任务数量）
         try:
-            allowed, status_info = concurrency_service.check_concurrency_limits(
+            allowed, status_info = await get_enhanced_concurrency_service().check_concurrency_limits(
                 db, current_user, requested_tasks=len(files), raise_exception=True
             )
         except ConcurrencyLimitExceeded as e:
             # 获取当前状态信息用于错误处理
-            _, status_info = concurrency_service.check_concurrency_limits(
+            _, status_info = await get_enhanced_concurrency_service().check_concurrency_limits(
                 db, current_user, requested_tasks=0, raise_exception=False
             )
             
@@ -307,7 +309,7 @@ class TaskView(BaseView):
         
         # 检查并发限制
         try:
-            allowed, status_info = concurrency_service.check_concurrency_limits(
+            allowed, status_info = await get_enhanced_concurrency_service().check_concurrency_limits(
                 db, current_user, requested_tasks=1, raise_exception=True
             )
         except ConcurrencyLimitExceeded as e:
@@ -448,7 +450,7 @@ class TaskView(BaseView):
         db: Session = Depends(get_db)
     ) -> dict:
         """获取并发状态信息"""
-        return concurrency_service.get_concurrency_status(db, current_user)
+        return get_enhanced_concurrency_service().get_concurrency_status(db, current_user)
     
     def update_user_concurrency_limit(
         self,
@@ -458,7 +460,7 @@ class TaskView(BaseView):
         db: Session = Depends(get_db)
     ) -> dict:
         """更新用户并发限制（仅管理员）"""
-        success = concurrency_service.update_user_concurrency_limit(
+        success = get_enhanced_concurrency_service().update_user_concurrency_limit(
             db, user_id, new_limit, current_user
         )
         if success:
@@ -641,6 +643,34 @@ class TaskView(BaseView):
         
         from app.core.database import get_db_monitor_status
         return get_db_monitor_status()
+    
+    async def get_queue_status(
+        self,
+        current_user: User = Depends(BaseView.get_current_user),
+        db: Session = Depends(get_db)
+    ) -> dict:
+        """获取队列状态信息（管理员功能）"""
+        if not (current_user.is_admin or current_user.is_system_admin):
+            raise HTTPException(403, "权限不足，仅管理员可查看队列状态")
+        
+        from app.services.database_queue_service import get_database_queue_service
+        queue_service = get_database_queue_service()
+        return await queue_service.get_queue_status()
+    
+    async def get_user_queue_status(
+        self,
+        user_id: int,
+        current_user: User = Depends(BaseView.get_current_user),
+        db: Session = Depends(get_db)
+    ) -> dict:
+        """获取用户队列状态"""
+        # 用户只能查看自己的状态，管理员可以查看任何用户的状态
+        if user_id != current_user.id and not (current_user.is_admin or current_user.is_system_admin):
+            raise HTTPException(403, "权限不足，只能查看自己的队列状态")
+        
+        from app.services.database_queue_service import get_database_queue_service
+        queue_service = get_database_queue_service()
+        return await queue_service.get_user_queue_status(user_id)
     
     @cache(expire=30, key_builder=build_statistics_cache_key)
     def get_task_statistics(

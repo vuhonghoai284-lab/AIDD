@@ -117,29 +117,27 @@ class TaskService(ITaskService):
             model_id=ai_model.id
         )
         
-        # 异步处理任务 - 使用优化的并发安全处理器
+        # 将任务加入队列系统，而不是直接处理
         try:
-            from app.services.new_task_processor import NewTaskProcessor
-            # 不传递数据库会话，让处理器自己创建独立的会话
-            processor = NewTaskProcessor()
+            from app.services.database_queue_service import get_database_queue_service
+            queue_service = get_database_queue_service()
             
-            # 检查当前是否在异步环境中
-            try:
-                # 尝试获取当前事件循环
-                loop = asyncio.get_running_loop()
-                # 在独立的任务中处理，避免阻塞主线程
-                task_future = asyncio.create_task(
-                    self._safe_process_task(processor, task.id)
-                )
-                print(f"✅ 后台任务已启动，任务ID: {task.id}")
-            except RuntimeError:
-                # 没有运行的事件循环，在测试环境或同步环境中是正常的
-                print(f"⚠️ 无法启动后台任务（非异步环境），任务ID: {task.id}")
-                print(f"📝 任务已创建，等待异步环境处理")
+            # 将任务加入队列
+            success = await queue_service.enqueue_task(
+                task_id=task.id,
+                user_id=user_id,
+                priority=5,  # 默认优先级
+                estimated_duration=300  # 默认5分钟
+            )
+            
+            if success:
+                print(f"✅ 任务 {task.id} 已加入队列，等待处理")
+            else:
+                print(f"⚠️ 任务 {task.id} 加入队列失败，可能队列已满")
                 
         except Exception as e:
-            print(f"❌ 启动后台任务时出错: {e}")
-            # 不抛出异常，让任务创建成功，只是处理会延后
+            print(f"❌ 任务 {task.id} 加入队列时出错: {e}")
+            # 不抛出异常，让任务创建成功，后续可以手动重试
         
         # 获取关联数据构建响应
         file_info = self.file_repo.get_by_id(task.file_id) if task.file_id else None

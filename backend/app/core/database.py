@@ -192,55 +192,81 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def _log_connection_pool_status(operation: str, previous_info: dict = None) -> dict:
-    """记录数据库连接池状态"""
+    """记录数据库连接池状态（兼容StaticPool）"""
     try:
         pool = engine.pool
         pool_type = pool.__class__.__name__
         
+        # StaticPool和其他连接池类型的兼容性处理
         current_info = {
-            'checked_in': pool.checkedin(),
-            'checked_out': pool.checkedout(), 
             'pool_type': pool_type,
             'timestamp': time.time()
         }
         
-        # 不同连接池类型有不同的方法
-        try:
-            current_info['overflow'] = pool.overflow()
-        except AttributeError:
-            current_info['overflow'] = 0
-            
-        try:
-            current_info['size'] = pool.size()
-        except AttributeError:
-            current_info['size'] = 1  # StaticPool固定为1
+        if pool_type == 'StaticPool':
+            # StaticPool是单连接池，没有checkedin/checkedout方法
+            current_info.update({
+                'checked_in': 0,  # StaticPool没有空闲连接概念
+                'checked_out': 1,  # StaticPool固定使用1个连接
+                'overflow': 0,     # StaticPool不支持溢出
+                'size': 1          # StaticPool固定大小为1
+            })
+        else:
+            # QueuePool等其他连接池类型
+            try:
+                current_info['checked_in'] = pool.checkedin()
+            except AttributeError:
+                current_info['checked_in'] = 0
+                
+            try:
+                current_info['checked_out'] = pool.checkedout()
+            except AttributeError:
+                current_info['checked_out'] = 0
+                
+            try:
+                current_info['overflow'] = pool.overflow()
+            except AttributeError:
+                current_info['overflow'] = 0
+                
+            try:
+                current_info['size'] = pool.size()
+            except AttributeError:
+                current_info['size'] = 1
         
-        # 计算变化量
-        if previous_info:
-            delta_out = current_info['checked_out'] - previous_info['checked_out']
-            delta_in = current_info['checked_in'] - previous_info['checked_in']
-            time_diff = (current_info['timestamp'] - previous_info['timestamp']) * 1000
+        # 计算变化量（仅对非StaticPool有意义）
+        if previous_info and pool_type != 'StaticPool':
+            delta_out = current_info['checked_out'] - previous_info.get('checked_out', 0)
+            delta_in = current_info['checked_in'] - previous_info.get('checked_in', 0)
+            time_diff = (current_info['timestamp'] - previous_info.get('timestamp', 0)) * 1000
             
-            if delta_out != 0 or delta_in != 0 or current_info['overflow'] > 0:
+            if abs(delta_out) > 0 or abs(delta_in) > 0 or current_info['overflow'] > 0:
                 print(f"🔗 [{operation}] 连接池变化 - "
                       f"活跃:{current_info['checked_out']}({delta_out:+d}) "
                       f"空闲:{current_info['checked_in']}({delta_in:+d}) "
                       f"溢出:{current_info['overflow']} "
                       f"耗时:{time_diff:.1f}ms")
-        else:
-            print(f"🔗 [{operation}] 连接池状态 - "
-                  f"活跃:{current_info['checked_out']} "
-                  f"空闲:{current_info['checked_in']} "
-                  f"总数:{current_info['size']} "
-                  f"溢出:{current_info['overflow']}")
+        elif not previous_info:
+            # 首次记录或StaticPool的状态记录
+            if pool_type == 'StaticPool':
+                # StaticPool状态记录过于频繁，仅在特殊操作或出现问题时记录
+                if ('FastAPI' in operation or 'error' in operation.lower() or 
+                    '异常' in operation or '失败' in operation):
+                    print(f"🔗 [{operation}] StaticPool状态 - 单连接池")
+            else:
+                print(f"🔗 [{operation}] {pool_type}状态 - "
+                      f"活跃:{current_info['checked_out']} "
+                      f"空闲:{current_info['checked_in']} "
+                      f"总数:{current_info['size']} "
+                      f"溢出:{current_info['overflow']}")
         
-        # 警告检查
-        if current_info['checked_out'] > 15:
-            print(f"⚠️ 数据库连接使用过多: {current_info['checked_out']} 个活跃连接")
-        if current_info['overflow'] > 10:
-            print(f"⚠️ 连接池溢出过多: {current_info['overflow']} 个溢出连接")
-        if current_info['checked_out'] + current_info['checked_in'] > current_info['size'] + 20:
-            print(f"🚨 连接池资源异常: 总使用数超出预期")
+        # 警告检查（StaticPool除外）
+        if pool_type != 'StaticPool':
+            if current_info['checked_out'] > 15:
+                print(f"⚠️ 数据库连接使用过多: {current_info['checked_out']} 个活跃连接")
+            if current_info['overflow'] > 10:
+                print(f"⚠️ 连接池溢出过多: {current_info['overflow']} 个溢出连接")
+            if current_info['checked_out'] + current_info['checked_in'] > current_info['size'] + 20:
+                print(f"🚨 连接池资源异常: 总使用数超出预期")
             
         return current_info
     except Exception as e:

@@ -32,6 +32,7 @@ interface UseTaskListReturn {
   refreshTasks: () => Promise<void>;
   backgroundRefresh: () => Promise<void>;
   refreshStatistics: () => Promise<void>;
+  goToPage: (page: number) => Promise<void>;
   // Stats
   statistics: TaskStatistics;
 }
@@ -385,6 +386,17 @@ export function useTaskList(options: UseTaskListOptions = {}): UseTaskListReturn
     await loadRealStatistics(true);
   }, [loadRealStatistics]);
 
+  // 页码跳转功能
+  const goToPage = useCallback(async (page: number) => {
+    console.log(`📄 跳转到第 ${page} 页`);
+    await loadTasks({
+      showLoading: true,
+      forceRefresh: false,
+      resetPage: false,
+      targetPage: page
+    });
+  }, [loadTasks]);
+
   // 搜索和过滤变更时的处理 - 使用防抖后的搜索文本
   useEffect(() => {
     console.log('🔍 搜索或过滤条件变更，重新加载数据');
@@ -467,6 +479,7 @@ export function useTaskList(options: UseTaskListOptions = {}): UseTaskListReturn
     refreshTasks,
     backgroundRefresh,
     refreshStatistics,
+    goToPage,
     statistics
   };
 }

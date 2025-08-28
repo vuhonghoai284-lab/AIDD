@@ -9,5 +9,6 @@ from app.models.user import User
 from app.models.ai_model import AIModel
 from app.models.file_info import FileInfo
 from app.models.task_share import TaskShare
+from app.models.task_queue import TaskQueue, QueueConfig
 
-__all__ = ["Task", "Issue", "AIOutput", "TaskLog", "User", "AIModel", "FileInfo", "TaskShare"]
+__all__ = ["Task", "Issue", "AIOutput", "TaskLog", "User", "AIModel", "FileInfo", "TaskShare", "TaskQueue", "QueueConfig"]

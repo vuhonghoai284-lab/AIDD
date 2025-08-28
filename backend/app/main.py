@@ -85,6 +85,23 @@ def setup_startup_event(app: FastAPI):
             print("✓ 后台任务服务已启动")
         except Exception as e:
             print(f"✗ 后台任务服务启动失败: {e}")
+        
+        # 初始化和启动队列系统
+        try:
+            from app.services.database_queue_service import initialize_queue_tables
+            from app.services.queue_worker_manager import get_queue_worker_manager
+            
+            # 初始化队列表
+            await initialize_queue_tables()
+            print("✓ 队列表初始化完成")
+            
+            # 启动工作者池
+            manager = get_queue_worker_manager()
+            await manager.start_worker_pool()
+            print("✓ 队列工作者池已启动 (20用户×3并发)")
+            
+        except Exception as e:
+            print(f"✗ 队列系统启动失败: {e}")
     
     @app.on_event("shutdown")
     async def shutdown_event():
@@ -96,6 +113,15 @@ def setup_startup_event(app: FastAPI):
             print("✓ 后台任务服务已停止")
         except Exception as e:
             print(f"✗ 后台任务服务停止失败: {e}")
+        
+        # 关闭队列工作者池
+        try:
+            from app.services.queue_worker_manager import get_queue_worker_manager
+            manager = get_queue_worker_manager()
+            await manager.shutdown_worker_pool()
+            print("✓ 队列工作者池已关闭")
+        except Exception as e:
+            print(f"✗ 队列系统关闭失败: {e}")
         
         # 关闭缓存连接
         try:
