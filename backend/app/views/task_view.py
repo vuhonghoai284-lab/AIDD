@@ -18,6 +18,18 @@ from app.dto.pagination import PaginationParams, PaginatedResponse
 from app.views.base import BaseView
 
 
+def build_statistics_cache_key(func, *args, **kwargs):
+    """构建统计缓存键，安全处理None情况"""
+    current_user = kwargs.get('current_user')
+    if not current_user:
+        return "task_statistics:anonymous"
+    elif hasattr(current_user, 'is_admin') and current_user.is_admin:
+        return "task_statistics:global"
+    else:
+        user_id = getattr(current_user, 'id', 'unknown')
+        return f"task_statistics:{user_id}"
+
+
 class TaskView(BaseView):
     """任务视图类"""
     
@@ -630,7 +642,7 @@ class TaskView(BaseView):
         from app.core.database import get_db_monitor_status
         return get_db_monitor_status()
     
-    @cache(expire=30, key_builder=lambda func, *args, **kwargs: f"task_statistics:{kwargs.get('current_user').id if not kwargs.get('current_user').is_admin else 'global'}")
+    @cache(expire=30, key_builder=build_statistics_cache_key)
     def get_task_statistics(
         self,
         current_user: User = Depends(BaseView.get_current_user),
