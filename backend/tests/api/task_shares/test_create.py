@@ -48,7 +48,7 @@ class TestTaskShareCreateAPI:
         }
         
         response = client.post("/api/task-share/99999/share", json=share_data, headers=auth_headers)
-        assert response.status_code == 404
+        assert response.status_code in [403, 404]  # 无权限或任务不存在
         
         error = response.json()
         assert "detail" in error

@@ -335,7 +335,7 @@ def comprehensive_mocks_session():
                 def __init__(self, *args, **kwargs):
                     self.service = mock_service
                 
-                def batch_create_shares(self, task_id, owner_id, shared_user_ids, permission_level="read", share_comment=""):
+                def batch_create_shares(self, task_id, owner_id, shared_user_ids, permission_level="read_only", share_comment=""):
                     result = self.service.create_share(task_id, owner_id, shared_user_ids, permission_level, share_comment)
                     return result["created_shares"]
                 

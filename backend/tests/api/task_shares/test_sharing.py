@@ -54,11 +54,11 @@ class TestTaskSharingWorkflow:
         # 测试分享不存在的任务
         share_data = {
             "shared_user_ids": [2],
-            "permission_level": "read"
+            "permission_level": "read_only"
         }
         
         response = client.post("/api/task-share/99999/share", json=share_data, headers=auth_headers)
-        assert response.status_code in [403, 404]  # 无权限或任务不存在
+        assert response.status_code == 403  # 无权限访问
         
     def test_sharing_data_validation(self, client: TestClient, sample_file, auth_headers):
         """测试分享数据验证"""

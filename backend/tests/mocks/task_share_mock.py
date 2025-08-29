@@ -17,7 +17,7 @@ class MockTaskShareService:
         self.next_share_id = 1
         
     def create_share(self, task_id: int, owner_id: int, shared_user_ids: List[int], 
-                    permission_level: str = "read", share_comment: str = "") -> Dict[str, Any]:
+                    permission_level: str = "read_only", share_comment: str = "") -> Dict[str, Any]:
         """创建任务分享"""
         # 模拟业务验证
         if not shared_user_ids:
@@ -183,7 +183,7 @@ class MockTaskShareService:
         """获取用户分享统计"""
         user_shares_count = 0
         active_shares_count = 0
-        permission_breakdown = {"read": 0, "write": 0, "admin": 0}
+        permission_breakdown = {"read_only": 0, "full_access": 0, "feedback_only": 0}
         
         # 统计用户作为分享者的分享
         for share in self.shares.values():
