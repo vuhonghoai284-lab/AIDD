@@ -8,23 +8,37 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 
-# 添加项目路径
-sys.path.append(str(Path(__file__).parent.parent))
+# 添加项目路径 - 确保能找到app模块
+backend_dir = Path(__file__).parent.parent
+sys.path.insert(0, str(backend_dir))
+
+# 如果在项目根目录运行，也添加backend目录
+project_root = backend_dir.parent
+if (project_root / 'backend').exists():
+    sys.path.insert(0, str(project_root / 'backend'))
 
 # 导入应用配置和模型
-from app.core.config import get_settings, init_settings
-from app.core.database import Base
+try:
+    from app.core.config import get_settings, init_settings
+    from app.core.database import Base
 
-# 导入所有模型（确保Alembic能检测到所有表）
-from app.models.user import User
-from app.models.ai_model import AIModel
-from app.models.file_info import FileInfo
-from app.models.task import Task
-from app.models.task_queue import TaskQueue, QueueConfig
-from app.models.task_share import TaskShare
-from app.models.issue import Issue
-from app.models.ai_output import AIOutput
-from app.models.task_log import TaskLog
+    # 导入所有模型（确保Alembic能检测到所有表）
+    from app.models.user import User
+    from app.models.ai_model import AIModel
+    from app.models.file_info import FileInfo
+    from app.models.task import Task
+    from app.models.task_queue import TaskQueue, QueueConfig
+    from app.models.task_share import TaskShare
+    from app.models.issue import Issue
+    from app.models.ai_output import AIOutput
+    from app.models.task_log import TaskLog
+except ImportError as e:
+    print(f"❌ Alembic导入错误: {e}")
+    print(f"📁 当前工作目录: {os.getcwd()}")
+    print(f"🐍 Python路径: {sys.path[:3]}...")
+    print(f"📂 Backend目录: {backend_dir}")
+    print("💡 请确保从backend目录运行Alembic或设置PYTHONPATH=.")
+    raise
 
 # Alembic配置对象
 config = context.config
