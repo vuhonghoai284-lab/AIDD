@@ -10,7 +10,7 @@ class TestCurrentUserAPI:
     """当前用户信息API测试类"""
     
     def test_get_current_user_info_success(self, client: TestClient, auth_headers):
-        """测试获取当前用户信息成功 - GET /api/users/me"""
+        """测试获取当前用户信息成功 - USER-001"""
         response = client.get("/api/users/me", headers=auth_headers)
         assert response.status_code == 200
         

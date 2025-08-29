@@ -9,8 +9,17 @@ from fastapi.testclient import TestClient
 class TestSingleAIOutputAPI:
     """单个AI输出API测试类"""
     
+    def test_get_ai_output_detail_not_found(self, client: TestClient, auth_headers):
+        """测试获取不存在的AI输出详情 - AI-002"""
+        response = client.get("/api/ai-outputs/99999", headers=auth_headers)
+        assert response.status_code == 404
+        
+        error = response.json()
+        assert "detail" in error
+        assert "AI输出不存在" in error["detail"]
+    
     def test_get_ai_output_detail_success(self, client: TestClient, sample_file, auth_headers):
-        """测试获取AI输出详情成功 - GET /api/ai-outputs/{id}"""
+        """测试获取AI输出详情成功"""
         # 先创建任务以生成AI输出
         filename, content, content_type = sample_file
         files = {"file": (filename, io.BytesIO(content), content_type)}

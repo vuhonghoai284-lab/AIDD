@@ -11,7 +11,7 @@ class TestTaskAIOutputsAPI:
     """任务AI输出API测试类"""
     
     def test_get_task_ai_outputs_success(self, client: TestClient, sample_file, auth_headers):
-        """测试获取任务AI输出成功 - GET /api/tasks/{id}/ai-outputs"""
+        """测试获取任务AI输出成功 - AI-001"""
         # 先创建任务
         filename, content, content_type = sample_file
         files = {"file": (filename, io.BytesIO(content), content_type)}
@@ -28,7 +28,7 @@ class TestTaskAIOutputsAPI:
         # 新创建的任务可能还没有AI输出，所以不验证数量
     
     def test_get_task_ai_outputs_with_filter(self, client: TestClient, sample_file, auth_headers):
-        """测试按操作类型过滤AI输出"""
+        """测试按操作类型过滤AI输出 - AI-003"""
         # 先创建任务
         filename, content, content_type = sample_file
         files = {"file": (filename, io.BytesIO(content), content_type)}

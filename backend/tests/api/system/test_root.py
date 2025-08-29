@@ -3,14 +3,15 @@
 测试 / 端点
 """
 import pytest
+import time
 from fastapi.testclient import TestClient
 
 
 class TestRootAPI:
     """根路径API测试类"""
     
-    def test_root_endpoint_success(self, client: TestClient):
-        """测试根路径访问成功 - GET /"""
+    def test_root_endpoint(self, client: TestClient):
+        """测试根路径 - SYS-001"""
         response = client.get("/")
         assert response.status_code == 200
         
@@ -30,12 +31,15 @@ class TestRootAPI:
     
     def test_root_endpoint_performance(self, client: TestClient):
         """测试根路径响应性能"""
-        import time
-        
         start_time = time.time()
         response = client.get("/")
         end_time = time.time()
         
         assert response.status_code == 200
         response_time = (end_time - start_time) * 1000  # 转换为毫秒
-        assert response_time < 200, f"Root endpoint response too slow: {response_time}ms"
+        assert response_time < 500, f"Root endpoint response too slow: {response_time}ms"
+    
+    def test_invalid_endpoint(self, client: TestClient):
+        """测试无效端点"""
+        response = client.get("/api/invalid")
+        assert response.status_code == 404

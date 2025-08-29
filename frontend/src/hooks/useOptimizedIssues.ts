@@ -83,7 +83,7 @@ export function useOptimizedIssues({
         feedback_status: statusFilter !== 'all' ? (
           statusFilter === 'accepted' ? 'accept' :
           statusFilter === 'rejected' ? 'reject' :
-          statusFilter === 'pending' ? null : undefined
+          statusFilter === 'pending' ? 'unprocessed' : undefined
         ) : undefined,
         sort_by: 'id',
         sort_order: 'desc' as const
@@ -132,7 +132,7 @@ export function useOptimizedIssues({
         feedback_status: statusFilter !== 'all' ? (
           statusFilter === 'accepted' ? 'accept' :
           statusFilter === 'rejected' ? 'reject' :
-          statusFilter === 'unprocessed' ? null : undefined
+          statusFilter === 'pending' ? 'unprocessed' : undefined
         ) : undefined,
         sort_by: 'id',
         sort_order: 'desc' as const

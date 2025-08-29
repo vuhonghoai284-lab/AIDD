@@ -9,8 +9,8 @@ from fastapi.testclient import TestClient
 class TestModelsAPI:
     """AI模型API测试类"""
     
-    def test_get_models_list_success(self, client: TestClient):
-        """测试获取AI模型列表成功 - GET /api/models"""
+    def test_get_models_list(self, client: TestClient):
+        """测试获取AI模型列表 - SYS-003"""
         response = client.get("/api/models")
         assert response.status_code == 200
         
@@ -33,7 +33,7 @@ class TestModelsAPI:
             assert 0 <= data["default_index"] < len(data["models"])
     
     def test_models_endpoint_performance(self, client: TestClient):
-        """测试模型接口性能"""
+        """测试模型接口性能 - PERF-001"""
         import time
         
         start_time = time.time()

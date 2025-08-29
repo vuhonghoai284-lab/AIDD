@@ -177,12 +177,19 @@ const TaskCreate: React.FC = () => {
         });
       }
       
-      // 延迟跳转，给后端一些时间处理任务
-      setTimeout(() => {
-        // 设置刷新标记，让任务列表在加载时自动刷新
-        localStorage.setItem('taskListShouldRefresh', 'true');
-        navigate('/');
-      }, queuedTasks > 0 ? 2000 : 1500);
+      // 立即跳转并更新任务列表缓存，无需延迟等待
+      // 将新创建的任务数据暂存到localStorage，供任务列表立即显示
+      const taskDataForCache = {
+        tasks: createdTasks,
+        timestamp: Date.now(),
+        processingCount: processingTasks,
+        queuedCount: queuedTasks
+      };
+      localStorage.setItem('newlyCreatedTasks', JSON.stringify(taskDataForCache));
+      localStorage.setItem('taskListShouldRefresh', 'true');
+      
+      // 立即跳转，不再等待
+      navigate('/');
       
     } catch (error: any) {
       console.error('Batch create error:', error);

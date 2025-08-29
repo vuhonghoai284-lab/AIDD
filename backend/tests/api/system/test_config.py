@@ -9,8 +9,8 @@ from fastapi.testclient import TestClient
 class TestConfigAPI:
     """系统配置API测试类"""
     
-    def test_get_client_config_success(self, client: TestClient):
-        """测试获取客户端配置成功 - GET /api/config"""
+    def test_get_client_config(self, client: TestClient):
+        """测试获取客户端配置 - SYS-002"""
         response = client.get("/api/config")
         assert response.status_code == 200
         

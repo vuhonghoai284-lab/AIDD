@@ -9,8 +9,8 @@ from fastapi.testclient import TestClient
 class TestUsersListAPI:
     """用户列表API测试类"""
     
-    def test_get_all_users_as_admin_success(self, client: TestClient, auth_headers):
-        """测试管理员获取所有用户成功 - GET /api/users/"""
+    def test_get_all_users_as_admin(self, client: TestClient, auth_headers):
+        """测试管理员获取所有用户 - USER-002"""
         response = client.get("/api/users/", headers=auth_headers)
         assert response.status_code == 200
         

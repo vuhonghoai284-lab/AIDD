@@ -117,6 +117,19 @@ class TaskCacheService:
                 del self.cache[key]
             
             print(f"🔄 清空用户 {user_id} 的任务缓存: {len(keys_to_remove)} 个条目")
+
+    def invalidate_cache_for_user(self, user_id: int):
+        """为特定用户失效缓存（新任务创建后立即调用）"""
+        keys_to_remove = []
+        for key in self.cache.keys():
+            # 匹配用户相关的缓存键
+            if f'"user_id": {user_id}' in key:
+                keys_to_remove.append(key)
+        
+        for key in keys_to_remove:
+            del self.cache[key]
+        
+        print(f"🆕 为用户 {user_id} 清空任务缓存: {len(keys_to_remove)} 个条目，确保新任务立即可见")
     
     def get_cache_stats(self) -> dict:
         """获取缓存统计信息"""

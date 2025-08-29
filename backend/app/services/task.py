@@ -143,8 +143,9 @@ class TaskService(ITaskService):
         file_info = self.file_repo.get_by_id(task.file_id) if task.file_id else None
         ai_model = self.model_repo.get_by_id(task.model_id) if task.model_id else None
         user_info = self.user_repo.get_by_id(task.user_id) if task.user_id else None
-        # 任务创建后，失效相关缓存
+        # 任务创建后，立即失效相关缓存确保新任务可见
         self._invalidate_statistics_cache(user_id)
+        self._invalidate_task_cache(user_id)
         
         issue_count = self.task_repo.count_issues(task.id)
         processed_issues = self.task_repo.count_processed_issues(task.id)
@@ -365,6 +366,7 @@ class TaskService(ITaskService):
         
         # 失效相关缓存
         self._invalidate_statistics_cache(user_id)
+        self._invalidate_task_cache(user_id)
         
         issue_count = self.task_repo.count_issues(task.id)
         processed_issues = self.task_repo.count_processed_issues(task.id)
@@ -804,3 +806,14 @@ class TaskService(ITaskService):
             print(f"🗑️ 标记统计缓存待更新: user_id={user_id}")
         except Exception as e:
             print(f"⚠️ 标记缓存失效失败: {e}")
+
+    def _invalidate_task_cache(self, user_id: Optional[int] = None):
+        """失效任务列表缓存 - 确保新创建的任务能立即显示"""
+        try:
+            from app.services.task_cache_service import get_task_cache_service
+            cache_service = get_task_cache_service()
+            if user_id:
+                cache_service.invalidate_cache_for_user(user_id)
+            print(f"🗑️ 标记任务列表缓存待更新: user_id={user_id}")
+        except Exception as e:
+            print(f"⚠️ 标记任务列表缓存失效失败: {e}")

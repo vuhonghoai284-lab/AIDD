@@ -150,11 +150,17 @@ class TaskView(BaseView):
                 'model_index': model_index
             })
         
-        # 分批创建任务：立即创建 + 排队创建
+        # 优化的分批创建任务：快速创建 + 并行排队
+        import asyncio
+        import time
+        
+        start_time = time.time()
+        print(f"🚀 开始优化批量创建: {len(files)} 个文件")
+        
         if max_immediate >= len(files):
             # 所有任务都可以立即创建
             print(f"✅ 所有 {len(files)} 个任务都可以立即创建")
-            return await service.batch_create_tasks(files_data, user_id=current_user.id)
+            result = await service.batch_create_tasks(files_data, user_id=current_user.id)
         else:
             # 需要分批创建：一部分立即创建，剩余排队
             immediate_files = files_data[:max_immediate] if max_immediate > 0 else []
@@ -162,19 +168,44 @@ class TaskView(BaseView):
             
             print(f"🔄 分批创建: 立即创建={len(immediate_files)}, 排队={len(queued_files)}")
             
-            # 立即创建可用的任务
+            # 并行创建任务和排队任务，减少等待时间
+            async def create_immediate():
+                if immediate_files:
+                    return await service.batch_create_tasks(immediate_files, user_id=current_user.id)
+                return []
+            
+            async def create_queued():
+                if queued_files:
+                    return await service.batch_create_queued_tasks(queued_files, user_id=current_user.id)
+                return []
+            
+            # 并行执行立即创建和排队创建
+            immediate_results, queued_results = await asyncio.gather(
+                create_immediate(),
+                create_queued(),
+                return_exceptions=True
+            )
+            
+            # 处理结果
             created_tasks = []
-            if immediate_files:
-                created_tasks = await service.batch_create_tasks(immediate_files, user_id=current_user.id)
-                print(f"✅ 立即创建 {len(created_tasks)} 个任务")
+            if not isinstance(immediate_results, Exception):
+                created_tasks.extend(immediate_results)
+                print(f"✅ 立即创建 {len(immediate_results)} 个任务")
+            else:
+                print(f"❌ 立即创建失败: {immediate_results}")
             
-            # 排队剩余任务
-            if queued_files:
-                queued_tasks = await service.batch_create_queued_tasks(queued_files, user_id=current_user.id)
-                created_tasks.extend(queued_tasks)
-                print(f"📋 已将 {len(queued_tasks)} 个任务加入排队")
+            if not isinstance(queued_results, Exception):
+                created_tasks.extend(queued_results)
+                print(f"📋 已将 {len(queued_results)} 个任务加入排队")
+            else:
+                print(f"❌ 排队创建失败: {queued_results}")
             
-            return created_tasks
+            result = created_tasks
+        
+        elapsed_time = (time.time() - start_time) * 1000
+        print(f"✅ 批量创建完成，耗时: {elapsed_time:.1f}ms, 成功创建 {len(result)} 个任务")
+        
+        return result
     
     def get_tasks(
         self,

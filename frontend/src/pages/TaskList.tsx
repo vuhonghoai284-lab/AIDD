@@ -66,17 +66,43 @@ const TaskList: React.FC = () => {
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const pageSize = 20; // 与useTaskList中的pageSize保持一致
   
-  // 检查是否需要刷新任务列表（从任务创建页面返回时）
+  // 检查是否需要刷新任务列表并立即显示新创建的任务
   useEffect(() => {
     const shouldRefresh = localStorage.getItem('taskListShouldRefresh');
+    const newTasksData = localStorage.getItem('newlyCreatedTasks');
+    
     if (shouldRefresh === 'true') {
       // 清除刷新标记
       localStorage.removeItem('taskListShouldRefresh');
-      // 延迟刷新，确保组件已完全挂载
-      setTimeout(() => {
-        console.log('🔄 从任务创建页面返回，自动刷新任务列表');
-        refreshTasks();
-      }, 100);
+      
+      // 如果有新创建的任务数据，立即显示
+      if (newTasksData) {
+        try {
+          const taskData = JSON.parse(newTasksData);
+          const { tasks: newTasks, processingCount, queuedCount } = taskData;
+          
+          console.log(`🎉 立即显示新创建的 ${newTasks.length} 个任务：${processingCount}个执行中，${queuedCount}个排队`);
+          
+          // 显示成功消息，包含状态信息
+          if (queuedCount > 0) {
+            message.success({
+              content: `🎉 任务已创建！${processingCount}个执行中，${queuedCount}个排队`,
+              duration: 3
+            });
+          } else {
+            message.success(`🎉 ${newTasks.length}个任务已创建并开始处理！`);
+          }
+          
+          // 清除临时缓存数据
+          localStorage.removeItem('newlyCreatedTasks');
+        } catch (error) {
+          console.error('解析新任务数据失败:', error);
+        }
+      }
+      
+      // 立即刷新任务列表
+      console.log('🔄 从任务创建页面返回，立即刷新任务列表');
+      refreshTasks();
     }
   }, [refreshTasks]);
   
