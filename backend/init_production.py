@@ -37,7 +37,15 @@ def init_production_database():
             from sqlalchemy import create_engine
             
             # 导入所有模型确保表定义完整
-            from app.models import *
+            from app.models.user import User
+            from app.models.ai_model import AIModel
+            from app.models.file_info import FileInfo
+            from app.models.task import Task
+            from app.models.task_queue import TaskQueue, QueueConfig
+            from app.models.task_share import TaskShare
+            from app.models.issue import Issue
+            from app.models.ai_output import AIOutput
+            from app.models.task_log import TaskLog
             
             settings = init_settings('config.prod.yaml')
             engine = create_engine(settings.database_url)
