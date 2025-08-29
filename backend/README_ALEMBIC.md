@@ -193,11 +193,53 @@ alembic downgrade <revision_id>
 python test_alembic_integration.py
 ```
 
+## 全新数据库部署
+
+### 新项目部署
+对于全新的数据库（无任何表），使用以下步骤：
+
+```bash
+# 1. 确保虚拟环境激活
+source venv/bin/activate
+
+# 2. 执行迁移创建所有表
+alembic upgrade head
+
+# 3. 验证表创建
+python -c "from app.core.database import engine; from sqlalchemy import inspect; print('表:', inspect(engine).get_table_names())"
+```
+
+### 多环境全新部署
+```bash
+# 开发环境（SQLite）
+CONFIG_FILE=config.yaml alembic upgrade head
+
+# 测试环境
+CONFIG_FILE=config.test.yaml alembic upgrade head  
+
+# 生产环境（MySQL）
+CONFIG_FILE=config.prod.yaml alembic upgrade head
+```
+
+### 验证部署结果
+完成迁移后应该看到以下表：
+- `users` (用户表)
+- `ai_models` (AI模型表)  
+- `file_infos` (文件信息表)
+- `tasks` (任务表)
+- `task_queue` (任务队列表)
+- `queue_config` (队列配置表)
+- `task_shares` (任务分享表)
+- `issues` (问题反馈表)
+- `ai_outputs` (AI输出表)
+- `task_logs` (任务日志表)
+- `alembic_version` (Alembic版本表)
+
 ## 从旧迁移系统迁移
 
 1. **备份现有数据**: 确保数据安全
-2. **生成初始迁移**: 基于现有表结构
-3. **标记为已应用**: 设置基线版本
+2. **生成初始迁移**: 基于现有表结构（已完成）
+3. **标记为已应用**: 设置基线版本 `alembic stamp head`
 4. **移除旧迁移代码**: 清理自定义迁移逻辑
 
 ## 注意事项
