@@ -3,6 +3,7 @@
 """
  
 import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -20,6 +21,95 @@ settings = get_settings()
 # 使用Alembic进行数据库迁移（替代手动创建表）
 # Base.metadata.create_all(bind=engine)  # 已被Alembic迁移系统替代
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    # 启动时的初始化操作
+    from app.services.model_initializer import model_initializer
+    from app.services.task_recovery_service import task_recovery_service
+    from app.services.background_task_service import background_task_service
+    from app.core.alembic_manager import run_migrations_on_startup
+    
+    # 1. 首先执行数据库迁移
+    try:
+        config_file = os.getenv('CONFIG_FILE')
+        await run_migrations_on_startup(config_file)
+        print("✓ 数据库迁移完成")
+    except Exception as e:
+        print(f"✗ 数据库迁移失败: {e}")
+        # 迁移失败时继续启动，但会记录错误
+    
+    # 2. 初始化缓存
+    try:
+        init_cache()
+        print("✓ 缓存系统已初始化")
+    except Exception as e:
+        print(f"✗ 缓存初始化失败: {e}")
+    
+    # 3. 初始化AI模型配置到数据库
+    db = next(get_db())
+    try:
+        models = model_initializer.initialize_models(db)
+        print(f"✓ 已初始化 {len(models)} 个AI模型")
+    except Exception as e:
+        print(f"✗ AI模型初始化失败: {e}")
+    
+    # 4. 任务恢复机制
+    try:
+        recovered_count = await task_recovery_service.recover_tasks_on_startup(db)
+        print(f"✓ 已恢复 {recovered_count} 个待处理任务")
+    except Exception as e:
+        print(f"✗ 任务恢复失败: {e}")
+    finally:
+        db.close()
+    
+    # 5. 启动后台任务服务
+    try:
+        await background_task_service.start()
+        print("✓ 后台任务服务已启动")
+    except Exception as e:
+        print(f"✗ 后台任务服务启动失败: {e}")
+    
+    # 6. 初始化和启动队列系统
+    try:
+        from app.services.queue_worker_manager import get_queue_worker_manager
+        
+        # 启动工作者池（表结构已由Alembic迁移创建）
+        manager = get_queue_worker_manager()
+        await manager.start_worker_pool()
+        print("✓ 队列工作者池已启动 (20用户×3并发)")
+        
+    except Exception as e:
+        print(f"✗ 队列系统启动失败: {e}")
+    
+    # 应用运行期间
+    yield
+    
+    # 关闭时的清理操作
+    from app.services.background_task_service import background_task_service
+    
+    try:
+        await background_task_service.stop()
+        print("✓ 后台任务服务已停止")
+    except Exception as e:
+        print(f"✗ 后台任务服务停止失败: {e}")
+    
+    # 关闭队列工作者池
+    try:
+        from app.services.queue_worker_manager import get_queue_worker_manager
+        manager = get_queue_worker_manager()
+        await manager.shutdown_worker_pool()
+        print("✓ 队列工作者池已停止")
+    except Exception as e:
+        print(f"✗ 队列工作者池停止失败: {e}")
+    
+    # 关闭缓存系统
+    try:
+        close_cache()
+        print("✓ 缓存系统已关闭")
+    except Exception as e:
+        print(f"✗ 缓存系统关闭失败: {e}")
+
 def create_app() -> FastAPI:
     """创建并配置FastAPI应用"""
     app = FastAPI(
@@ -27,7 +117,8 @@ def create_app() -> FastAPI:
         description="基于AI的文档质量检测系统后端API",
         version="2.0.0",
         debug=settings.server_config.get('debug', False),
-        redirect_slashes=True  # 启用自动斜杠重定向
+        redirect_slashes=True,  # 启用自动斜杠重定向
+        lifespan=lifespan
     )
     
     # 配置CORS - 允许所有来源访问
@@ -47,96 +138,6 @@ def create_app() -> FastAPI:
 # 创建应用实例
 app = create_app()
 
-def setup_startup_event(app: FastAPI):
-    """设置应用启动事件"""
-    @app.on_event("startup")
-    async def startup_event():
-        """应用启动时的初始化操作"""        
-        from app.services.model_initializer import model_initializer
-        from app.services.task_recovery_service import task_recovery_service
-        from app.services.background_task_service import background_task_service
-        from app.core.alembic_manager import run_migrations_on_startup
-        
-        # 1. 首先执行数据库迁移
-        try:
-            config_file = os.getenv('CONFIG_FILE')
-            await run_migrations_on_startup(config_file)
-            print("✓ 数据库迁移完成")
-        except Exception as e:
-            print(f"✗ 数据库迁移失败: {e}")
-            # 迁移失败时继续启动，但会记录错误
-        
-        # 2. 初始化缓存
-        try:
-            init_cache()
-            print("✓ 缓存系统已初始化")
-        except Exception as e:
-            print(f"✗ 缓存初始化失败: {e}")
-        
-        # 3. 初始化AI模型配置到数据库
-        db = next(get_db())
-        try:
-            models = model_initializer.initialize_models(db)
-            print(f"✓ 已初始化 {len(models)} 个AI模型")
-        except Exception as e:
-            print(f"✗ AI模型初始化失败: {e}")
-        
-        # 4. 任务恢复机制
-        try:
-            recovered_count = await task_recovery_service.recover_tasks_on_startup(db)
-            print(f"✓ 已恢复 {recovered_count} 个待处理任务")
-        except Exception as e:
-            print(f"✗ 任务恢复失败: {e}")
-        finally:
-            db.close()
-        
-        # 5. 启动后台任务服务
-        try:
-            await background_task_service.start()
-            print("✓ 后台任务服务已启动")
-        except Exception as e:
-            print(f"✗ 后台任务服务启动失败: {e}")
-        
-        # 6. 初始化和启动队列系统（现在通过Alembic迁移创建表）
-        try:
-            from app.services.queue_worker_manager import get_queue_worker_manager
-            
-            # 启动工作者池（表结构已由Alembic迁移创建）
-            manager = get_queue_worker_manager()
-            await manager.start_worker_pool()
-            print("✓ 队列工作者池已启动 (20用户×3并发)")
-            
-        except Exception as e:
-            print(f"✗ 队列系统启动失败: {e}")
-    
-    @app.on_event("shutdown")
-    async def shutdown_event():
-        """应用关闭时的清理操作"""
-        from app.services.background_task_service import background_task_service
-        
-        try:
-            await background_task_service.stop()
-            print("✓ 后台任务服务已停止")
-        except Exception as e:
-            print(f"✗ 后台任务服务停止失败: {e}")
-        
-        # 关闭队列工作者池
-        try:
-            from app.services.queue_worker_manager import get_queue_worker_manager
-            manager = get_queue_worker_manager()
-            await manager.shutdown_worker_pool()
-            print("✓ 队列工作者池已关闭")
-        except Exception as e:
-            print(f"✗ 队列系统关闭失败: {e}")
-        
-        # 关闭缓存连接
-        try:
-            close_cache()
-        except Exception as e:
-            print(f"✗ 缓存关闭失败: {e}")
-
-# 设置启动事件
-setup_startup_event(app)
 
 def setup_routes(app: FastAPI):
     """设置所有路由"""

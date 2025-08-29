@@ -83,17 +83,8 @@ def run_migrations_online() -> None:
     configuration = config.get_section(config.config_ini_section)
     configuration["sqlalchemy.url"] = settings.database_url
     
-    # 合并引擎配置 - 简化版本，避免复杂的嵌套配置
-    if 'pool_size' in engine_config:
-        configuration["sqlalchemy.pool_size"] = str(engine_config['pool_size'])
-    if 'max_overflow' in engine_config:
-        configuration["sqlalchemy.max_overflow"] = str(engine_config['max_overflow'])
-    if 'pool_timeout' in engine_config:
-        configuration["sqlalchemy.pool_timeout"] = str(engine_config['pool_timeout'])
-    if 'pool_recycle' in engine_config:
-        configuration["sqlalchemy.pool_recycle"] = str(engine_config['pool_recycle'])
-    if 'pool_pre_ping' in engine_config:
-        configuration["sqlalchemy.pool_pre_ping"] = str(engine_config['pool_pre_ping'])
+    # NullPool不支持连接池参数，所以只设置基本配置
+    # 迁移时使用简单的连接方式，避免连接池复杂性
 
     connectable = engine_from_config(
         configuration,

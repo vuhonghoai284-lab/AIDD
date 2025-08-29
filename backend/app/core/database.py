@@ -180,32 +180,60 @@ def get_db() -> Generator[Session, None, None]:
         
         yield db
     except Exception as e:
-        # 发生异常时回滚事务
+        # 发生异常时安全回滚事务
         try:
-            db.rollback()
-        except Exception:
-            pass  # 忽略回滚异常
-        monitor.log_session_error(session_id, str(e))
+            if hasattr(db, 'rollback'):
+                db.rollback()
+                print(f"🔄 会话异常，已执行回滚: {session_id}")
+        except Exception as rollback_error:
+            print(f"❌ 事务回滚失败: {rollback_error}")
+        monitor.log_session_error(session_id, f"会话异常: {str(e)}")
         raise e
     finally:
         # 记录会话使用时间
         session_time = (time.time() - session_start) * 1000
         
-        # 强制会话清理 - 解决会话泄漏问题
+        # 增强会话清理 - 生产环境稳定性优化
         try:
-            # 检查是否有未提交的事务
-            if hasattr(db, 'in_transaction') and callable(db.in_transaction):
-                if db.in_transaction():
-                    print(f"⚠️ 检测到未完成事务，强制回滚: {session_id}")
+            # 更准确的事务状态检查
+            try:
+                # 对于SQLAlchemy 1.4+，使用更准确的事务检查方式
+                if hasattr(db, 'get_transaction') and db.get_transaction() is not None:
+                    transaction = db.get_transaction()
+                    if transaction is not None and hasattr(transaction, 'is_active') and transaction.is_active:
+                        print(f"🔄 检测到活跃事务，执行安全回滚: {session_id}")
+                        db.rollback()
+                # 备用检查方式，但不打印错误日志（避免误报）
+                elif hasattr(db, 'in_transaction') and callable(db.in_transaction):
+                    if db.in_transaction():
+                        # 静默回滚，不打印错误（这是正常的清理操作）
+                        db.rollback()
+            except Exception as trans_check_error:
+                # 静默处理事务检查错误，执行保守的回滚
+                try:
                     db.rollback()
+                except:
+                    pass
             
             # 强制关闭会话连接
-            if hasattr(db, 'is_active') and db.is_active:
-                db.close()
-            elif hasattr(db, 'close'):
-                db.close()
+            try:
+                if hasattr(db, 'is_active') and db.is_active:
+                    db.close()
+                elif hasattr(db, 'close'):
+                    db.close()
+                    
+                # 对于MySQL，确保连接返回到连接池
+                if 'mysql' in str(engine.url) and hasattr(db, 'connection'):
+                    try:
+                        if hasattr(db.connection(), 'invalidate'):
+                            db.connection().invalidate()
+                    except:
+                        pass
+                        
+            except Exception as close_error:
+                print(f"❌ 数据库会话错误 [{session_id}]: 会话关闭失败: {close_error}")
                 
-            # 对于长时间会话，额外清理
+            # 对于长时间会话，执行额外清理
             if session_time > 10000:  # 超过10秒
                 print(f"🔄 检测到长时间会话，执行深度清理: {session_time:.1f}ms")
                 # 强制垃圾回收
@@ -213,7 +241,7 @@ def get_db() -> Generator[Session, None, None]:
                 gc.collect()
                 
         except Exception as cleanup_error:
-            print(f"❌ 数据库会话清理失败: {cleanup_error}")
+            print(f"❌ 数据库会话错误 [{session_id}]: 数据库会话清理失败: {cleanup_error}")
         
         # 性能日志
         if session_time > 5000:  # 超过5秒记录警告
