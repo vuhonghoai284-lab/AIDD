@@ -71,7 +71,11 @@ def test_migration_basic():
                 # 验证表是否创建
                 print("   验证表创建...")
                 from sqlalchemy import text
-                result = manager.session.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='test_table'"))
+                # 检测数据库类型并使用相应的查询
+                if 'sqlite' in str(manager.engine.url):
+                    result = manager.session.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='test_table'"))
+                else:  # MySQL
+                    result = manager.session.execute(text("SHOW TABLES LIKE 'test_table'"))
                 tables = result.fetchall()
                 assert len(tables) > 0, "测试表未创建"
                 print("   ✅ 测试表创建成功")
@@ -90,7 +94,11 @@ def test_migration_basic():
                 
                 # 验证表是否删除
                 print("   验证表删除...")
-                result = manager.session.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='test_table'"))
+                # 检测数据库类型并使用相应的查询
+                if 'sqlite' in str(manager.engine.url):
+                    result = manager.session.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='test_table'"))
+                else:  # MySQL
+                    result = manager.session.execute(text("SHOW TABLES LIKE 'test_table'"))
                 tables = result.fetchall()
                 assert len(tables) == 0, "测试表未删除"
                 print("   ✅ 测试表删除成功")
@@ -131,9 +139,15 @@ def test_backup_restore():
                 # 创建测试数据
                 print("   创建测试数据...")
                 from sqlalchemy import text
-                manager.session.execute(text(
-                    "CREATE TABLE IF NOT EXISTS backup_test (id INTEGER PRIMARY KEY, data TEXT)"
-                ))
+                # 检测数据库类型并使用相应的SQL语法
+                if 'sqlite' in str(manager.engine.url):
+                    manager.session.execute(text(
+                        "CREATE TABLE IF NOT EXISTS backup_test (id INTEGER PRIMARY KEY, data TEXT)"
+                    ))
+                else:  # MySQL
+                    manager.session.execute(text(
+                        "CREATE TABLE IF NOT EXISTS backup_test (id INT PRIMARY KEY AUTO_INCREMENT, data TEXT)"
+                    ))
                 manager.session.execute(text(
                     "INSERT INTO backup_test (data) VALUES ('test data')"
                 ))
@@ -149,7 +163,7 @@ def test_backup_restore():
                 # 修改数据
                 print("   修改数据...")
                 manager.session.execute(text(
-                    "UPDATE backup_test SET data = 'modified data'"
+                    "INSERT INTO backup_test (id, data) VALUES (1, 'modified data')"
                 ))
                 manager.session.commit()
                 
