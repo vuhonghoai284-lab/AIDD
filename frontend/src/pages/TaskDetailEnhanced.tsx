@@ -15,6 +15,7 @@ import {
 import { useParams, useNavigate } from 'react-router-dom';
 import { taskAPI } from '../api';
 import { TaskDetail as TaskDetailType, Issue, AIOutput, IssueSummary, AIOutputSummary } from '../types';
+import { useOptimizedIssues } from '../hooks/useOptimizedIssues';
 import TaskLogs from '../components/TaskLogs';
 import { formatInputText, formatJSON, decodeUnicode, isLikelyJSON } from '../utils/textFormatter';
 import './TaskDetailEnhanced.css';
@@ -40,12 +41,8 @@ const TaskDetailEnhanced: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [taskDetail, setTaskDetail] = useState<EnhancedTaskDetail | null>(null);
-  const [issues, setIssues] = useState<EnhancedIssue[]>([]);
-  const [issuesLoading, setIssuesLoading] = useState(false);
-  const [issuesTotal, setIssuesTotal] = useState(0); // 当前筛选条件下的问题总数
   const [allIssuesTotal, setAllIssuesTotal] = useState(0); // 任务的全部问题总数
   const [loading, setLoading] = useState(true);
-  const [feedbackLoading, setFeedbackLoading] = useState<{ [key: number]: boolean }>({});
   const [aiOutputs, setAiOutputs] = useState<AIOutput[]>([]);
   const [aiOutputsLoading, setAiOutputsLoading] = useState(false);
   
@@ -58,13 +55,30 @@ const TaskDetailEnhanced: React.FC = () => {
   const taskStatusRef = useRef<string | undefined>(undefined);
   
   // 分页相关状态
-  const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [expandedIssues, setExpandedIssues] = useState<Set<number>>(new Set());
   const [expandedSections, setExpandedSections] = useState<{ [key: number]: Set<string> }>({});
   const [expandedComments, setExpandedComments] = useState<Set<number>>(new Set());
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // 使用优化的问题管理Hook
+  const {
+    issues,
+    loading: issuesLoading,
+    currentPage,
+    totalIssues: issuesTotal,
+    hasNextPage,
+    feedbackLoading,
+    handleQuickFeedback: optimizedHandleQuickFeedback,
+    goToPage,
+    refreshCurrentPage
+  } = useOptimizedIssues({
+    taskId: parseInt(id || '0'),
+    pageSize,
+    severityFilter,
+    statusFilter
+  });
   const [aiOutputFilter, setAiOutputFilter] = useState<string>('all');
   const [aiStatusFilter, setAiStatusFilter] = useState<string>('all');
   const [aiOutputsLoaded, setAiOutputsLoaded] = useState(false); // 跟踪是否已加载AI输出
@@ -104,36 +118,6 @@ const TaskDetailEnhanced: React.FC = () => {
     setLoading(false);
   }, [id]);
 
-  const loadIssues = useCallback(async (page: number = 1, pageSize: number = 10) => {
-    if (!id) return;
-    
-    setIssuesLoading(true);
-    try {
-      const params = {
-        page,
-        page_size: pageSize,
-        search: undefined,
-        severity: severityFilter !== 'all' ? severityFilter : undefined,
-        issue_type: undefined,
-        feedback_status: statusFilter !== 'all' ? (
-          statusFilter === 'accepted' ? 'accept' :
-          statusFilter === 'rejected' ? 'reject' :
-          statusFilter === 'pending' ? 'unprocessed' :
-          statusFilter
-        ) : undefined,
-        sort_by: 'id',
-        sort_order: 'desc' as const
-      };
-      
-      const response = await taskAPI.getTaskIssues(parseInt(id), params);
-      setIssues(response.items as EnhancedIssue[]);
-      setIssuesTotal(response.total);
-    } catch (error) {
-      message.error('加载问题列表失败');
-      console.error(error);
-    }
-    setIssuesLoading(false);
-  }, [id, severityFilter, statusFilter]);
 
   const loadAIOutputs = useCallback(async (page: number = 1, pageSize: number = aiPageSize, forceReload = false) => {
     if (!id) return;
@@ -191,20 +175,9 @@ const TaskDetailEnhanced: React.FC = () => {
   }, [id, aiOutputFilter, aiPageSize, aiOutputsLoaded]);
 
   useEffect(() => {
-    // 先加载任务详情，成功后再加载问题
-    loadTaskDetail().then(() => {
-      // 加载问题列表
-      loadIssues(currentPage, pageSize);
-      // AI输出改为懒加载，只有用户点击标签页时才加载
-    });
-  }, [loadTaskDetail]); // 移除loadAIOutputs依赖，改为按需加载
-
-  // 分页、过滤条件变化时重新加载问题
-  useEffect(() => {
-    if (taskDetail) {
-      loadIssues(currentPage, pageSize);
-    }
-  }, [currentPage, pageSize, severityFilter, statusFilter, taskDetail]);
+    // 只加载任务详情，问题列表由优化Hook管理
+    loadTaskDetail();
+  }, [loadTaskDetail]);
 
   // 清理定时器 useEffect - 仅在组件卸载时清理
   useEffect(() => {
@@ -216,47 +189,22 @@ const TaskDetailEnhanced: React.FC = () => {
     };
   }, []); // 空依赖数组，仅在组件卸载时执行
 
-  const handleFeedback = useCallback(async (issueId: number, feedbackType: 'accept' | 'reject', comment?: string) => {
-    setFeedbackLoading(prev => ({ ...prev, [issueId]: true }));
-    try {
-      await taskAPI.submitFeedback(issueId, feedbackType, comment);
-      message.success('反馈已提交');
-      await loadTaskDetail();
-      await loadIssues(currentPage, pageSize); // 重新加载当前页问题
-      
-      // 提交反馈后重新检查下载权限（可能影响下载权限）
-      if (id && taskDetail?.task.status === 'completed') {
-        await checkDownloadPermission(parseInt(id));
-      }
-    } catch (error) {
-      message.error('提交反馈失败');
-    }
-    setFeedbackLoading(prev => ({ ...prev, [issueId]: false }));
-  }, [id, taskDetail?.task.status, loadTaskDetail, loadIssues, currentPage, pageSize]);
-
+  // 包装优化的反馈处理函数，同时更新任务详情和下载权限
   const handleQuickFeedback = useCallback(async (issueId: number, feedbackType: 'accept' | 'reject' | null, comment?: string) => {
-    setFeedbackLoading(prev => ({ ...prev, [issueId]: true }));
+    await optimizedHandleQuickFeedback(issueId, feedbackType, comment);
     
-    try {
-      if (feedbackType === null) {
-        // 重新处理：清除之前的反馈，通过提交空的反馈类型来实现
-        await taskAPI.submitFeedback(issueId, '', comment);
-        message.success('已重置，可重新处理');
-      } else {
-        await taskAPI.submitFeedback(issueId, feedbackType, comment);
-        message.success(
-          feedbackType === 'accept' ? '已接受此问题' : '已拒绝此问题',
-          1.5
-        );
+    // 异步更新任务详情和下载权限（不阻塞UI）
+    setTimeout(async () => {
+      try {
+        await loadTaskDetail();
+        if (id && taskDetail?.task.status === 'completed') {
+          await checkDownloadPermission(parseInt(id));
+        }
+      } catch (error) {
+        console.warn('更新任务详情失败:', error);
       }
-      await loadTaskDetail();
-      await loadIssues(currentPage, pageSize); // 重新加载当前页问题
-    } catch (error) {
-      message.error('操作失败');
-    }
-    
-    setFeedbackLoading(prev => ({ ...prev, [issueId]: false }));
-  }, [loadTaskDetail, loadIssues, currentPage, pageSize]);
+    }, 100);
+  }, [optimizedHandleQuickFeedback, loadTaskDetail, id, taskDetail?.task.status]);
 
   // 检查下载权限 - 内联函数避免依赖问题
   const checkDownloadPermission = async (taskId: number) => {
@@ -573,7 +521,7 @@ const TaskDetailEnhanced: React.FC = () => {
                           value={severityFilter} 
                           onChange={(e) => {
                             setSeverityFilter(e.target.value);
-                            setCurrentPage(1);
+                            goToPage(1);
                           }}
                           size="small"
                         >
@@ -599,7 +547,7 @@ const TaskDetailEnhanced: React.FC = () => {
                           value={statusFilter} 
                           onChange={(e) => {
                             setStatusFilter(e.target.value);
-                            setCurrentPage(1);
+                            goToPage(1);
                           }}
                           size="small"
                         >
@@ -715,11 +663,12 @@ const TaskDetailEnhanced: React.FC = () => {
                       <div style={{ textAlign: 'center', padding: 50 }}>
                         <Spin size="large" tip="加载问题中..." />
                       </div>
-                    ) : displayIssues.length > 0 ? (
-                        displayIssues.map((issue, index) => (
+                    ) : issues.length > 0 ? (
+                      <div className="issues-container">
+                        {issues.map((issue, index) => (
                         <Card 
                           key={issue.id} 
-                          className={`issue-card-enhanced issue-severity-${issue.severity.toLowerCase()} ${issue.feedback_type ? 'processed' : 'pending'}`}
+                          className={`issue-card-enhanced issue-item ${issue.isRemoving ? 'removing' : ''} ${issue.isNew ? 'new-item' : ''} issue-severity-${issue.severity.toLowerCase()} ${issue.feedback_type ? 'processed' : 'pending'}`}
                           size="small"
                         >
                           {/* 第一行：问题编号 + 级别 + 错误类型 + 状态 */}
@@ -853,13 +802,8 @@ const TaskDetailEnhanced: React.FC = () => {
                                     value={issue.satisfaction_rating || 0}
                                     onChange={async (value) => {
                                       try {
-                                        // 更新当前显示的问题列表
-                                        const newIssues = [...issues];
-                                        const idx = newIssues.findIndex(i => i.id === issue.id);
-                                        if (idx >= 0) {
-                                          newIssues[idx].satisfaction_rating = value;
-                                          setIssues(newIssues);
-                                        }
+                                        // 直接更新当前问题对象
+                                        issue.satisfaction_rating = value;
                                         await taskAPI.submitSatisfactionRating(issue.id, value);
                                         message.success('评分已保存');
                                       } catch (error) {
@@ -973,12 +917,8 @@ const TaskDetailEnhanced: React.FC = () => {
                                   rows={3}
                                   value={issue.feedback_comment || ''}
                                   onChange={(e) => {
-                                    const newIssues = [...issues];
-                                    const idx = newIssues.findIndex(i => i.id === issue.id);
-                                    if (idx >= 0) {
-                                      newIssues[idx].feedback_comment = e.target.value;
-                                      setIssues(newIssues);
-                                    }
+                                    // 直接更新当前问题对象的评论
+                                    issue.feedback_comment = e.target.value;
                                   }}
                                   className="comment-textarea"
                                 />
@@ -1005,12 +945,9 @@ const TaskDetailEnhanced: React.FC = () => {
                                           const template = templates[parseInt(key) - 1] || '';
                                           
                                           if (template) {
-                                            const newIssues = [...issues];
-                                            const idx = newIssues.findIndex(i => i.id === issue.id);
-                                            if (idx >= 0) {
-                                              newIssues[idx].feedback_comment = template;
-                                              setIssues(newIssues);
-                                            }
+                                            // 直接设置评论到当前问题的状态，不更新整个列表
+                                            // 这个更改将在保存时提交到服务器
+                                            issue.feedback_comment = template;
                                           }
                                         }
                                       }}
@@ -1024,16 +961,8 @@ const TaskDetailEnhanced: React.FC = () => {
                                       type="primary"
                                       onClick={async () => {
                                         try {
-                                          // 如果已有反馈类型，更新整个反馈；否则只保存评论
-                                          if (issue.feedback_type) {
-                                            await handleFeedback(issue.id, issue.feedback_type, issue.feedback_comment);
-                                          } else {
-                                            // 使用新的API只更新评论，不改变反馈状态
-                                            await taskAPI.updateCommentOnly(issue.id, issue.feedback_comment);
-                                            // 重新加载任务详情和问题列表以获取最新的评论
-                                            await loadTaskDetail();
-                                            await loadIssues(currentPage, pageSize);
-                                          }
+                                          // 保存评论，不刷新页面
+                                          await taskAPI.updateCommentOnly(issue.id, issue.feedback_comment);
                                           message.success('评论已保存');
                                           toggleComment(issue.id);
                                         } catch (error) {
@@ -1055,7 +984,8 @@ const TaskDetailEnhanced: React.FC = () => {
                             </div>
                           )}
                         </Card>
-                        ))
+                        ))}
+                      </div>
                     ) : (
                       <div style={{ textAlign: 'center', padding: '40px 20px' }}>
                         <Empty 
@@ -1083,20 +1013,18 @@ const TaskDetailEnhanced: React.FC = () => {
                     )}
 
                     {/* 分页器 */}
-                    {hasAnyIssues && totalIssues > 0 && (
+                    {hasAnyIssues && issuesTotal > 0 && (
                       <div className="pagination-container">
                         <Pagination
                           current={currentPage}
                           pageSize={pageSize}
-                          total={totalIssues}
+                          total={issuesTotal}
                           onChange={(page) => {
-                            setCurrentPage(page);
-                            loadIssues(page, pageSize);
+                            goToPage(page);
                           }}
                           onShowSizeChange={(_, size) => {
                             setPageSize(size);
-                            setCurrentPage(1);
-                            loadIssues(1, size);
+                            goToPage(1);
                           }}
                           showSizeChanger
                           showQuickJumper
