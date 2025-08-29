@@ -52,6 +52,10 @@ class ReportService:
         if task.status != "completed":
             return {"can_download": False, "reason": "任务尚未完成，请等待任务处理完成"}
         
+        # 管理员特权：可以直接下载报告，无需等待问题处理完成
+        if user.is_admin or user.is_system_admin:
+            return {"can_download": True, "reason": "管理员权限"}
+        
         # 检查问题处理状态
         total_issues = self.task_repo.count_issues(task_id)
         processed_issues = self.task_repo.count_processed_issues(task_id)
