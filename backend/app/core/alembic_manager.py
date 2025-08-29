@@ -145,13 +145,31 @@ class AlembicManager:
 
 # FastAPI集成函数
 async def run_migrations_on_startup(config_file: Optional[str] = None):
-    """FastAPI启动时自动执行迁移"""
+    """FastAPI启动时自动执行迁移（增强错误处理）"""
     try:
         manager = AlembicManager(config_file)
+        
+        # 首先测试数据库连接
+        try:
+            from sqlalchemy import create_engine
+            settings = init_settings(config_file) if config_file else get_settings()
+            engine = create_engine(settings.database_url)
+            # 测试连接
+            with engine.connect() as conn:
+                pass
+            print("✓ 数据库连接测试成功")
+        except Exception as conn_error:
+            print(f"❌ 数据库连接失败: {conn_error}")
+            print("💡 请检查生产环境数据库配置和网络连接")
+            raise conn_error
+        
+        # 执行迁移
         manager.upgrade("head")
         logger.info("✅ 数据库迁移完成")
+        
     except Exception as e:
         logger.error(f"❌ 数据库迁移失败: {e}")
+        print(f"🔧 迁移详细错误: {str(e)}")
         raise
 
 

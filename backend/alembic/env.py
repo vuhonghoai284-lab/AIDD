@@ -8,6 +8,10 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 
+# 加载.env文件（如果存在）
+from dotenv import load_dotenv
+load_dotenv()
+
 # 添加项目路径 - 确保能找到app模块
 backend_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(backend_dir))
@@ -59,7 +63,10 @@ if context.get_x_argument(as_dictionary=True).get('config_file'):
 # 根据指定的配置文件初始化设置
 if custom_config_file:
     print(f"🔧 使用自定义配置文件: {custom_config_file}")
+    # 确保在配置初始化前重新加载环境变量
+    load_dotenv(override=True)  # 重新加载.env，覆盖现有变量
     settings = init_settings(custom_config_file)
+    print(f"🌐 数据库类型: {settings.database_config.get('type', 'unknown')}")
 else:
     settings = get_settings()
     print("🔧 使用默认配置文件")

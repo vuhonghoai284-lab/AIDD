@@ -5,6 +5,10 @@ import os
 import yaml
 from typing import Dict, Any, List, Optional
 from pathlib import Path
+from dotenv import load_dotenv
+
+# 在模块加载时就加载.env文件
+load_dotenv()
 
 
 class Settings:

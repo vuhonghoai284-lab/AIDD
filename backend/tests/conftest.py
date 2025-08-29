@@ -134,7 +134,14 @@ def admin_user_token():
     """管理员token"""
     return {
         "token": "test_admin_token", 
-        "user": {"id": 1, "username": "sys_admin", "is_admin": True}
+        "user": {
+            "id": 1, 
+            "uid": "sys_admin", 
+            "display_name": "系统管理员",
+            "email": "admin@test.com",
+            "is_admin": True,
+            "is_system_admin": True
+        }
     }
 
 @pytest.fixture(scope="session")
@@ -206,13 +213,16 @@ def comprehensive_mocks_session():
             # 检查预定义的token
             if token in valid_tokens:
                 user_data = valid_tokens[token]
+                from datetime import datetime
                 return User(
                     id=user_data["id"],
                     uid=user_data["uid"],
                     display_name=user_data["display_name"],
                     email=user_data["email"],
                     is_admin=user_data["is_admin"],
-                    is_system_admin=user_data["is_system_admin"]
+                    is_system_admin=user_data["is_system_admin"],
+                    created_at=datetime.utcnow(),
+                    last_login_at=datetime.utcnow()
                 )
             
             # 检查是否是login_user方法生成的token格式
@@ -224,23 +234,29 @@ def comprehensive_mocks_session():
                         user_id = int(parts[2])
                         # 根据用户ID查找对应的用户信息
                         if user_id == 2121:  # sys_admin的预期ID
+                            from datetime import datetime
                             return User(
                                 id=user_id,
                                 uid="sys_admin",
                                 display_name="系统管理员",
                                 email="admin@example.com",
                                 is_admin=True,
-                                is_system_admin=True
+                                is_system_admin=True,
+                                created_at=datetime.utcnow(),
+                                last_login_at=datetime.utcnow()
                             )
                         else:
                             # 其他mock token用户
+                            from datetime import datetime
                             return User(
                                 id=user_id,
                                 uid=f"mock_user_{user_id}",
                                 display_name=f"Mock用户{user_id}",
                                 email=f"mock{user_id}@test.com",
                                 is_admin=False,
-                                is_system_admin=False
+                                is_system_admin=False,
+                                created_at=datetime.utcnow(),
+                                last_login_at=datetime.utcnow()
                             )
                 except ValueError:
                     pass
@@ -354,6 +370,7 @@ def comprehensive_mocks(monkeypatch):
         
         if token in token_map:
             user_data = token_map[token]
+            from datetime import datetime
             # 创建User对象
             user = User(
                 id=user_data["id"],
@@ -361,11 +378,14 @@ def comprehensive_mocks(monkeypatch):
                 display_name=user_data["display_name"],
                 email=user_data["email"],
                 is_admin=user_data["is_admin"],
-                is_system_admin=user_data["is_system_admin"]
+                is_system_admin=user_data["is_system_admin"],
+                created_at=datetime.utcnow(),
+                last_login_at=datetime.utcnow()
             )
             return user
         
         # 动态生成mock用户
+        from datetime import datetime
         user_id = abs(hash(token)) % 10000 + 100
         user = User(
             id=user_id,
@@ -373,7 +393,9 @@ def comprehensive_mocks(monkeypatch):
             display_name=f"Mock用户{user_id}",
             email=f"mock{user_id}@test.com",
             is_admin=False,
-            is_system_admin=False
+            is_system_admin=False,
+            created_at=datetime.utcnow(),
+            last_login_at=datetime.utcnow()
         )
         return user
     

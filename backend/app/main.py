@@ -46,7 +46,14 @@ async def lifespan(app: FastAPI):
             print(f"✗ 数据库表创建失败: {fallback_error}")
     except Exception as e:
         print(f"✗ 数据库迁移失败: {e}")
-        # 迁移失败时继续启动，但会记录错误
+        print("🔄 尝试使用SQLAlchemy降级创建表...")
+        # 迁移失败时使用降级方案
+        try:
+            Base.metadata.create_all(bind=engine)
+            print("✓ 使用SQLAlchemy创建数据库表（降级模式）")
+        except Exception as fallback_error:
+            print(f"✗ 数据库表创建失败: {fallback_error}")
+            print("❌ 数据库初始化完全失败，应用可能无法正常工作")
     
     # 2. 初始化缓存
     try:
