@@ -164,8 +164,24 @@ cd frontend && npm run preview
 
 ### Database Operations
 ```bash
-# The system uses SQLite for development, no separate database setup required
-# Database file is located at: ./data/app.db
+# Database migrations with Alembic (recommended)
+cd backend && alembic revision --autogenerate -m "migration description"  # Generate migration
+cd backend && alembic upgrade head                                        # Apply migrations
+cd backend && alembic downgrade -1                                       # Rollback last migration
+cd backend && alembic current                                            # Show current version
+cd backend && alembic history                                            # Show migration history
+
+# Custom config file support
+cd backend && CONFIG_FILE=config.test.yaml alembic upgrade head          # Use test config
+cd backend && alembic -x config_file=config.test.yaml upgrade head       # Alternative syntax
+
+# Python integration (alternative to alembic CLI)
+cd backend && python app/core/alembic_manager.py generate --message "description"
+cd backend && python app/core/alembic_manager.py upgrade
+cd backend && python app/core/alembic_manager.py --config-file config.test.yaml upgrade
+
+# Legacy database setup (deprecated - use Alembic instead)
+# Database file is located at: ./data/app.db (SQLite) or configured MySQL database
 ```
 
 ### Testing
@@ -289,10 +305,12 @@ Planned feature using MCP+Agent for operational validation (not yet implemented 
 ### 任务处理
 - 所有回答通过中文进行回复
 - 任务创建的临时测试脚本统一放到tmp目录中，任务结束时请清理
-- 使用pytest标记系统组织测试: `@pytest.mark.unit`, `@pytest.mark.integration`
+- 在开始任务前，请尽可能使用稳定、开源、成熟的方案或开源库，非必要不要自己手动实现
+
 
 ### Testing Strategy
 - **Backend**: pytest with fixtures, mock services, database isolation
 - **Frontend**: Vitest for unit tests, Playwright for E2E tests
 - **Test Categories**: unit, integration, e2e, security, performance markers
 - **Coverage Thresholds**: Frontend 80% line coverage, Backend comprehensive test suite
+- 使用pytest标记系统组织测试: `@pytest.mark.unit`, `@pytest.mark.integration`

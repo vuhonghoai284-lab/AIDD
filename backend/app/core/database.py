@@ -35,16 +35,18 @@ def get_engine_config():
             'connect_args': {
                 'charset': mysql_config.get('charset', 'utf8mb4'),
                 'autocommit': False,
-                'connect_timeout': 10,  # 减少连接超时，快速失败
-                'read_timeout': 15,     # 减少读取超时
-                'write_timeout': 15,    # 减少写入超时
-                # MySQL性能优化参数
-                'init_command': "SET SESSION innodb_lock_wait_timeout = 5, lock_wait_timeout = 5",
+                'connect_timeout': 15,  # 增加连接超时，避免网络波动
+                'read_timeout': 30,     # 增加读取超时
+                'write_timeout': 30,    # 增加写入超时
+                # MySQL性能和稳定性优化参数
+                'init_command': "SET SESSION innodb_lock_wait_timeout = 10, lock_wait_timeout = 10, wait_timeout = 28800, interactive_timeout = 28800",
+                'sql_mode': 'TRADITIONAL',  # 严格模式
+                'use_unicode': True,
             },
             'pool_size': pool_config.get('pool_size', 25),
             'max_overflow': pool_config.get('max_overflow', 30),
-            'pool_timeout': pool_config.get('pool_timeout', 10),  # 减少池获取超时
-            'pool_recycle': pool_config.get('pool_recycle', 1800),  # 30分钟回收连接
+            'pool_timeout': pool_config.get('pool_timeout', 20),  # 增加池获取超时
+            'pool_recycle': pool_config.get('pool_recycle', 3600),  # 增加到1小时，避免频繁重连
             'pool_pre_ping': pool_config.get('pool_pre_ping', True),
             'pool_reset_on_return': pool_config.get('pool_reset_on_return', 'rollback'),
             'echo': False,  # 可根据需要开启SQL日志
@@ -126,11 +128,38 @@ def get_db() -> Generator[Session, None, None]:
         # 添加连接健康检查，确保会话可用
         try:
             db.execute(text("SELECT 1"))
+            
+            # 为MySQL添加会话级别的优化设置
+            if 'mysql' in str(engine.url):
+                try:
+                    # MySQL会话级别优化，提高稳定性
+                    db.execute(text("SET SESSION sql_mode = 'TRADITIONAL'"))
+                    db.execute(text("SET SESSION wait_timeout = 28800"))  # 8小时
+                    db.execute(text("SET SESSION interactive_timeout = 28800"))  # 8小时
+                    db.execute(text("SET SESSION innodb_lock_wait_timeout = 10"))  # 10秒锁等待
+                    db.commit()
+                    print(f"✅ MySQL会话优化完成: {session_id}")
+                except Exception as mysql_error:
+                    print(f"⚠️ MySQL会话优化失败: {mysql_error}")
+                    # 不抛出异常，继续使用默认设置
+                    
         except Exception as conn_error:
             print(f"⚠️ 数据库连接异常，重新创建会话: {conn_error}")
             monitor.log_session_error(session_id, f"连接异常: {conn_error}")
-            db.close()
+            try:
+                db.close()
+            except:
+                pass
             db = SessionLocal()
+            
+            # 重新测试连接
+            try:
+                db.execute(text("SELECT 1"))
+                print(f"✅ 数据库会话重新创建成功: {session_id}")
+            except Exception as retry_error:
+                print(f"❌ 数据库会话重新创建失败: {retry_error}")
+                monitor.log_session_error(session_id, f"重新创建失败: {retry_error}")
+                # 继续使用，让上层处理错误
         
         # 为SQLite设置WAL模式和优化参数，减少锁竞争
         if 'sqlite' in str(engine.url):

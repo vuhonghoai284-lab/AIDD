@@ -672,19 +672,29 @@ class TaskView(BaseView):
         queue_service = get_database_queue_service()
         return await queue_service.get_user_queue_status(user_id)
     
-    @cache(expire=30, key_builder=build_statistics_cache_key)
     def get_task_statistics(
         self,
         current_user: User = Depends(BaseView.get_current_user),
         db: Session = Depends(get_db)
     ) -> dict:
-        """获取任务统计数据（使用fastapi-cache2缓存30秒）"""
-        service = TaskService(db)
-        # 管理员可以查看所有任务统计，普通用户只能查看自己的任务统计
-        if current_user.is_admin:
-            return service.get_task_statistics(user_id=None)
-        else:
-            return service.get_task_statistics(user_id=current_user.id)
+        """获取任务统计数据（临时移除缓存避免生产环境认证问题）"""
+        try:
+            # 额外的认证检查，确保用户有效
+            if not current_user or not hasattr(current_user, 'id'):
+                from fastapi import HTTPException
+                raise HTTPException(status_code=401, detail="用户认证无效")
+            
+            service = TaskService(db)
+            # 管理员可以查看所有任务统计，普通用户只能查看自己的任务统计
+            if hasattr(current_user, 'is_admin') and current_user.is_admin:
+                return service.get_task_statistics(user_id=None)
+            else:
+                return service.get_task_statistics(user_id=current_user.id)
+                
+        except Exception as e:
+            print(f"❌ 获取任务统计失败: {e}")
+            from fastapi import HTTPException
+            raise HTTPException(status_code=500, detail=f"获取统计数据失败: {str(e)}")
 
 
 # 创建视图实例并导出router

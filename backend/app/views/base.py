@@ -17,24 +17,42 @@ class BaseView:
     
     @staticmethod
     def get_current_user(authorization: str = Header(None), db: Session = Depends(get_db)) -> User:
-        """获取当前登录用户（优化版本）"""
+        """获取当前登录用户（生产环境增强版本）"""
         import time
         start_time = time.time()
         
-        if not authorization:
-            raise HTTPException(status_code=401, detail="缺少认证信息")
-        
-        # 解析Bearer token
-        scheme, _, token = authorization.partition(" ")
-        if scheme.lower() != "bearer":
-            raise HTTPException(status_code=401, detail="无效的认证方案")
-        
         try:
+            if not authorization:
+                print("❌ 认证失败: 缺少Authorization头")
+                raise HTTPException(status_code=401, detail="缺少认证信息")
+            
+            # 解析Bearer token
+            scheme, _, token = authorization.partition(" ")
+            if scheme.lower() != "bearer":
+                print(f"❌ 认证失败: 无效的认证方案 '{scheme}'")
+                raise HTTPException(status_code=401, detail="无效的认证方案")
+            
+            if not token or len(token) < 10:
+                print("❌ 认证失败: Token为空或过短")
+                raise HTTPException(status_code=401, detail="无效的认证令牌")
+            
+            # 验证数据库会话
+            if not db:
+                print("❌ 数据库会话获取失败")
+                raise HTTPException(status_code=500, detail="服务器内部错误")
+            
             # 验证token
             auth_service = AuthService(db)
             user = auth_service.verify_token(token)
+            
             if not user:
+                print("❌ Token验证失败: verify_token返回None")
                 raise HTTPException(status_code=401, detail="无效的认证令牌")
+            
+            # 验证用户对象完整性
+            if not hasattr(user, 'id') or not hasattr(user, 'uid'):
+                print(f"❌ 用户对象不完整: {type(user)}, 属性: {dir(user) if user else 'None'}")
+                raise HTTPException(status_code=401, detail="用户数据异常")
             
             # 记录性能日志
             elapsed_time = (time.time() - start_time) * 1000
@@ -49,7 +67,7 @@ class BaseView:
             raise
         except Exception as e:
             elapsed_time = (time.time() - start_time) * 1000
-            print(f"❌ 用户认证异常: {e}, 耗时: {elapsed_time:.1f}ms")
+            print(f"❌ 用户认证异常: {e}, 耗时: {elapsed_time:.1f}ms, 异常类型: {type(e)}")
             raise HTTPException(status_code=500, detail="认证服务异常")
     
     @staticmethod

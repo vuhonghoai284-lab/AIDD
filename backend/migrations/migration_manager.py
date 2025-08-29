@@ -78,16 +78,34 @@ class MigrationManager:
         self.settings = None
         self.engine = None
         self.session = None
+        self.config_file = config_file
         
         # 初始化配置
         try:
             if config_file:
+                # 验证配置文件是否存在
+                config_path = Path(config_file)
+                if not config_path.exists():
+                    raise FileNotFoundError(f"指定的配置文件不存在: {config_file}")
+                
+                # 设置环境变量以便app.core.config使用正确的配置文件
                 os.environ['CONFIG_FILE'] = config_file
-            from app.core.config import get_settings
-            self.settings = get_settings()
+                logger.info(f"使用自定义配置文件: {config_file}")
+                
+                # 重新导入配置模块以确保使用新的CONFIG_FILE
+                from app.core.config import init_settings
+                self.settings = init_settings(config_file)
+            else:
+                from app.core.config import get_settings
+                self.settings = get_settings()
+                logger.info("使用默认配置文件")
+                
         except ImportError:
             logger.warning("无法加载应用配置，使用默认设置")
             self.settings = self._create_default_settings()
+        except FileNotFoundError as e:
+            logger.error(str(e))
+            raise
         
         # 迁移目录配置
         self.migrations_dir = Path(__file__).parent

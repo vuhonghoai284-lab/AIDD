@@ -28,6 +28,14 @@ class AuthService(IAuthService):
         self.ALGORITHM = jwt_config.get("algorithm", "HS256")
         self.ACCESS_TOKEN_EXPIRE_MINUTES = jwt_config.get("access_token_expire_minutes", 30)
         
+        # 生产环境JWT密钥检查
+        if not jwt_config.get("secret_key"):
+            print(f"⚠️ JWT_SECRET_KEY未配置，使用默认密钥。生产环境请务必设置JWT_SECRET_KEY环境变量")
+        else:
+            print(f"✅ JWT密钥已正确配置 (长度: {len(self.SECRET_KEY)} 字符)")
+            
+        print(f"🔧 JWT配置 - 算法: {self.ALGORITHM}, 过期时间: {self.ACCESS_TOKEN_EXPIRE_MINUTES}分钟")
+        
         # 第三方认证配置
         self.third_party_config = self.settings.third_party_auth_config
     
@@ -134,56 +142,73 @@ class AuthService(IAuthService):
         }
     
     def verify_token(self, token: str) -> Optional[User]:
-        """验证令牌（带缓存优化版）"""
+        """验证令牌（生产环境增强版）"""
         start_time = time.time()
         
         try:
+            if not token or len(token) < 10:
+                print(f"❌ Token为空或无效，长度: {len(token) if token else 0}")
+                return None
+            
             # 首先验证JWT令牌
-            payload = jwt.decode(token, self.SECRET_KEY, algorithms=[self.ALGORITHM])
+            try:
+                payload = jwt.decode(token, self.SECRET_KEY, algorithms=[self.ALGORITHM])
+            except jwt.ExpiredSignatureError:
+                print(f"❌ Token已过期")
+                return None
+            except jwt.InvalidTokenError as e:
+                print(f"❌ Token无效: {e}")
+                return None
+            except jwt.DecodeError as e:
+                print(f"❌ Token解码失败: {e}")
+                return None
+            except Exception as e:
+                print(f"❌ JWT解码异常: {e}, Token前缀: {token[:20]}...")
+                return None
+            
             # 支持两种字段：user_id（新格式）和sub（旧格式）
             user_id = payload.get("user_id") or payload.get("sub")
             if user_id is None:
+                print(f"❌ Token载荷中缺少用户ID字段: {list(payload.keys())}")
                 return None
             
-            user_id_int = int(user_id)
+            try:
+                user_id_int = int(user_id)
+            except (ValueError, TypeError) as e:
+                print(f"❌ 用户ID格式错误: {user_id}, 错误: {e}")
+                return None
             
             # 检查令牌是否即将过期
             exp = payload.get("exp", 0)
             current_time = time.time()
             time_until_expiry = exp - current_time
             
-            # 尝试从缓存获取用户信息（不管是否即将过期都先试试缓存）
-            from app.services.user_cache_service import get_user_cache_service
-            cache_service = get_user_cache_service()
-            cached_user_data = cache_service.get_user_from_cache(user_id_int)
+            if time_until_expiry <= 0:
+                print(f"❌ Token已过期，过期时间差: {time_until_expiry}")
+                return None
             
-            if cached_user_data and cache_service.is_cache_fresh(cached_user_data):
-                # 缓存命中且新鲜，直接使用
-                elapsed_time = (time.time() - start_time) * 1000
-                print(f"⚡ Token验证缓存命中，耗时: {elapsed_time:.1f}ms, user_id={user_id_int}")
-                return cache_service.recreate_user_from_cache(cached_user_data)
-            
+            # 生产环境暂时跳过用户缓存，直接查询数据库避免缓存冲突
             # 缓存未命中或过期，查询数据库
-            user = self.user_repo.get_by_id(user_id_int)
+            print(f"🔍 直接查询数据库用户（生产环境模式）: {user_id_int}")
+            
+            try:
+                user = self.user_repo.get_by_id(user_id_int)
+            except Exception as db_error:
+                print(f"❌ 数据库查询用户失败: {db_error}")
+                return None
             
             if user:
-                # 将查询结果缓存（除非令牌即将过期）
-                if time_until_expiry >= 300:  # 令牌还有5分钟以上有效期才缓存
-                    cache_service.cache_user(user)
-                
                 elapsed_time = (time.time() - start_time) * 1000
                 if elapsed_time > 100:  # 超过100ms记录日志
                     print(f"🔍 Token验证数据库查询，耗时: {elapsed_time:.1f}ms, user_id={user_id_int}")
+                return user
+            else:
+                print(f"❌ Token验证失败：用户不存在 user_id={user_id_int}")
+                return None
             
-            return user
-            
-        except jwt.PyJWTError:
-            elapsed_time = (time.time() - start_time) * 1000
-            print(f"❌ Token验证失败（JWT错误），耗时: {elapsed_time:.1f}ms")
-            return None
         except Exception as e:
             elapsed_time = (time.time() - start_time) * 1000
-            print(f"❌ Token验证异常: {e}，耗时: {elapsed_time:.1f}ms")
+            print(f"❌ Token验证异常: {e}，耗时: {elapsed_time:.1f}ms, 异常类型: {type(e)}")
             return None
     
     async def exchange_code_for_token(self, code: str) -> ThirdPartyTokenResponse:

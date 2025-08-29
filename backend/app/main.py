@@ -2,6 +2,7 @@
 重构后的主应用入口
 """
  
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -16,8 +17,8 @@ from app.models import *
 # 获取配置
 settings = get_settings()
 
-# 创建数据库表
-Base.metadata.create_all(bind=engine)
+# 使用Alembic进行数据库迁移（替代手动创建表）
+# Base.metadata.create_all(bind=engine)  # 已被Alembic迁移系统替代
 
 def create_app() -> FastAPI:
     """创建并配置FastAPI应用"""
@@ -54,15 +55,25 @@ def setup_startup_event(app: FastAPI):
         from app.services.model_initializer import model_initializer
         from app.services.task_recovery_service import task_recovery_service
         from app.services.background_task_service import background_task_service
+        from app.core.alembic_manager import run_migrations_on_startup
         
-        # 初始化缓存
+        # 1. 首先执行数据库迁移
+        try:
+            config_file = os.getenv('CONFIG_FILE')
+            await run_migrations_on_startup(config_file)
+            print("✓ 数据库迁移完成")
+        except Exception as e:
+            print(f"✗ 数据库迁移失败: {e}")
+            # 迁移失败时继续启动，但会记录错误
+        
+        # 2. 初始化缓存
         try:
             init_cache()
             print("✓ 缓存系统已初始化")
         except Exception as e:
             print(f"✗ 缓存初始化失败: {e}")
         
-        # 初始化AI模型配置到数据库
+        # 3. 初始化AI模型配置到数据库
         db = next(get_db())
         try:
             models = model_initializer.initialize_models(db)
@@ -70,7 +81,7 @@ def setup_startup_event(app: FastAPI):
         except Exception as e:
             print(f"✗ AI模型初始化失败: {e}")
         
-        # 任务恢复机制
+        # 4. 任务恢复机制
         try:
             recovered_count = await task_recovery_service.recover_tasks_on_startup(db)
             print(f"✓ 已恢复 {recovered_count} 个待处理任务")
@@ -79,23 +90,18 @@ def setup_startup_event(app: FastAPI):
         finally:
             db.close()
         
-        # 启动后台任务服务
+        # 5. 启动后台任务服务
         try:
             await background_task_service.start()
             print("✓ 后台任务服务已启动")
         except Exception as e:
             print(f"✗ 后台任务服务启动失败: {e}")
         
-        # 初始化和启动队列系统
+        # 6. 初始化和启动队列系统（现在通过Alembic迁移创建表）
         try:
-            from app.services.database_queue_service import initialize_queue_tables
             from app.services.queue_worker_manager import get_queue_worker_manager
             
-            # 初始化队列表
-            await initialize_queue_tables()
-            print("✓ 队列表初始化完成")
-            
-            # 启动工作者池
+            # 启动工作者池（表结构已由Alembic迁移创建）
             manager = get_queue_worker_manager()
             await manager.start_worker_pool()
             print("✓ 队列工作者池已启动 (20用户×3并发)")
