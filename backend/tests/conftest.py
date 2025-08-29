@@ -142,7 +142,14 @@ def normal_user_token():
     """普通用户token"""
     return {
         "token": "test_user_token", 
-        "user": {"id": 2, "username": "test_user", "is_admin": False}
+        "user": {
+            "id": 2, 
+            "uid": "test_user", 
+            "display_name": "测试用户",
+            "email": "user@test.com",
+            "is_admin": False,
+            "is_system_admin": False
+        }
     }
 
 @pytest.fixture
@@ -261,31 +268,38 @@ def comprehensive_mocks_session():
                 avatar_url=f'https://avatar.example.com/{user_id}'
             )
         
-        def mock_get_authorization_url_method(self, state: str = "12345"):
-            return "https://gitee.com/oauth/authorize?client_id=test&response_type=code&redirect_uri=http://localhost:3000/callback&scope=user_info&state=12345"
+        def mock_get_authorization_url_method(self, state: str = None, **kwargs):
+            state = state or kwargs.get('state', '12345')
+            return f"https://gitee.com/oauth/authorize?client_id=test&response_type=code&redirect_uri=http://localhost:3000/callback&scope=user_info&state={state}"
         
         def mock_login_user_method(self, uid: str, display_name: str = None, email: str = None, 
                                  avatar_url: str = None, is_admin: bool = False, 
                                  is_system_admin: bool = False):
             from app.models.user import User
+            import time
+            
+            # 添加时间戳避免唯一性冲突
+            timestamp = int(time.time() * 1000) % 10000
             
             # 为系统管理员使用固定ID
             if uid == "sys_admin":
                 user_id = 2121  # 固定ID用于测试
+                unique_uid = uid  # 系统管理员保持固定uid
             else:
-                user_id = abs(hash(uid)) % 10000 + 100
+                user_id = abs(hash(uid + str(timestamp))) % 10000 + 100
+                unique_uid = f"{uid}_{timestamp}"  # 添加时间戳确保唯一性
                 
             mock_user = User(
                 id=user_id,
-                uid=uid,
+                uid=unique_uid,
                 display_name=display_name or f"用户{user_id}",
-                email=email or f"{uid}@test.com",
+                email=email or f"{unique_uid}@test.com",
                 is_admin=is_admin,
                 is_system_admin=is_system_admin
             )
             
             # 生成mock token
-            mock_token = f"mock_token_{user_id}_{abs(hash(uid)) % 1000}"
+            mock_token = f"mock_token_{user_id}_{abs(hash(unique_uid)) % 1000}"
             
             return {
                 "user": mock_user,
@@ -490,6 +504,38 @@ def mock_generate_report(self, task_id, user):
             # 静默忽略无法mock的模块
             print(f"⚠️ 无法Mock: {attr_path} - {e}")
             pass
+
+
+# 压力测试用户创建fixture
+@pytest.fixture(scope="session")
+def create_stress_test_users():
+    """为压力测试创建多个Mock用户数据"""
+    def create_users(count=50):
+        from app.models.user import User
+        import time
+        import uuid
+        
+        test_users = []
+        base_timestamp = int(time.time() * 1000000)
+        
+        for i in range(count):
+            # 使用UUID确保绝对唯一性
+            unique_id = str(uuid.uuid4())[:8]
+            timestamp = base_timestamp + i
+            
+            user = User(
+                id=10000 + i,
+                uid=f"stress_test_user_{unique_id}",
+                display_name=f"压力测试用户{i+1}",
+                email=f"stress{i+1}_{unique_id}@test.com",
+                is_admin=False,
+                is_system_admin=False
+            )
+            test_users.append(user)
+            
+        return test_users
+    
+    return create_users
     
     
     # 增强的HTTP Mock系统

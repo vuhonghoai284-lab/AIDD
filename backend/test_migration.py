@@ -27,7 +27,8 @@ def test_migration_basic():
         # 创建测试数据库
         test_db_path = temp_path / "test.db"
         
-        # Mock设置
+        # Mock设置，确保数据库文件存在
+        test_db_path.touch()  # 创建空文件
         mock_settings = MagicMock()
         mock_settings.database_url = f"sqlite:///{test_db_path}"
         mock_settings.database_type = "sqlite"
@@ -113,7 +114,8 @@ def test_backup_restore():
         # 创建测试数据库
         test_db_path = temp_path / "test.db"
         
-        # Mock设置
+        # Mock设置，确保数据库文件存在
+        test_db_path.touch()  # 创建空文件
         mock_settings = MagicMock()
         mock_settings.database_url = f"sqlite:///{test_db_path}"
         mock_settings.database_type = "sqlite"

@@ -316,22 +316,32 @@ class DatabaseQueueService:
                 TaskQueue.status == QueueStatus.PROCESSING
             ).group_by(TaskQueue.user_id).all()
             
-            # 获取平均等待时间 - SQLite兼容版本
+            # 获取平均等待时间 - 数据库兼容版本
             try:
-                # 使用SQLite兼容的时间计算
-                from sqlalchemy import text
-                avg_wait_time = db.execute(text("""
-                    SELECT AVG(
-                        CASE 
-                            WHEN started_at IS NOT NULL THEN
-                                (julianday(started_at) - julianday(queued_at)) * 86400
-                            ELSE
-                                (julianday('now') - julianday(queued_at)) * 86400
-                        END
-                    ) as avg_wait_seconds
-                    FROM task_queue 
-                    WHERE status != 'queued'
-                """)).scalar()
+                # 使用SQLAlchemy ORM计算，避免数据库特定函数
+                from sqlalchemy import case, extract, func
+                
+                # 使用Python时间差计算而非数据库函数
+                wait_times = db.query(
+                    case(
+                        (TaskQueue.started_at.isnot(None), TaskQueue.started_at),
+                        else_=func.now()
+                    ).label('end_time'),
+                    TaskQueue.queued_at
+                ).filter(TaskQueue.status != QueueStatus.QUEUED).all()
+                
+                if wait_times:
+                    total_wait_seconds = 0
+                    count = 0
+                    for end_time, queued_at in wait_times:
+                        if end_time and queued_at:
+                            wait_seconds = (end_time - queued_at).total_seconds()
+                            total_wait_seconds += wait_seconds
+                            count += 1
+                    avg_wait_time = total_wait_seconds / count if count > 0 else 0
+                else:
+                    avg_wait_time = 0
+                    
             except Exception as e:
                 logger.warning(f"计算平均等待时间失败: {e}")
                 avg_wait_time = 0

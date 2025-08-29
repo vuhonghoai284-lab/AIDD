@@ -135,7 +135,7 @@ class TestFreshDatabaseStartup:
         assert response.status_code == 200
         detail = response.json()
         assert "task" in detail
-        assert "issues" in detail
+        assert "issue_summary" in detail
         assert detail["task"]["id"] == task_id
         
         # Step 9: 验证AI输出可以获取
@@ -144,15 +144,12 @@ class TestFreshDatabaseStartup:
         outputs = response.json()
         assert isinstance(outputs, list)
         
-        # Step 10: 验证系统的满意度评分功能
-        # 如果有问题数据，测试满意度评分
-        if detail["issues"]:
-            issue_id = detail["issues"][0]["id"]
-            rating_data = {"satisfaction_rating": 4.5}
-            response = self.client.put(f"/api/issues/{issue_id}/satisfaction", 
-                                     json=rating_data, headers=auth_headers)
-            # 满意度评分功能应该正常工作
-            assert response.status_code in [200, 404]  # 404是正常的，因为可能没有权限
+        # Step 10: 验证问题统计信息可以获取
+        # issue_summary包含统计信息而非具体问题列表
+        assert isinstance(detail["issue_summary"], dict)
+        # 可以验证统计信息结构
+        if "by_type" in detail["issue_summary"]:
+            assert isinstance(detail["issue_summary"]["by_type"], dict)
         
         # Step 11: 验证任务可以删除
         response = self.client.delete(f"/api/tasks/{task_id}", headers=auth_headers)

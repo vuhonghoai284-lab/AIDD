@@ -218,7 +218,8 @@ class TaskService(ITaskService):
         
         for i, result in enumerate(tasks):
             if isinstance(result, Exception):
-                file_obj = files_data[i].get('file')
+                file_data = files_data[i]
+                file_obj = file_data.get('file') if isinstance(file_data, dict) else file_data
                 filename = getattr(file_obj, 'filename', 'unknown') if file_obj else 'unknown'
                 failed_tasks.append({
                     'index': i,

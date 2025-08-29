@@ -15,11 +15,13 @@ class TestAnalyticsAPI:
     
     def setup_test_data(self, db_session: Session, admin_user_token):
         """设置测试数据"""
-        # 创建测试用户
+        import time
+        # 创建唯一的测试用户
+        timestamp = int(time.time() * 1000000) % 1000000
         test_user = User(
-            uid="test_analytics_user",
+            uid=f"test_analytics_user_{timestamp}",
             display_name="Analytics Test User",
-            email="analytics@test.com",
+            email=f"analytics_{timestamp}@test.com",
             is_admin=False,
             created_at=datetime.utcnow() - timedelta(days=5),
             last_login_at=datetime.utcnow() - timedelta(hours=2)
@@ -29,10 +31,10 @@ class TestAnalyticsAPI:
         
         # 创建AI模型
         ai_model = AIModel(
-            model_key="test-analytics-model",
+            model_key=f"test-analytics-model-{timestamp}",
             label="测试分析模型",
             provider="test",
-            model_name="test-analytics-model"
+            model_name=f"test-analytics-model-{timestamp}"
         )
         db_session.add(ai_model)
         db_session.flush()
@@ -396,14 +398,16 @@ class TestAnalyticsDataAccuracy:
         test_db_session.commit()
         
         # 创建特定的测试数据
+        import time
+        timestamp = int(time.time() * 1000000) % 1000000
         now = datetime.utcnow()
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         
         # 今天注册的用户
         today_user = User(
-            uid="accuracy_test_today",
+            uid=f"accuracy_test_today_{timestamp}",
             display_name="Today User",
-            email="today@test.com",
+            email=f"today_{timestamp}@test.com",
             created_at=today_start + timedelta(hours=10),
             last_login_at=today_start + timedelta(hours=11)
         )
@@ -411,9 +415,9 @@ class TestAnalyticsDataAccuracy:
         
         # 昨天注册的用户
         yesterday_user = User(
-            uid="accuracy_test_yesterday",
+            uid=f"accuracy_test_yesterday_{timestamp}",
             display_name="Yesterday User",
-            email="yesterday@test.com",
+            email=f"yesterday_{timestamp}@test.com",
             created_at=today_start - timedelta(days=1),
             last_login_at=today_start + timedelta(hours=5)  # 今天活跃
         )
@@ -421,9 +425,9 @@ class TestAnalyticsDataAccuracy:
         
         # 一周前注册的管理员用户
         week_ago_admin = User(
-            uid="accuracy_test_week_admin",
+            uid=f"accuracy_test_week_admin_{timestamp}",
             display_name="Week Admin",
-            email="week.admin@test.com",
+            email=f"week.admin_{timestamp}@test.com",
             is_admin=True,
             created_at=today_start - timedelta(days=7),
             last_login_at=today_start - timedelta(days=2)  # 非今天活跃
@@ -456,19 +460,21 @@ class TestAnalyticsDataAccuracy:
     def test_task_stats_accuracy(self, client: TestClient, test_db_session: Session, admin_user_token):
         """测试任务统计数据准确性"""
         # 创建测试用户和文件
+        import time
+        timestamp = int(time.time() * 1000000) % 1000000
         test_user = User(
-            uid="task_accuracy_user",
+            uid=f"task_accuracy_user_{timestamp}",
             display_name="Task Test User",
-            email="task@test.com"
+            email=f"task_{timestamp}@test.com"
         )
         test_db_session.add(test_user)
         test_db_session.flush()
         
         ai_model = AIModel(
-            model_key="task-accuracy-model",
+            model_key=f"task-accuracy-model-{timestamp}",
             label="任务准确性测试模型",
             provider="test",
-            model_name="task-accuracy-model"
+            model_name=f"task-accuracy-model-{timestamp}"
         )
         test_db_session.add(ai_model)
         test_db_session.flush()

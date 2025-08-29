@@ -9,6 +9,7 @@ import sys
 import hashlib
 import json
 import shutil
+import importlib.util
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
@@ -185,7 +186,7 @@ class MigrationManager:
                     executed_at DATETIME,
                     backup_path VARCHAR(500),
                     rollback_sql TEXT,
-                    created_at DATETIME
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
                 """
                 
@@ -640,14 +641,30 @@ def downgrade(session):
                 executed_at = None
                 if row[4]:
                     if isinstance(row[4], str):
-                        executed_at = datetime.fromisoformat(row[4])
+                        # Handle common invalid datetime strings
+                        if row[4] in ('CURRENT_DATETIME', 'CURRENT_TIMESTAMP'):
+                            executed_at = datetime.now()
+                        else:
+                            try:
+                                executed_at = datetime.fromisoformat(row[4])
+                            except ValueError:
+                                # If parsing fails, use current time
+                                executed_at = datetime.now()
                     else:
                         executed_at = row[4]
                 
                 created_at = datetime.now()
                 if row[7]:
                     if isinstance(row[7], str):
-                        created_at = datetime.fromisoformat(row[7])
+                        # Handle common invalid datetime strings
+                        if row[7] in ('CURRENT_DATETIME', 'CURRENT_TIMESTAMP'):
+                            created_at = datetime.now()
+                        else:
+                            try:
+                                created_at = datetime.fromisoformat(row[7])
+                            except ValueError:
+                                # If parsing fails, use current time
+                                created_at = datetime.now()
                     else:
                         created_at = row[7]
                 
@@ -693,8 +710,8 @@ def downgrade(session):
             
             # 记录迁移执行
             self.session.execute(text("""
-                INSERT INTO schema_migrations (id, name, description, checksum, executed_at, backup_path, rollback_sql)
-                VALUES (:id, :name, :desc, :checksum, :executed_at, :backup_path, :rollback_sql)
+                INSERT INTO schema_migrations (id, name, description, checksum, executed_at, backup_path, rollback_sql, created_at)
+                VALUES (:id, :name, :desc, :checksum, :executed_at, :backup_path, :rollback_sql, :created_at)
             """), {
                 'id': migration_id,
                 'name': getattr(migration_module, 'DESCRIPTION', migration_id),
@@ -702,7 +719,8 @@ def downgrade(session):
                 'checksum': getattr(migration_module, 'CHECKSUM', ''),
                 'executed_at': datetime.now(),
                 'backup_path': backup_path,
-                'rollback_sql': getattr(migration_module, 'SQL_DOWN', '')
+                'rollback_sql': getattr(migration_module, 'SQL_DOWN', ''),
+                'created_at': getattr(migration_module, 'CREATED_AT', datetime.now())
             })
             
             self.session.commit()

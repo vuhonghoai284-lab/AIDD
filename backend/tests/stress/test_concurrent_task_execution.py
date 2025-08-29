@@ -23,27 +23,18 @@ class TestConcurrentTaskExecution:
     """高并发任务执行测试类"""
     
     @pytest.fixture(autouse=True)
-    def setup_concurrent_users(self, client):
+    def setup_concurrent_users(self, client, create_stress_test_users):
         """设置多个并发用户"""
         self.concurrent_users = []
         
-        # 创建10个测试用户用于并发测试
-        for i in range(10):
+        # 使用Mock系统创建50个测试用户用于并发测试
+        mock_users = create_stress_test_users(50)
+        
+        for i, user in enumerate(mock_users):
             try:
-                # 步骤1: 先通过code兑换access_token
-                code_data = {"code": f"concurrent_user_{i}_auth_code"}
-                token_response = client.post("/api/auth/thirdparty/exchange-token", json=code_data)
-                
-                if token_response.status_code != 200:
-                    print(f"用户{i} Token兑换失败: {token_response.status_code} {token_response.text}")
-                    continue
-                
-                token_data = token_response.json()
-                access_token = token_data["access_token"]
-                
-                # 步骤2: 使用access_token登录
-                login_data = {"access_token": access_token}
-                login_response = client.post("/api/auth/thirdparty/login", json=login_data)
+                # 使用Mock的第三方登录创建认证用户
+                code_data = {"code": f"concurrent_user_{i}_auth_code_{user.uid}"}
+                login_response = client.post("/api/auth/thirdparty/login-legacy", json=code_data)
                 
                 if login_response.status_code == 200:
                     result = login_response.json()

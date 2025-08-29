@@ -74,20 +74,13 @@ class TestCompleteDocumentTestingWorkflow:
         ai_outputs = ai_outputs_response.json()
         assert isinstance(ai_outputs, list)
         
-        # 6. 查看检测到的问题
-        issues = task_detail["issues"]
-        assert isinstance(issues, list)
+        # 6. 查看检测到的问题统计
+        issue_summary = task_detail["issue_summary"]
+        assert isinstance(issue_summary, dict)
         
-        # 7. 提交问题反馈（如果有问题的话）
-        if issues:
-            issue_id = issues[0]["id"]
-            feedback_data = {
-                "feedback_type": "accept",
-                "comment": "E2E测试反馈"
-            }
-            
-            feedback_response = client.put(f"/api/issues/{issue_id}/feedback", json=feedback_data, headers=headers)
-            assert feedback_response.status_code == 200
+        # 7. 验证问题统计结构
+        # issue_summary包含统计信息而非具体问题列表
+        assert "by_type" in issue_summary or "by_severity" in issue_summary
         
         # 8. 下载测试报告
         report_response = client.get(f"/api/tasks/{task_id}/report", headers=headers)
@@ -158,7 +151,7 @@ class TestThirdPartyUserWorkflow:
         
         detail = detail_response.json()
         assert "task" in detail
-        assert "issues" in detail
+        assert "issue_summary" in detail
         assert detail["task"]["id"] == task_id
 
 

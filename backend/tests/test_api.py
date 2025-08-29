@@ -62,7 +62,7 @@ def test_get_task_detail(client: TestClient, sample_file, auth_headers):
     assert response.status_code == 200
     detail = response.json()
     assert "task" in detail
-    assert "issues" in detail
+    assert "issue_summary" in detail
     assert detail["task"]["id"] == task_id
 
 

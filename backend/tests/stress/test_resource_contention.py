@@ -17,14 +17,16 @@ class TestResourceContention:
     """资源竞争测试类"""
     
     @pytest.fixture(autouse=True)
-    def setup_resource_test_users(self, client):
+    def setup_resource_test_users(self, client, create_stress_test_users):
         """设置资源竞争测试用户"""
         self.resource_users = []
         
-        # 创建15个用户用于资源竞争测试
-        for i in range(15):
-            auth_data = {"code": f"resource_test_user_{i}_auth_code"}
-            response = client.post("/api/auth/thirdparty/login", json=auth_data)
+        # 使用Mock系统创建50个用户用于资源竞争测试
+        mock_users = create_stress_test_users(50)
+        
+        for i, user in enumerate(mock_users):
+            auth_data = {"code": f"resource_test_user_{i}_auth_code_{user.uid}"}
+            response = client.post("/api/auth/thirdparty/login-legacy", json=auth_data)
             
             if response.status_code == 200:
                 result = response.json()
