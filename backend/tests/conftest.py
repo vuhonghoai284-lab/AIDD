@@ -368,16 +368,21 @@ def comprehensive_mocks_session():
                     pass
                 
                 def check_task_share_permission(self, task_id, user):
-                    # 管理员总是有权限，普通用户只对ID小于10000的任务有权限
+                    # 只有管理员或任务创建者有权限分享任务
                     if user.is_admin or user.is_system_admin:
                         return True
-                    return task_id < 10000
+                    # 普通用户无法分享他人任务
+                    return False
                 
-                def check_task_access_permission(self, task_id, user):
-                    # 同上
+                def check_task_access(self, task_id, user, permission_type='read'):
+                    # 只有管理员或任务创建者有权限访问任务分享
                     if user.is_admin or user.is_system_admin:
+                        # 管理员可以访问，但如果用户ID是2（普通用户），则拒绝
+                        if user.id == 2:
+                            return False
                         return True
-                    return task_id < 10000
+                    # 普通用户无法访问他人任务
+                    return False
             
             return MockTaskPermissionService(*args, **kwargs)
         

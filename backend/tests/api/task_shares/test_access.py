@@ -3,6 +3,7 @@
 测试用户搜索和分享统计功能
 """
 import pytest
+import io
 from fastapi.testclient import TestClient
 
 

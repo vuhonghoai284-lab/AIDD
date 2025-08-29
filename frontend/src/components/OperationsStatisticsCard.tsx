@@ -102,7 +102,108 @@ export const TaskStatisticsCard: React.FC<TaskCardProps> = ({ data, loading = fa
       }}
       className="statistics-card"
     >
-      <Row gutter={[16, 16]} style={{ height: '240px' }}>
+      {/* 今日数据突出显示在顶部 */}
+      <div style={{ 
+        marginBottom: 20,
+        backgroundColor: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+        borderRadius: '12px',
+        padding: '20px 16px',
+        border: '2px solid #bae7ff',
+        position: 'relative',
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: '4px',
+          background: 'linear-gradient(90deg, #1890ff 0%, #40a9ff 100%)'
+        }}></div>
+        
+        <Title level={4} style={{ 
+          margin: 0, 
+          marginBottom: 16, 
+          fontSize: '18px',
+          fontWeight: 'bold',
+          color: '#1890ff',
+          textAlign: 'center',
+          letterSpacing: '0.5px'
+        }}>
+          📊 今日任务数据
+        </Title>
+        
+        <Row gutter={16}>
+          <Col span={8}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ 
+                fontSize: '28px', 
+                fontWeight: 900, 
+                color: '#1890ff',
+                marginBottom: '4px',
+                textShadow: '0 2px 4px rgba(24, 144, 255, 0.2)'
+              }}>
+                {data.today_total}
+              </div>
+              <div style={{ 
+                fontSize: '14px', 
+                color: '#666',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>
+                新增任务
+              </div>
+            </div>
+          </Col>
+          <Col span={8}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ 
+                fontSize: '28px', 
+                fontWeight: 900, 
+                color: '#52c41a',
+                marginBottom: '4px',
+                textShadow: '0 2px 4px rgba(82, 196, 26, 0.2)'
+              }}>
+                {data.today_completed}
+              </div>
+              <div style={{ 
+                fontSize: '14px', 
+                color: '#666',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>
+                完成任务
+              </div>
+            </div>
+          </Col>
+          <Col span={8}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ 
+                fontSize: '28px', 
+                fontWeight: 900, 
+                color: '#ff4d4f',
+                marginBottom: '4px',
+                textShadow: '0 2px 4px rgba(255, 77, 79, 0.2)'
+              }}>
+                {data.today_failed}
+              </div>
+              <div style={{ 
+                fontSize: '14px', 
+                color: '#666',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>
+                失败任务
+              </div>
+            </div>
+          </Col>
+        </Row>
+      </div>
+
+      <Row gutter={[16, 16]} style={{ height: '200px' }}>
         <Col xs={24} sm={12}>
           <div style={{ 
             display: 'flex', 
@@ -113,7 +214,7 @@ export const TaskStatisticsCard: React.FC<TaskCardProps> = ({ data, loading = fa
           }}>
             <div style={{ 
               textAlign: 'center', 
-              marginBottom: 24,
+              marginBottom: 20,
               backgroundColor: '#f8faff',
               padding: '16px',
               borderRadius: '8px',
@@ -124,7 +225,7 @@ export const TaskStatisticsCard: React.FC<TaskCardProps> = ({ data, loading = fa
                 value={data.total}
                 prefix={<ClockCircleOutlined style={{ fontSize: '16px' }} />}
                 valueStyle={{ 
-                  fontSize: '28px', 
+                  fontSize: '26px', 
                   color: '#1890ff',
                   fontWeight: 'bold',
                   lineHeight: 1.2
@@ -144,7 +245,7 @@ export const TaskStatisticsCard: React.FC<TaskCardProps> = ({ data, loading = fa
                 suffix="%" 
                 precision={1}
                 valueStyle={{ 
-                  fontSize: '24px',
+                  fontSize: '22px',
                   fontWeight: 'bold',
                   lineHeight: 1.2,
                   color: data.success_rate >= 80 ? '#52c41a' : '#ff4d4f' 
@@ -154,7 +255,7 @@ export const TaskStatisticsCard: React.FC<TaskCardProps> = ({ data, loading = fa
           </div>
         </Col>
         <Col xs={24} sm={12}>
-          <div style={{ height: '200px' }}>
+          <div style={{ height: '160px' }}>
             <ReactECharts 
               option={pieOption} 
               style={{ height: '100%', width: '100%' }}
@@ -163,67 +264,6 @@ export const TaskStatisticsCard: React.FC<TaskCardProps> = ({ data, loading = fa
           </div>
         </Col>
       </Row>
-
-      <div style={{ 
-        marginTop: 16, 
-        borderTop: '2px solid #f0f0f0', 
-        paddingTop: 16,
-        backgroundColor: '#fafafa',
-        borderRadius: '0 0 6px 6px',
-        margin: '16px -24px -16px -24px',
-        padding: '16px 24px'
-      }}>
-        <Title level={5} style={{ 
-          margin: 0, 
-          marginBottom: 12, 
-          fontSize: '14px',
-          color: '#595959',
-          textAlign: 'center'
-        }}>
-          📊 今日数据
-        </Title>
-        <Row gutter={16}>
-          <Col span={8}>
-            <div style={{ textAlign: 'center' }}>
-              <Statistic 
-                title={<span style={{ fontSize: '12px', color: '#8c8c8c' }}>新增</span>}
-                value={data.today_total} 
-                valueStyle={{ 
-                  fontSize: '16px',
-                  fontWeight: 600,
-                  color: '#1890ff'
-                }}
-              />
-            </div>
-          </Col>
-          <Col span={8}>
-            <div style={{ textAlign: 'center' }}>
-              <Statistic 
-                title={<span style={{ fontSize: '12px', color: '#8c8c8c' }}>完成</span>}
-                value={data.today_completed}
-                valueStyle={{ 
-                  fontSize: '16px',
-                  fontWeight: 600,
-                  color: '#52c41a'
-                }}
-              />
-            </div>
-          </Col>
-          <Col span={8}>
-            <div style={{ textAlign: 'center' }}>
-              <Statistic 
-                title={<span style={{ fontSize: '12px', color: '#8c8c8c' }}>失败</span>}
-                value={data.today_failed}
-                valueStyle={{ 
-                  fontSize: '16px',
-                  fontWeight: 600,
-                  color: '#ff4d4f'
-                }}
-              />
-            </div>
-          </Col>
-        </Row>
-      </div>
     </Card>
   );
 };
@@ -340,7 +380,86 @@ export const UserStatisticsCard: React.FC<UserCardProps> = ({ data, trends = [],
       }}
       className="statistics-card"
     >
-      <Row gutter={[16, 16]} style={{ height: '240px' }}>
+      {/* 今日数据突出显示在顶部 */}
+      <div style={{ 
+        marginBottom: 20,
+        backgroundColor: 'linear-gradient(135deg, #f6ffed 0%, #e6fffb 100%)',
+        borderRadius: '12px',
+        padding: '20px 16px',
+        border: '2px solid #b7eb8f',
+        position: 'relative',
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: '4px',
+          background: 'linear-gradient(90deg, #52c41a 0%, #73d13d 100%)'
+        }}></div>
+        
+        <Title level={4} style={{ 
+          margin: 0, 
+          marginBottom: 16, 
+          fontSize: '18px',
+          fontWeight: 'bold',
+          color: '#52c41a',
+          textAlign: 'center',
+          letterSpacing: '0.5px'
+        }}>
+          👥 今日用户数据
+        </Title>
+        
+        <Row gutter={16}>
+          <Col span={12}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ 
+                fontSize: '32px', 
+                fontWeight: 900, 
+                color: '#52c41a',
+                marginBottom: '4px',
+                textShadow: '0 2px 4px rgba(82, 196, 26, 0.2)'
+              }}>
+                {data.today_new_registrations}
+              </div>
+              <div style={{ 
+                fontSize: '14px', 
+                color: '#666',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>
+                新注册用户
+              </div>
+            </div>
+          </Col>
+          <Col span={12}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ 
+                fontSize: '32px', 
+                fontWeight: 900, 
+                color: '#1890ff',
+                marginBottom: '4px',
+                textShadow: '0 2px 4px rgba(24, 144, 255, 0.2)'
+              }}>
+                {data.today_active}
+              </div>
+              <div style={{ 
+                fontSize: '14px', 
+                color: '#666',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>
+                活跃用户
+              </div>
+            </div>
+          </Col>
+        </Row>
+      </div>
+
+      <Row gutter={[16, 16]} style={{ height: '200px' }}>
         <Col xs={24} sm={12}>
           <div style={{ 
             display: 'flex', 
@@ -352,16 +471,17 @@ export const UserStatisticsCard: React.FC<UserCardProps> = ({ data, trends = [],
             <div style={{ 
               textAlign: 'center',
               backgroundColor: '#f8faff',
-              padding: '20px 16px',
+              padding: '16px',
               borderRadius: '8px',
-              border: '1px solid #e8f4fd'
+              border: '1px solid #e8f4fd',
+              marginBottom: '12px'
             }}>
               <Statistic 
                 title={<span style={{ fontSize: '13px', fontWeight: 500 }}>总用户数</span>}
                 value={data.total_users}
                 prefix={<UserOutlined style={{ fontSize: '16px', color: '#1890ff' }} />}
                 valueStyle={{ 
-                  fontSize: '26px', 
+                  fontSize: '24px', 
                   color: '#1890ff',
                   fontWeight: 'bold',
                   lineHeight: 1.2
@@ -378,13 +498,13 @@ export const UserStatisticsCard: React.FC<UserCardProps> = ({ data, trends = [],
                 flex: 1,
                 textAlign: 'center',
                 backgroundColor: '#f6ffed',
-                padding: '12px 8px',
+                padding: '10px 8px',
                 borderRadius: '6px',
                 border: '1px solid #d9f7be'
               }}>
                 <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '4px' }}>活跃</div>
                 <div style={{ 
-                  fontSize: '18px', 
+                  fontSize: '16px', 
                   fontWeight: 'bold', 
                   color: '#52c41a',
                   lineHeight: 1.2 
@@ -397,13 +517,13 @@ export const UserStatisticsCard: React.FC<UserCardProps> = ({ data, trends = [],
                 flex: 1,
                 textAlign: 'center',
                 backgroundColor: '#fff7e6',
-                padding: '12px 8px',
+                padding: '10px 8px',
                 borderRadius: '6px',
                 border: '1px solid #ffd591'
               }}>
                 <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '4px' }}>在线</div>
                 <div style={{ 
-                  fontSize: '18px', 
+                  fontSize: '16px', 
                   fontWeight: 'bold', 
                   color: '#fa8c16',
                   lineHeight: 1.2 
@@ -415,7 +535,7 @@ export const UserStatisticsCard: React.FC<UserCardProps> = ({ data, trends = [],
           </div>
         </Col>
         <Col xs={24} sm={12}>
-          <div style={{ height: '200px' }}>
+          <div style={{ height: '160px' }}>
             <ReactECharts 
               option={lineOption} 
               style={{ height: '100%', width: '100%' }}
@@ -424,53 +544,6 @@ export const UserStatisticsCard: React.FC<UserCardProps> = ({ data, trends = [],
           </div>
         </Col>
       </Row>
-
-      <div style={{ 
-        marginTop: 16, 
-        borderTop: '2px solid #f0f0f0', 
-        backgroundColor: '#fafafa',
-        borderRadius: '0 0 6px 6px',
-        margin: '16px -24px -16px -24px',
-        padding: '16px 24px'
-      }}>
-        <Title level={5} style={{ 
-          margin: 0, 
-          marginBottom: 12, 
-          fontSize: '14px',
-          color: '#595959',
-          textAlign: 'center'
-        }}>
-          👥 今日数据
-        </Title>
-        <Row gutter={16}>
-          <Col span={12}>
-            <div style={{ textAlign: 'center' }}>
-              <Statistic 
-                title={<span style={{ fontSize: '12px', color: '#8c8c8c' }}>新注册</span>}
-                value={data.today_new_registrations} 
-                valueStyle={{ 
-                  fontSize: '16px',
-                  fontWeight: 600,
-                  color: '#52c41a'
-                }}
-              />
-            </div>
-          </Col>
-          <Col span={12}>
-            <div style={{ textAlign: 'center' }}>
-              <Statistic 
-                title={<span style={{ fontSize: '12px', color: '#8c8c8c' }}>活跃</span>}
-                value={data.today_active}
-                valueStyle={{ 
-                  fontSize: '16px',
-                  fontWeight: 600,
-                  color: '#1890ff'
-                }}
-              />
-            </div>
-          </Col>
-        </Row>
-      </div>
     </Card>
   );
 };
@@ -555,7 +628,86 @@ export const IssueStatisticsCard: React.FC<IssueCardProps> = ({ data, loading = 
       }}
       className="statistics-card"
     >
-      <Row gutter={[16, 16]} style={{ height: '240px' }}>
+      {/* 今日数据突出显示在顶部 */}
+      <div style={{ 
+        marginBottom: 20,
+        backgroundColor: 'linear-gradient(135deg, #fff7e6 0%, #fff2e8 100%)',
+        borderRadius: '12px',
+        padding: '20px 16px',
+        border: '2px solid #ffd591',
+        position: 'relative',
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: '4px',
+          background: 'linear-gradient(90deg, #fa8c16 0%, #ffa940 100%)'
+        }}></div>
+        
+        <Title level={4} style={{ 
+          margin: 0, 
+          marginBottom: 16, 
+          fontSize: '18px',
+          fontWeight: 'bold',
+          color: '#fa8c16',
+          textAlign: 'center',
+          letterSpacing: '0.5px'
+        }}>
+          🐛 今日问题数据
+        </Title>
+        
+        <Row gutter={16}>
+          <Col span={12}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ 
+                fontSize: '30px', 
+                fontWeight: 900, 
+                color: '#fa8c16',
+                marginBottom: '4px',
+                textShadow: '0 2px 4px rgba(250, 140, 22, 0.2)'
+              }}>
+                {data.today_new}
+              </div>
+              <div style={{ 
+                fontSize: '14px', 
+                color: '#666',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>
+                新增问题
+              </div>
+            </div>
+          </Col>
+          <Col span={12}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ 
+                fontSize: '30px', 
+                fontWeight: 900, 
+                color: '#52c41a',
+                marginBottom: '4px',
+                textShadow: '0 2px 4px rgba(82, 196, 26, 0.2)'
+              }}>
+                {data.today_accepted}
+              </div>
+              <div style={{ 
+                fontSize: '14px', 
+                color: '#666',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>
+                已接受问题
+              </div>
+            </div>
+          </Col>
+        </Row>
+      </div>
+
+      <Row gutter={[16, 16]} style={{ height: '200px' }}>
         <Col xs={24} sm={12}>
           <div style={{ 
             display: 'flex', 
@@ -567,17 +719,17 @@ export const IssueStatisticsCard: React.FC<IssueCardProps> = ({ data, loading = 
             <div style={{ 
               textAlign: 'center',
               backgroundColor: '#fff7e6',
-              padding: '16px',
+              padding: '14px',
               borderRadius: '8px',
               border: '1px solid #ffd591',
-              marginBottom: '16px'
+              marginBottom: '12px'
             }}>
               <Statistic 
                 title={<span style={{ fontSize: '13px', fontWeight: 500 }}>总问题数</span>}
                 value={data.total_issues}
                 prefix={<BugOutlined style={{ fontSize: '16px', color: '#fa8c16' }} />}
                 valueStyle={{ 
-                  fontSize: '24px', 
+                  fontSize: '22px', 
                   color: '#fa8c16',
                   fontWeight: 'bold',
                   lineHeight: 1.2
@@ -593,13 +745,13 @@ export const IssueStatisticsCard: React.FC<IssueCardProps> = ({ data, loading = 
               <div style={{
                 textAlign: 'center',
                 backgroundColor: '#fff7e6',
-                padding: '10px 8px',
+                padding: '8px 6px',
                 borderRadius: '6px',
                 border: '1px solid #ffd591'
               }}>
-                <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '2px' }}>待处理</div>
+                <div style={{ fontSize: '11px', color: '#8c8c8c', marginBottom: '2px' }}>待处理</div>
                 <div style={{ 
-                  fontSize: '16px', 
+                  fontSize: '14px', 
                   fontWeight: 'bold', 
                   color: '#faad14',
                   lineHeight: 1.2 
@@ -611,13 +763,13 @@ export const IssueStatisticsCard: React.FC<IssueCardProps> = ({ data, loading = 
               <div style={{
                 textAlign: 'center',
                 backgroundColor: '#f6ffed',
-                padding: '10px 8px',
+                padding: '8px 6px',
                 borderRadius: '6px',
                 border: '1px solid #d9f7be'
               }}>
-                <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '2px' }}>已接受</div>
+                <div style={{ fontSize: '11px', color: '#8c8c8c', marginBottom: '2px' }}>已接受</div>
                 <div style={{ 
-                  fontSize: '16px', 
+                  fontSize: '14px', 
                   fontWeight: 'bold', 
                   color: '#52c41a',
                   lineHeight: 1.2 
@@ -629,13 +781,13 @@ export const IssueStatisticsCard: React.FC<IssueCardProps> = ({ data, loading = 
               <div style={{
                 textAlign: 'center',
                 backgroundColor: '#fff2f0',
-                padding: '10px 8px',
+                padding: '8px 6px',
                 borderRadius: '6px',
                 border: '1px solid #ffccc7'
               }}>
-                <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '2px' }}>已拒绝</div>
+                <div style={{ fontSize: '11px', color: '#8c8c8c', marginBottom: '2px' }}>已拒绝</div>
                 <div style={{ 
-                  fontSize: '16px', 
+                  fontSize: '14px', 
                   fontWeight: 'bold', 
                   color: '#ff4d4f',
                   lineHeight: 1.2 
@@ -647,13 +799,13 @@ export const IssueStatisticsCard: React.FC<IssueCardProps> = ({ data, loading = 
               <div style={{
                 textAlign: 'center',
                 backgroundColor: '#ff4d4f20',
-                padding: '10px 8px',
+                padding: '8px 6px',
                 borderRadius: '6px',
                 border: '1px solid #ff4d4f40'
               }}>
-                <div style={{ fontSize: '12px', color: '#8c8c8c', marginBottom: '2px' }}>致命</div>
+                <div style={{ fontSize: '11px', color: '#8c8c8c', marginBottom: '2px' }}>致命</div>
                 <div style={{ 
-                  fontSize: '16px', 
+                  fontSize: '14px', 
                   fontWeight: 'bold', 
                   color: '#ff4d4f',
                   lineHeight: 1.2 
@@ -665,7 +817,7 @@ export const IssueStatisticsCard: React.FC<IssueCardProps> = ({ data, loading = 
           </div>
         </Col>
         <Col xs={24} sm={12}>
-          <div style={{ height: '200px' }}>
+          <div style={{ height: '160px' }}>
             <ReactECharts 
               option={barOption} 
               style={{ height: '100%', width: '100%' }}
@@ -674,53 +826,6 @@ export const IssueStatisticsCard: React.FC<IssueCardProps> = ({ data, loading = 
           </div>
         </Col>
       </Row>
-
-      <div style={{ 
-        marginTop: 16, 
-        borderTop: '2px solid #f0f0f0', 
-        backgroundColor: '#fafafa',
-        borderRadius: '0 0 6px 6px',
-        margin: '16px -24px -16px -24px',
-        padding: '16px 24px'
-      }}>
-        <Title level={5} style={{ 
-          margin: 0, 
-          marginBottom: 12, 
-          fontSize: '14px',
-          color: '#595959',
-          textAlign: 'center'
-        }}>
-          🐛 今日数据
-        </Title>
-        <Row gutter={16}>
-          <Col span={12}>
-            <div style={{ textAlign: 'center' }}>
-              <Statistic 
-                title={<span style={{ fontSize: '12px', color: '#8c8c8c' }}>新增问题</span>}
-                value={data.today_new} 
-                valueStyle={{ 
-                  fontSize: '16px',
-                  fontWeight: 600,
-                  color: '#fa8c16'
-                }}
-              />
-            </div>
-          </Col>
-          <Col span={12}>
-            <div style={{ textAlign: 'center' }}>
-              <Statistic 
-                title={<span style={{ fontSize: '12px', color: '#8c8c8c' }}>已接受</span>}
-                value={data.today_accepted}
-                valueStyle={{ 
-                  fontSize: '16px',
-                  fontWeight: 600,
-                  color: '#52c41a'
-                }}
-              />
-            </div>
-          </Col>
-        </Row>
-      </div>
     </Card>
   );
 };
