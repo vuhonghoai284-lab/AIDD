@@ -55,14 +55,21 @@ async def lifespan(app: FastAPI):
             print(f"✗ 数据库表创建失败: {fallback_error}")
             print("❌ 数据库初始化完全失败，应用可能无法正常工作")
     
-    # 2. 初始化缓存
+    # 2. 修复数据库字符集（MySQL）
+    try:
+        from app.services.database_charset_fixer import fix_database_charset
+        fix_database_charset()
+    except Exception as e:
+        print(f"⚠️ 数据库字符集修复失败: {e}")
+    
+    # 3. 初始化缓存
     try:
         init_cache()
         print("✓ 缓存系统已初始化")
     except Exception as e:
         print(f"✗ 缓存初始化失败: {e}")
     
-    # 3. 初始化AI模型配置到数据库
+    # 4. 初始化AI模型配置到数据库
     db = None
     try:
         db = next(get_db())
@@ -86,7 +93,7 @@ async def lifespan(app: FastAPI):
         if db:
             db.close()
     
-    # 4. 任务恢复机制 - 使用新的独立会话
+    # 5. 任务恢复机制 - 使用新的独立会话
     db = None
     try:
         db = next(get_db())

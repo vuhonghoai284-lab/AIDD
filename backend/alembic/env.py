@@ -104,13 +104,16 @@ def run_migrations_online() -> None:
     configuration = config.get_section(config.config_ini_section)
     configuration["sqlalchemy.url"] = settings.database_url
     
-    # NullPool不支持连接池参数，所以只设置基本配置
-    # 迁移时使用简单的连接方式，避免连接池复杂性
+    # 为MySQL设置默认字符集和排序规则
+    mysql_create_table_suffix = ""
+    if settings.database_type == 'mysql':
+        mysql_create_table_suffix = "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
 
     connectable = engine_from_config(
         configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,  # 迁移时使用NullPool避免连接池问题
+        connect_args=engine_config.get('connect_args', {})  # 使用应用的连接配置
     )
 
     with connectable.connect() as connection:
@@ -121,7 +124,9 @@ def run_migrations_online() -> None:
             compare_type=True,
             compare_server_default=True,
             # 渲染模式配置
-            render_as_batch=True if settings.database_type == 'sqlite' else False
+            render_as_batch=True if settings.database_type == 'sqlite' else False,
+            # MySQL表创建时的默认字符集
+            **({'mysql_table_options': mysql_create_table_suffix} if mysql_create_table_suffix else {})
         )
 
         with context.begin_transaction():
