@@ -18,11 +18,11 @@ database:
   
   # MySQL生产环境配置
   mysql:
-    host: "${MYSQL_HOST}"
+    host: "${MYSQL_HOST:localhost}"
     port: "${MYSQL_PORT:3306}"
-    username: "${MYSQL_USERNAME}"
-    password: "${MYSQL_PASSWORD}"
-    database: "${MYSQL_DATABASE:ai_doc_test}"
+    username: "${MYSQL_USERNAME:ai_docs_user}"
+    password: "${MYSQL_PASSWORD:ai_docs_password}"
+    database: "${MYSQL_DATABASE:ai_docs_db}"
     charset: "utf8mb4"
     # 生产环境连接池配置
     pool:

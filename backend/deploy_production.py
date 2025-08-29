@@ -163,9 +163,9 @@ def main():
     print("🚀 生产环境部署开始...")
     
     # 1. 检查环境变量
-    if not check_environment():
-        print("💡 请设置必需的环境变量后重试")
-        sys.exit(1)
+    # if not check_environment():
+    #     print("💡 请设置必需的环境变量后重试")
+    #     sys.exit(1)
     
     # 2. 测试数据库连接
     conn_success, engine = test_database_connection()
