@@ -37,7 +37,7 @@ cache:
 # 数据库配置
 database:
   # 数据库类型: sqlite 或 mysql
-  type: "sqlite"
+  type: "${DATABASE_TYPE:mysql}"
   
   # SQLite配置（默认）
   sqlite:
@@ -47,9 +47,9 @@ database:
   mysql:
     host: "${MYSQL_HOST:localhost}"
     port: "${MYSQL_PORT:3306}"
-    username: "${MYSQL_USERNAME:root}"
-    password: "${MYSQL_PASSWORD}"
-    database: "${MYSQL_DATABASE:ai_doc_test}"
+    username: "${MYSQL_USERNAME:ai_docs_user}"
+    password: "${MYSQL_PASSWORD:ai_docs_password}"
+    database: "${MYSQL_DATABASE:ai_docs_db}"
     charset: "utf8mb4"
     # 连接池配置 - 生产环境优化版本
     pool:

@@ -14,8 +14,8 @@ from app.core.db_monitor import get_monitor
 
 # 控制连接池状态打印频率的全局变量
 _last_pool_log_time = {}
-_pool_log_interval = 30  # 30秒内不重复打印相同类型的连接池状态
-_pool_log_counter = 0    # 连接池日志计数器，每10次操作才打印一次
+_pool_log_interval = 60  # 60秒内不重复打印相同类型的连接池状态
+_pool_log_counter = 0    # 连接池日志计数器，每100次操作才打印一次
 
 # 获取配置
 settings = get_settings()
@@ -205,12 +205,12 @@ def _log_connection_pool_status(operation: str, previous_info: dict = None) -> d
         pool_type = pool.__class__.__name__
         current_time = time.time()
         
-        # 使用计数器控制打印频率：每10次操作打印一次，或30秒强制打印一次
+        # 使用计数器控制打印频率：每100次操作打印一次，或60秒强制打印一次
         _pool_log_counter += 1
         operation_key = f"general_{pool_type}"  # 统一操作类型，避免过细分化
         last_log_time = _last_pool_log_time.get(operation_key, 0)
         
-        should_log = (_pool_log_counter % 10 == 0) or (current_time - last_log_time >= _pool_log_interval)
+        should_log = (_pool_log_counter % 100 == 0) or (current_time - last_log_time >= _pool_log_interval)
         
         # StaticPool和其他连接池类型的兼容性处理
         current_info = {
@@ -248,19 +248,30 @@ def _log_connection_pool_status(operation: str, previous_info: dict = None) -> d
             except AttributeError:
                 current_info['size'] = 1
         
-        # 仅在需要时打印日志
-        if should_log:
+        # 只在异常情况下打印日志，正常状态不打印
+        has_warnings = False
+        
+        # 检查是否有异常状态（StaticPool除外）
+        if pool_type != 'StaticPool':
+            if (current_info['checked_out'] > 15 or 
+                current_info['overflow'] > 5 or 
+                current_info['checked_out'] + current_info['checked_in'] > current_info['size'] + 10):
+                has_warnings = True
+        
+        # 检查是否为错误相关操作
+        is_error_operation = ('error' in operation.lower() or '异常' in operation or '失败' in operation)
+        
+        # 仅在异常情况或错误操作时打印
+        if should_log and (has_warnings or is_error_operation):
             _last_pool_log_time[operation_key] = current_time
             
-            # 对StaticPool进一步限制打印
             if pool_type == 'StaticPool':
-                # StaticPool状态记录控制更严格，仅在错误或异常时记录
-                if ('error' in operation.lower() or '异常' in operation or '失败' in operation):
+                if is_error_operation:
                     print(f"🔗 [{operation}] StaticPool状态 - 单连接池")
-                # 否则完全不打印StaticPool的正常状态
             else:
-                # 对于非StaticPool，打印摘要信息而非每次操作详情
-                print(f"🔗 连接池摘要[{_pool_log_counter}次操作] {pool_type} - "
+                # 只在有问题时打印连接池状态
+                status_symbol = "⚠️" if has_warnings else "🔗"
+                print(f"{status_symbol} 连接池状态[{_pool_log_counter}次操作] {pool_type} - "
                       f"活跃:{current_info['checked_out']} "
                       f"空闲:{current_info['checked_in']} "
                       f"总数:{current_info['size']} "
