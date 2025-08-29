@@ -71,16 +71,19 @@ class AuthService(IAuthService):
                    avatar_url: str = None, is_admin: bool = False, 
                    is_system_admin: bool = False) -> Optional[Dict[str, Any]]:
         """用户登录"""
+        print(f"🔐 [AuthService] 开始用户登录流程 - uid: {uid}")
         max_retries = 3
         retry_count = 0
         
         while retry_count < max_retries:
             try:
+                print(f"🔍 [AuthService] 尝试查找用户 - uid: {uid} (重试次数: {retry_count})")
                 # 查找用户
                 user = self.user_repo.get_by_uid(uid)
                 
                 # 如果用户不存在，创建新用户
                 if not user:
+                    print(f"👤 [AuthService] 用户不存在，创建新用户 - uid: {uid}")
                     user_create = UserCreate(
                         uid=uid,
                         display_name=display_name,
@@ -90,9 +93,12 @@ class AuthService(IAuthService):
                         is_system_admin=is_system_admin
                     )
                     user = self.user_repo.create(user_create)
+                    print(f"✅ [AuthService] 新用户创建成功 - id: {user.id}, uid: {user.uid}")
                 else:
+                    print(f"✅ [AuthService] 找到已存在用户 - id: {user.id}, uid: {user.uid}")
                     # 更新用户最后登录时间
                     self.user_repo.update_last_login(user.id)
+                    print(f"✅ [AuthService] 更新用户最后登录时间成功")
                 
                 # 如果成功，跳出重试循环
                 break
@@ -100,6 +106,7 @@ class AuthService(IAuthService):
             except Exception as e:
                 retry_count += 1
                 error_msg = str(e)
+                print(f"⚠️ [AuthService] 用户登录异常 (第{retry_count}次重试) - uid: {uid}, 错误: {error_msg}")
                 
                 # 处理各种并发问题
                 if ("UNIQUE constraint failed" in error_msg or 
@@ -108,38 +115,49 @@ class AuthService(IAuthService):
                     "FlushError" in error_msg or
                     "database is locked" in error_msg):
                     
+                    print(f"🔄 [AuthService] 检测到并发问题，执行回滚和重试逻辑")
                     # 回滚当前事务
                     try:
                         self.db.rollback()
-                    except:
-                        pass
+                        print(f"✅ [AuthService] 事务回滚成功")
+                    except Exception as rollback_error:
+                        print(f"⚠️ [AuthService] 事务回滚失败: {rollback_error}")
                     
                     # 重新查找用户（可能被其他线程创建了）
                     user = self.user_repo.get_by_uid(uid)
                     if user:
+                        print(f"✅ [AuthService] 重新查找发现用户已存在 - id: {user.id}")
                         break  # 找到用户，成功
                     
                     # 如果还有重试次数，稍等片刻再重试
                     if retry_count < max_retries:
                         import time
-                        time.sleep(0.1 * retry_count)  # 递增延迟
+                        wait_time = 0.1 * retry_count
+                        print(f"🔄 [AuthService] 等待 {wait_time:.1f}秒后进行第{retry_count+1}次重试")
+                        time.sleep(wait_time)  # 递增延迟
                         continue
                     else:
+                        print(f"❌ [AuthService] 重试次数已用完，抛出异常")
                         raise e  # 重试次数用完，抛出异常
                 else:
+                    print(f"❌ [AuthService] 非并发问题，直接抛出异常: {error_msg}")
                     raise e  # 非并发问题，直接抛出
         
         # 创建访问令牌
+        print(f"🔑 [AuthService] 开始创建访问令牌 - user_id: {user.id}")
         access_token_expires = timedelta(minutes=self.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = self.create_access_token(
             data={"sub": str(user.id)}, expires_delta=access_token_expires
         )
+        print(f"✅ [AuthService] 访问令牌创建成功 - user_id: {user.id}, 过期时间: {self.ACCESS_TOKEN_EXPIRE_MINUTES}分钟")
         
-        return {
+        result = {
             "user": user,
             "access_token": access_token,
             "token_type": "bearer"
         }
+        print(f"✅ [AuthService] 用户登录流程完成 - uid: {uid}, user_id: {user.id}")
+        return result
     
     def verify_token(self, token: str) -> Optional[User]:
         """验证令牌（生产环境增强版）"""

@@ -6,7 +6,7 @@
 import time
 import asyncio
 import threading
-from app.core.database import SessionLocal, get_independent_db_session, close_independent_db_session, _log_connection_pool_status
+from app.core.database import SessionLocal, get_independent_db_session, close_independent_db_session
 from app.core.db_monitor import get_monitor
 from app.services.concurrency_service import concurrency_service
 
@@ -113,7 +113,7 @@ def test_connection_pool_behavior():
     """测试连接池行为"""
     print("🔍 测试连接池行为...")
     
-    _log_connection_pool_status("测试开始")
+    print("测试开始")
     
     sessions = []
     try:
@@ -124,7 +124,7 @@ def test_connection_pool_behavior():
             elapsed = (time.time() - start) * 1000
             sessions.append(session)
             print(f"创建会话 {i}: {elapsed:.1f}ms")
-            _log_connection_pool_status(f"创建会话 {i}")
+            print(f"创建会话 {i}")
             
             if elapsed > 1000:  # 超过1秒的会话创建
                 print(f"⚠️ 会话 {i} 创建耗时过长: {elapsed:.1f}ms")
@@ -136,7 +136,7 @@ def test_connection_pool_behavior():
             session.close()
             elapsed = (time.time() - start) * 1000
             print(f"关闭会话 {i}: {elapsed:.1f}ms")
-            _log_connection_pool_status(f"关闭会话 {i}")
+            print(f"关闭会话 {i}")
 
 async def test_full_batch_simulation():
     """完整模拟批量任务创建流程"""

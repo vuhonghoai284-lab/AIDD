@@ -23,6 +23,8 @@ def get_engine_config():
             'connect_args': {
                 'charset': 'utf8mb4',
                 'autocommit': False,
+                'use_unicode': True,
+                'init_command': "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci"
             },
             'pool_size': 10,
             'max_overflow': 20,
@@ -113,7 +115,7 @@ def get_independent_db_session() -> Session:
     return SessionLocal()
 
 
-def close_independent_db_session(db: Session):
+def close_independent_db_session(db: Session, operation: str = "关闭独立会话"):
     """
     关闭独立数据库会话
     """

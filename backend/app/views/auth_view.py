@@ -196,29 +196,55 @@ class AuthView(BaseView):
         db: Session = Depends(get_db)
     ) -> UserLoginResponse:
         """系统管理员登录"""
-        auth_service = AuthService(db)
+        print(f"🔐 [系统登录] 开始处理管理员登录请求 - 用户名: {username}")
         
-        # 验证管理员凭据（在实际应用中应该使用加密密码验证）
-        if username == "admin" and password == "admin123":
-            # 创建或获取系统管理员用户
-            login_result = auth_service.login_user(
-                uid="sys_admin",
-                display_name="系统管理员",
-                email="admin@example.com",
-                is_system_admin=True,
-                is_admin=True
-            )
+        try:
+            auth_service = AuthService(db)
+            print(f"✅ [系统登录] AuthService初始化成功")
             
-            if not login_result:
-                raise HTTPException(status_code=401, detail="登录失败")
-            
-            return UserLoginResponse(
-                user=UserResponse.from_orm(login_result["user"]),
-                access_token=login_result["access_token"],
-                token_type=login_result["token_type"]
-            )
-        else:
-            raise HTTPException(status_code=401, detail="用户名或密码错误")
+            # 验证管理员凭据（在实际应用中应该使用加密密码验证）
+            if username == "admin" and password == "admin123":
+                print(f"✅ [系统登录] 用户名密码验证通过")
+                
+                # 创建或获取系统管理员用户
+                try:
+                    login_result = auth_service.login_user(
+                        uid="sys_admin",
+                        display_name="系统管理员",
+                        email="admin@example.com",
+                        is_system_admin=True,
+                        is_admin=True
+                    )
+                    print(f"✅ [系统登录] 用户登录服务调用成功")
+                    
+                    if not login_result:
+                        print(f"❌ [系统登录] 登录服务返回空结果")
+                        raise HTTPException(status_code=401, detail="登录失败")
+                    
+                    print(f"✅ [系统登录] 用户创建/获取成功 - 用户ID: {login_result['user'].id}")
+                    print(f"✅ [系统登录] Token生成成功 - Token前缀: {login_result['access_token'][:20]}...")
+                    
+                    return UserLoginResponse(
+                        user=UserResponse.from_orm(login_result["user"]),
+                        access_token=login_result["access_token"],
+                        token_type=login_result["token_type"]
+                    )
+                    
+                except Exception as login_error:
+                    print(f"❌ [系统登录] 用户登录过程异常: {login_error}")
+                    print(f"❌ [系统登录] 异常类型: {type(login_error)}")
+                    raise HTTPException(status_code=500, detail=f"登录过程异常: {str(login_error)}")
+            else:
+                print(f"❌ [系统登录] 用户名或密码错误 - 用户名: {username}")
+                raise HTTPException(status_code=401, detail="用户名或密码错误")
+                
+        except HTTPException:
+            # 重新抛出HTTP异常
+            raise
+        except Exception as e:
+            print(f"❌ [系统登录] 系统登录过程发生未预期异常: {e}")
+            print(f"❌ [系统登录] 异常类型: {type(e)}")
+            raise HTTPException(status_code=500, detail=f"系统登录异常: {str(e)}")
 
 
 # 创建视图实例并导出router
