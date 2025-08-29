@@ -241,6 +241,135 @@ class TaskService(ITaskService):
         
         return successful_tasks
     
+    async def batch_create_queued_tasks(self, files_data: List[dict], user_id: Optional[int] = None) -> List[TaskResponse]:
+        """批量创建排队任务（不立即处理，只创建任务记录并加入队列）"""
+        print(f"📋 开始批量创建排队任务: {len(files_data)} 个文件")
+        
+        created_tasks = []
+        
+        for file_data in files_data:
+            try:
+                # 创建任务记录，但不启动处理
+                task_response = await self.create_queued_task(
+                    file=file_data.get('file'),
+                    title=file_data.get('title'),
+                    model_index=file_data.get('model_index'),
+                    user_id=user_id
+                )
+                created_tasks.append(task_response)
+                
+            except Exception as e:
+                file_obj = file_data.get('file')
+                filename = getattr(file_obj, 'filename', 'unknown') if file_obj else 'unknown'
+                print(f"❌ 创建排队任务失败 {filename}: {e}")
+                # 继续处理其他文件，不中断整个批量操作
+        
+        print(f"✅ 批量排队任务创建完成: 成功 {len(created_tasks)} 个")
+        return created_tasks
+    
+    async def create_queued_task(self, file: UploadFile, title: Optional[str] = None, model_index: Optional[int] = None, user_id: Optional[int] = None) -> TaskResponse:
+        """创建排队任务（只创建记录，不立即处理）"""
+        # 验证文件
+        file_settings = self.settings.file_settings
+        allowed_exts = ['.' + ext for ext in file_settings.get('allowed_extensions', ['pdf', 'docx', 'md'])]
+        file_ext = os.path.splitext(file.filename)[1].lower()
+        if file_ext not in allowed_exts:
+            raise HTTPException(400, f"不支持的文件类型: {file_ext}")
+        
+        # 读取文件内容
+        content = await file.read()
+        file_size = len(content)
+        max_size = file_settings.get('max_file_size', 10485760)
+        if file_size > max_size:
+            raise HTTPException(400, f"文件大小超过限制: {file_size / 1024 / 1024:.2f}MB")
+        
+        # 计算文件哈希
+        content_hash = hashlib.sha256(content).hexdigest()
+        
+        # 检查文件是否已存在
+        existing_file = self.file_repo.get_by_hash(content_hash)
+        if existing_file:
+            file_info = existing_file
+        else:
+            # 保存新文件
+            file_name = file.filename
+            upload_dir = self.settings.upload_dir
+            os.makedirs(upload_dir, exist_ok=True)
+            
+            timestamp = datetime.now().timestamp()
+            stored_name = f"{timestamp}_{file_name}"
+            file_path = os.path.join(upload_dir, stored_name)
+            
+            with open(file_path, 'wb') as f:
+                f.write(content)
+            
+            file_info = self.file_repo.create(
+                original_name=file_name,
+                stored_name=stored_name,
+                file_path=file_path,
+                file_size=file_size,
+                file_type=file_ext[1:],
+                mime_type=file.content_type or 'application/octet-stream',
+                content_hash=content_hash,
+                encoding='utf-8',
+                is_processed='pending'
+            )
+        
+        # 获取AI模型
+        if model_index is not None:
+            active_models = self.model_repo.get_active_models()
+            if model_index < len(active_models):
+                ai_model = active_models[model_index]
+            else:
+                ai_model = self.model_repo.get_default_model()
+        else:
+            ai_model = self.model_repo.get_default_model()
+        
+        if not ai_model:
+            raise HTTPException(400, "没有可用的AI模型")
+        
+        # 创建任务记录（状态为pending，表示排队中）
+        task = self.task_repo.create(
+            title=title or os.path.splitext(file.filename)[0],
+            status='pending',
+            progress=0,
+            user_id=user_id,
+            file_id=file_info.id,
+            model_id=ai_model.id
+        )
+        
+        # 将任务直接加入数据库队列（不立即处理）
+        try:
+            from app.services.database_queue_service import get_database_queue_service
+            queue_service = get_database_queue_service()
+            
+            success = await queue_service.enqueue_task(
+                task_id=task.id,
+                user_id=user_id,
+                priority=3,  # 排队任务优先级稍低
+                estimated_duration=300
+            )
+            
+            if success:
+                print(f"📋 任务 {task.id} 已加入排队")
+            else:
+                print(f"⚠️ 任务 {task.id} 加入排队失败")
+                
+        except Exception as e:
+            print(f"❌ 任务 {task.id} 加入排队时出错: {e}")
+        
+        # 获取关联数据构建响应
+        file_info = self.file_repo.get_by_id(task.file_id) if task.file_id else None
+        ai_model = self.model_repo.get_by_id(task.model_id) if task.model_id else None
+        user_info = self.user_repo.get_by_id(task.user_id) if task.user_id else None
+        
+        # 失效相关缓存
+        self._invalidate_statistics_cache(user_id)
+        
+        issue_count = self.task_repo.count_issues(task.id)
+        processed_issues = self.task_repo.count_processed_issues(task.id)
+        return TaskResponse.from_task_with_relations(task, file_info, ai_model, user_info, issue_count, processed_issues)
+    
     def get_all_tasks(self) -> List[TaskResponse]:
         """获取所有任务（性能优化版）"""
         print("🚀 开始获取任务列表（使用性能优化查询）...")

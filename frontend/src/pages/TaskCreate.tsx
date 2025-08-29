@@ -120,11 +120,15 @@ const TaskCreate: React.FC = () => {
       
       message.info(`正在批量创建 ${pendingFiles.length} 个任务...`);
       
-      // 调用批量创建API
+      // 调用批量创建API（支持排队）
       const createdTasks = await taskAPI.batchCreateTasks(
         pendingFiles.map(f => f.file), 
         selectedModel
       );
+      
+      // 统计立即创建和排队的任务数量
+      const processingTasks = createdTasks.filter(task => task.status === 'processing').length;
+      const queuedTasks = createdTasks.filter(task => task.status === 'pending').length;
       
       // 更新成功的任务
       const updatedTasks = [...tasks];
@@ -140,30 +144,53 @@ const TaskCreate: React.FC = () => {
       });
       setUploadedFiles(updatedTasks);
       
-      message.success({
-        content: (
-          <div>
-            <div>🎉 批量创建成功！共创建 {createdTasks.length} 个任务</div>
-            <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
-              正在跳转到任务列表，您可以在那里查看处理进度...
+      // 显示不同的成功消息
+      if (queuedTasks > 0) {
+        message.success({
+          content: (
+            <div>
+              <div>🎉 批量创建成功！共创建 {createdTasks.length} 个任务</div>
+              <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+                • 立即开始处理: {processingTasks} 个任务
+              </div>
+              <div style={{ fontSize: 12, color: '#666' }}>
+                • 已加入排队: {queuedTasks} 个任务（系统将自动处理）
+              </div>
+              <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+                正在跳转到任务列表，您可以在那里查看处理进度...
+              </div>
             </div>
-          </div>
-        ),
-        duration: 2
-      });
+          ),
+          duration: 3
+        });
+      } else {
+        message.success({
+          content: (
+            <div>
+              <div>🎉 批量创建成功！共创建 {createdTasks.length} 个任务</div>
+              <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+                所有任务都已开始处理，正在跳转到任务列表...
+              </div>
+            </div>
+          ),
+          duration: 2
+        });
+      }
       
       // 延迟跳转，给后端一些时间处理任务
       setTimeout(() => {
+        // 设置刷新标记，让任务列表在加载时自动刷新
+        localStorage.setItem('taskListShouldRefresh', 'true');
         navigate('/');
-      }, 1500);
+      }, queuedTasks > 0 ? 2000 : 1500);
       
     } catch (error: any) {
       console.error('Batch create error:', error);
       
-      // 处理429并发限制错误
+      // 处理429并发限制错误（现在应该很少出现，因为支持排队了）
       if (error.response?.status === 429) {
         const errorDetail = error.response.data?.detail;
-        let errorMessage = '并发限制已达上限';
+        let errorMessage = '系统繁忙，请稍后重试';
         
         if (typeof errorDetail === 'object' && errorDetail?.message) {
           errorMessage = errorDetail.message;
@@ -172,7 +199,7 @@ const TaskCreate: React.FC = () => {
         }
         
         message.error({
-          content: `批量创建失败: ${errorMessage}`,
+          content: `创建失败: ${errorMessage}`,
           duration: 5
         });
         
@@ -188,7 +215,7 @@ const TaskCreate: React.FC = () => {
       }
       
       // 其他错误降级到前端并发创建
-      message.warning('批量创建失败，正在使用逐个创建...');
+      message.warning('批量创建遇到问题，正在使用逐个创建模式...');
       await handleConcurrentCreateTasks(pendingFiles);
     }
   };
@@ -264,6 +291,8 @@ const TaskCreate: React.FC = () => {
       
       // 延迟跳转，给后端一些时间处理任务
       setTimeout(() => {
+        // 设置刷新标记，让任务列表在加载时自动刷新
+        localStorage.setItem('taskListShouldRefresh', 'true');
         navigate('/');
       }, 1500);
     }
@@ -355,7 +384,7 @@ const TaskCreate: React.FC = () => {
             <h3>上传文档文件</h3>
             <p>支持的文件格式：PDF、Word (.docx)、Markdown (.md)，最大文件大小：10MB</p>
             <p style={{ color: '#52c41a', fontSize: '12px', marginTop: '4px' }}>
-              💡 批量选择超过3个文件时将自动使用高性能批量创建模式
+              💡 批量选择文件时系统将智能处理：可立即处理的任务会优先启动，其余将自动排队等待处理
             </p>
             <Dragger {...uploadProps} disabled={creating}>
               <p className="ant-upload-drag-icon">

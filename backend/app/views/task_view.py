@@ -124,59 +124,20 @@ class TaskView(BaseView):
         current_user: User = Depends(BaseView.get_current_user),
         db: Session = Depends(get_db)
     ) -> List[TaskResponse]:
-        """批量创建任务"""
+        """批量创建任务 - 支持大量文件排队"""
         print(f"🚀 批量创建任务请求: {len(files)} 个文件, model_index={model_index}, user={current_user.uid}")
         
-        # 检查并发限制（批量任务需要检查请求的任务数量）
-        try:
-            allowed, status_info = await get_enhanced_concurrency_service().check_concurrency_limits(
-                db, current_user, requested_tasks=len(files), raise_exception=True
-            )
-        except ConcurrencyLimitExceeded as e:
-            # 获取当前状态信息用于错误处理
-            _, status_info = await get_enhanced_concurrency_service().check_concurrency_limits(
-                db, current_user, requested_tasks=0, raise_exception=False
-            )
-            
-            # 提供批量任务的特殊错误处理
-            if e.limit_type == 'system':
-                available_slots = status_info['system']['available_slots']
-                raise HTTPException(
-                    status_code=429,
-                    detail={
-                        "error": "system_concurrency_limit_exceeded",
-                        "message": f"系统最多还能创建 {available_slots} 个任务，无法创建 {len(files)} 个任务",
-                        "requested_tasks": len(files),
-                        "available_slots": available_slots,
-                        "current_count": e.current_count,
-                        "max_count": e.max_count,
-                        "limit_type": "system"
-                    }
-                )
-            elif e.limit_type == 'user':
-                available_slots = status_info['user']['available_slots']
-                raise HTTPException(
-                    status_code=429,
-                    detail={
-                        "error": "user_concurrency_limit_exceeded",
-                        "message": f"您最多还能创建 {available_slots} 个任务，无法创建 {len(files)} 个任务",
-                        "requested_tasks": len(files),
-                        "available_slots": available_slots,
-                        "current_count": e.current_count,
-                        "max_count": e.max_count,
-                        "limit_type": "user"
-                    }
-                )
-            else:
-                raise HTTPException(
-                    status_code=429,
-                    detail={
-                        "error": "concurrency_limit_exceeded",
-                        "message": str(e),
-                        "requested_tasks": len(files),
-                        "limit_type": "both"
-                    }
-                )
+        # 检查可创建的任务数量，不强制抛出异常
+        allowed, status_info = await get_enhanced_concurrency_service().check_concurrency_limits(
+            db, current_user, requested_tasks=len(files), raise_exception=False
+        )
+        
+        # 计算可立即创建的任务数量
+        system_available = status_info['system']['available_slots']
+        user_available = status_info['user']['available_slots']
+        max_immediate = min(system_available, user_available)
+        
+        print(f"📊 并发限制检查: 系统可用={system_available}, 用户可用={user_available}, 可立即创建={max_immediate}")
         
         service = TaskService(db)
         
@@ -189,8 +150,31 @@ class TaskView(BaseView):
                 'model_index': model_index
             })
         
-        # 使用服务层的批量创建方法
-        return await service.batch_create_tasks(files_data, user_id=current_user.id)
+        # 分批创建任务：立即创建 + 排队创建
+        if max_immediate >= len(files):
+            # 所有任务都可以立即创建
+            print(f"✅ 所有 {len(files)} 个任务都可以立即创建")
+            return await service.batch_create_tasks(files_data, user_id=current_user.id)
+        else:
+            # 需要分批创建：一部分立即创建，剩余排队
+            immediate_files = files_data[:max_immediate] if max_immediate > 0 else []
+            queued_files = files_data[max_immediate:]
+            
+            print(f"🔄 分批创建: 立即创建={len(immediate_files)}, 排队={len(queued_files)}")
+            
+            # 立即创建可用的任务
+            created_tasks = []
+            if immediate_files:
+                created_tasks = await service.batch_create_tasks(immediate_files, user_id=current_user.id)
+                print(f"✅ 立即创建 {len(created_tasks)} 个任务")
+            
+            # 排队剩余任务
+            if queued_files:
+                queued_tasks = await service.batch_create_queued_tasks(queued_files, user_id=current_user.id)
+                created_tasks.extend(queued_tasks)
+                print(f"📋 已将 {len(queued_tasks)} 个任务加入排队")
+            
+            return created_tasks
     
     def get_tasks(
         self,

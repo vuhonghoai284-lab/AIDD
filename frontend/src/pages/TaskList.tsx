@@ -66,6 +66,20 @@ const TaskList: React.FC = () => {
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const pageSize = 20; // 与useTaskList中的pageSize保持一致
   
+  // 检查是否需要刷新任务列表（从任务创建页面返回时）
+  useEffect(() => {
+    const shouldRefresh = localStorage.getItem('taskListShouldRefresh');
+    if (shouldRefresh === 'true') {
+      // 清除刷新标记
+      localStorage.removeItem('taskListShouldRefresh');
+      // 延迟刷新，确保组件已完全挂载
+      setTimeout(() => {
+        console.log('🔄 从任务创建页面返回，自动刷新任务列表');
+        refreshTasks();
+      }, 100);
+    }
+  }, [refreshTasks]);
+  
   // 使用优化的无限滚动Hook（仅在无限滚动模式时启用）
   const loadMoreTriggerRef = useInfiniteScroll({
     hasNextPage: paginationMode === 'infinite' ? hasNextPage : false, // 分页模式时禁用无限滚动
