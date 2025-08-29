@@ -28,13 +28,22 @@ async def lifespan(app: FastAPI):
     from app.services.model_initializer import model_initializer
     from app.services.task_recovery_service import task_recovery_service
     from app.services.background_task_service import background_task_service
-    from app.core.alembic_manager import run_migrations_on_startup
     
     # 1. 首先执行数据库迁移
     try:
+        from app.core.alembic_manager import run_migrations_on_startup
         config_file = os.getenv('CONFIG_FILE')
         await run_migrations_on_startup(config_file)
         print("✓ 数据库迁移完成")
+    except ImportError as import_error:
+        print(f"⚠️ Alembic未安装，跳过自动迁移: {import_error}")
+        print("💡 请在虚拟环境中安装: pip install alembic==1.13.1")
+        # 降级到原来的表创建方式
+        try:
+            Base.metadata.create_all(bind=engine)
+            print("✓ 使用SQLAlchemy创建数据库表（降级模式）")
+        except Exception as fallback_error:
+            print(f"✗ 数据库表创建失败: {fallback_error}")
     except Exception as e:
         print(f"✗ 数据库迁移失败: {e}")
         # 迁移失败时继续启动，但会记录错误
@@ -47,21 +56,46 @@ async def lifespan(app: FastAPI):
         print(f"✗ 缓存初始化失败: {e}")
     
     # 3. 初始化AI模型配置到数据库
-    db = next(get_db())
+    db = None
     try:
+        db = next(get_db())
+        # 确保使用全新的干净会话
+        try:
+            db.rollback()  # 清理任何残留事务状态
+        except Exception:
+            pass
+        
         models = model_initializer.initialize_models(db)
         print(f"✓ 已初始化 {len(models)} 个AI模型")
     except Exception as e:
         print(f"✗ AI模型初始化失败: {e}")
+        # 确保异常时也回滚
+        if db:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+    finally:
+        if db:
+            db.close()
     
-    # 4. 任务恢复机制
+    # 4. 任务恢复机制 - 使用新的独立会话
+    db = None
     try:
+        db = next(get_db())
+        # 确保使用全新的干净会话
+        try:
+            db.rollback()  # 清理任何残留事务状态
+        except Exception:
+            pass
+            
         recovered_count = await task_recovery_service.recover_tasks_on_startup(db)
         print(f"✓ 已恢复 {recovered_count} 个待处理任务")
     except Exception as e:
         print(f"✗ 任务恢复失败: {e}")
     finally:
-        db.close()
+        if db:
+            db.close()
     
     # 5. 启动后台任务服务
     try:

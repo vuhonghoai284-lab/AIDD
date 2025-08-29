@@ -18,7 +18,7 @@ class ModelInitializer:
     
     def initialize_models(self, db: Session) -> List[AIModel]:
         """
-        从配置文件初始化AI模型到数据库
+        从配置文件初始化AI模型到数据库（增强事务安全版本）
         
         Args:
             db: 数据库会话
@@ -26,35 +26,73 @@ class ModelInitializer:
         Returns:
             初始化的模型列表
         """
-        models_config = self.settings.ai_models
-        default_index = self.settings.default_model_index
-        
-        initialized_models = []
-        
-        for index, model_config in enumerate(models_config):
-            # 生成模型key（基于配置内容的哈希）
-            model_key = self._generate_model_key(model_config)
+        try:
+            models_config = self.settings.ai_models
+            default_index = self.settings.default_model_index
             
-            # 检查模型是否已存在
-            existing_model = db.query(AIModel).filter(AIModel.model_key == model_key).first()
+            initialized_models = []
             
-            if existing_model:
-                # 更新现有模型
-                self._update_model(existing_model, model_config, index, default_index)
+            # 在事务开始前确保会话是干净的
+            try:
+                db.rollback()  # 清理任何待处理的事务
+            except Exception:
+                pass  # 忽略回滚错误
+            
+            for index, model_config in enumerate(models_config):
+                try:
+                    # 生成模型key（基于配置内容的哈希）
+                    model_key = self._generate_model_key(model_config)
+                    
+                    # 检查模型是否已存在
+                    existing_model = db.query(AIModel).filter(AIModel.model_key == model_key).first()
+                    
+                    if existing_model:
+                        # 更新现有模型
+                        self._update_model(existing_model, model_config, index, default_index)
+                        initialized_models.append(existing_model)
+                    else:
+                        # 创建新模型
+                        new_model = self._create_model(model_config, model_key, index, default_index)
+                        db.add(new_model)
+                        initialized_models.append(new_model)
+                        
+                except Exception as model_error:
+                    print(f"⚠️ 处理模型配置失败 (索引 {index}): {model_error}")
+                    # 回滚这个模型的变更，继续处理其他模型
+                    try:
+                        db.rollback()
+                    except Exception:
+                        pass
+                    continue
+            
+            # 标记不在配置中的模型为非活跃状态
+            try:
+                self._deactivate_unused_models(db, [model.model_key for model in initialized_models])
+            except Exception as deactivate_error:
+                print(f"⚠️ 停用未使用模型失败: {deactivate_error}")
+                # 不影响主要流程
+            
+            # 最终提交所有变更
+            try:
                 db.commit()
-                initialized_models.append(existing_model)
-            else:
-                # 创建新模型
-                new_model = self._create_model(model_config, model_key, index, default_index)
-                db.add(new_model)
-                db.commit()
-                db.refresh(new_model)
-                initialized_models.append(new_model)
-        
-        # 标记不在配置中的模型为非活跃状态
-        self._deactivate_unused_models(db, [model.model_key for model in initialized_models])
-        
-        return initialized_models
+                print(f"✅ AI模型初始化成功: {len(initialized_models)} 个模型")
+            except Exception as commit_error:
+                print(f"❌ AI模型初始化提交失败: {commit_error}")
+                db.rollback()
+                raise
+                
+            return initialized_models
+            
+        except Exception as e:
+            # 确保在异常情况下回滚事务
+            try:
+                db.rollback()
+                print(f"🔄 AI模型初始化异常，已执行事务回滚")
+            except Exception as rollback_error:
+                print(f"⚠️ 事务回滚也失败了: {rollback_error}")
+            
+            # 重新抛出原始异常
+            raise e
     
     def _generate_model_key(self, model_config: Dict[str, Any]) -> str:
         """
@@ -163,16 +201,24 @@ class ModelInitializer:
             db: 数据库会话
             active_keys: 活跃模型key列表
         """
-        unused_models = db.query(AIModel).filter(
-            ~AIModel.model_key.in_(active_keys),
-            AIModel.is_active == True
-        ).all()
-        
-        for model in unused_models:
-            model.is_active = False
-            model.is_default = False
-        
-        db.commit()
+        try:
+            unused_models = db.query(AIModel).filter(
+                ~AIModel.model_key.in_(active_keys),
+                AIModel.is_active == True
+            ).all()
+            
+            deactivated_count = 0
+            for model in unused_models:
+                model.is_active = False
+                model.is_default = False
+                deactivated_count += 1
+            
+            if deactivated_count > 0:
+                print(f"📋 停用了 {deactivated_count} 个未使用的模型")
+                
+        except Exception as e:
+            print(f"⚠️ 查询或停用未使用模型失败: {e}")
+            # 不提交，让调用方统一处理事务
     
     def get_active_models(self, db: Session) -> List[AIModel]:
         """
