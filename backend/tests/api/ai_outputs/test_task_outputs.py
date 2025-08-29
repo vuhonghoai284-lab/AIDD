@@ -16,7 +16,7 @@ class TestTaskAIOutputsAPI:
         filename, content, content_type = sample_file
         files = {"file": (filename, io.BytesIO(content), content_type)}
         create_response = client.post("/api/tasks/", files=files, data={"ai_model_index": "0"}, headers=auth_headers)
-        assert create_response.status_code == 200
+        assert create_response.status_code == 201
         task_id = create_response.json()["id"]
         
         # 获取AI输出
@@ -33,6 +33,7 @@ class TestTaskAIOutputsAPI:
         filename, content, content_type = sample_file
         files = {"file": (filename, io.BytesIO(content), content_type)}
         create_response = client.post("/api/tasks/", files=files, data={"ai_model_index": "0"}, headers=auth_headers)
+        assert create_response.status_code == 201
         task_id = create_response.json()["id"]
         
         # 使用操作类型过滤
@@ -69,6 +70,7 @@ class TestTaskAIOutputsAPI:
         filename, content, content_type = sample_file
         files = {"file": (filename, io.BytesIO(content), content_type)}
         create_response = client.post("/api/tasks/", files=files, data={"ai_model_index": "0"}, headers=auth_headers)
+        assert create_response.status_code == 201
         task_id = create_response.json()["id"]
         
         # 普通用户尝试访问
@@ -81,6 +83,7 @@ class TestTaskAIOutputsAPI:
         filename, content, content_type = sample_file
         files = {"file": (filename, io.BytesIO(content), content_type)}
         create_response = client.post("/api/tasks/", files=files, data={"ai_model_index": "0"}, headers=auth_headers)
+        assert create_response.status_code == 201
         task_id = create_response.json()["id"]
         
         response = client.get(f"/api/tasks/{task_id}/ai-outputs", headers=auth_headers)
@@ -103,6 +106,7 @@ class TestTaskAIOutputsAPI:
         filename, content, content_type = sample_file
         files = {"file": (filename, io.BytesIO(content), content_type)}
         create_response = client.post("/api/tasks/", files=files, data={"ai_model_index": "0"}, headers=auth_headers)
+        assert create_response.status_code == 201
         task_id = create_response.json()["id"]
         
         # 测试各种过滤参数
@@ -125,6 +129,7 @@ class TestTaskAIOutputsAPI:
         filename, content, content_type = sample_file
         files = {"file": (filename, io.BytesIO(content), content_type)}
         create_response = client.post("/api/tasks/", files=files, data={"ai_model_index": "0"}, headers=auth_headers)
+        assert create_response.status_code == 201
         task_id = create_response.json()["id"]
         
         import time
@@ -157,6 +162,7 @@ class TestTaskAIOutputsValidation:
         filename, content, content_type = sample_file
         files = {"file": (filename, io.BytesIO(content), content_type)}
         create_response = client.post("/api/tasks/", files=files, data={"ai_model_index": "0"}, headers=auth_headers)
+        assert create_response.status_code == 201
         task_id = create_response.json()["id"]
         
         # 测试无效的操作类型过滤
@@ -173,6 +179,7 @@ class TestTaskAIOutputsValidation:
         filename, content, content_type = sample_file
         files = {"file": (filename, io.BytesIO(content), content_type)}
         create_response = client.post("/api/tasks/", files=files, data={"ai_model_index": "0"}, headers=auth_headers)
+        assert create_response.status_code == 201
         task_id = create_response.json()["id"]
         
         # 测试可能的分页参数（如果API支持）

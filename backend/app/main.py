@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.core.database import engine, get_db, Base
 from app.services.cache_service import init_cache, close_cache
-from app.views import system_view, auth_view, task_view, user_view, ai_output_view, issue_view, task_log_view, analytics_view, task_share_view
+from app.views import system_view, auth_view, task_view, user_view, ai_output_view, issue_view, task_log_view, analytics_view, task_share_view, operations_view
 
 # 导入所有模型以确保它们被注册到Base.metadata
 from app.models import *
@@ -210,6 +210,9 @@ def setup_routes(app: FastAPI):
     
     # 注册任务分享相关路由
     app.include_router(task_share_view.router, tags=["任务分享"])
+    
+    # 注册运营数据相关路由
+    app.include_router(operations_view.router, prefix="/api/operations", tags=["运营数据"])
 
 # 设置路由
 setup_routes(app)

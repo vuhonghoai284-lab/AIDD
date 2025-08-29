@@ -324,12 +324,72 @@ def comprehensive_mocks_session():
             }
         
         # 应用所有Mock
+        # Mock任务分享服务
+        def mock_task_share_repository_constructor(*args, **kwargs):
+            """Mock TaskShareRepository构造函数"""
+            from tests.mocks.task_share_mock import get_mock_task_share_service
+            mock_service = get_mock_task_share_service()
+            
+            # 创建Mock Repository类
+            class MockTaskShareRepository:
+                def __init__(self, *args, **kwargs):
+                    self.service = mock_service
+                
+                def batch_create_shares(self, task_id, owner_id, shared_user_ids, permission_level="read", share_comment=""):
+                    result = self.service.create_share(task_id, owner_id, shared_user_ids, permission_level, share_comment)
+                    return result["created_shares"]
+                
+                def get_task_shares(self, task_id, include_inactive=False):
+                    return self.service.get_task_shares(task_id, include_inactive)
+                
+                def get_user_shared_tasks(self, user_id, include_inactive=False):
+                    return self.service.get_user_shared_tasks(user_id, include_inactive)
+                
+                def update_share_permission(self, share_id, owner_id, permission_level=None, share_comment=None):
+                    return self.service.update_share(share_id, owner_id, permission_level, share_comment)
+                
+                def delete_share(self, share_id, owner_id):
+                    return self.service.delete_share(share_id, owner_id, permanently=True)
+                
+                def revoke_share(self, share_id, owner_id):
+                    return self.service.delete_share(share_id, owner_id, permanently=False)
+            
+            return MockTaskShareRepository(*args, **kwargs)
+        
+        def mock_user_repository_search_users(self, query, exclude_user_id=None, limit=20):
+            """Mock用户搜索方法"""
+            from tests.mocks.task_share_mock import get_mock_task_share_service
+            return get_mock_task_share_service().search_users(query, exclude_user_id or 0, limit)
+        
+        def mock_task_permission_service_constructor(*args, **kwargs):
+            """Mock TaskPermissionService构造函数"""
+            class MockTaskPermissionService:
+                def __init__(self, *args, **kwargs):
+                    pass
+                
+                def check_task_share_permission(self, task_id, user):
+                    # 管理员总是有权限，普通用户只对ID小于10000的任务有权限
+                    if user.is_admin or user.is_system_admin:
+                        return True
+                    return task_id < 10000
+                
+                def check_task_access_permission(self, task_id, user):
+                    # 同上
+                    if user.is_admin or user.is_system_admin:
+                        return True
+                    return task_id < 10000
+            
+            return MockTaskPermissionService(*args, **kwargs)
+        
         patches_config = [
             ('app.services.auth.AuthService.verify_token', mock_verify_token_method),
             ('app.services.auth.AuthService.exchange_code_for_token', mock_exchange_code_for_token_method),
             ('app.services.auth.AuthService.get_third_party_user_info', mock_get_third_party_user_info_method),
             ('app.services.auth.AuthService.get_authorization_url', mock_get_authorization_url_method),
             ('app.services.auth.AuthService.login_user', mock_login_user_method),
+            ('app.repositories.task_share.TaskShareRepository', mock_task_share_repository_constructor),
+            ('app.repositories.user.UserRepository.search_users', mock_user_repository_search_users),
+            ('app.services.task_permission_service.TaskPermissionService', mock_task_permission_service_constructor),
         ]
         
         for patch_target, mock_method in patches_config:

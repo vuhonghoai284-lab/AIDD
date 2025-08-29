@@ -131,11 +131,15 @@ class TestTaskLogsValidation:
     
     def test_task_logs_invalid_task_id(self, client: TestClient, auth_headers):
         """测试无效任务ID获取日志"""
-        invalid_ids = ["abc", "0.5", "-1"]
+        invalid_ids = ["abc", "0.5"]  # 只测试格式无效的ID
         
         for task_id in invalid_ids:
             response = client.get(f"/api/tasks/{task_id}/logs/history", headers=auth_headers)
             assert response.status_code == 422, f"Should reject invalid task ID: {task_id}"
+        
+        # 负数ID格式有效但不存在，返回404
+        response = client.get("/api/tasks/-1/logs/history", headers=auth_headers)
+        assert response.status_code == 404
     
     def test_task_logs_ordering(self, client: TestClient, sample_file, auth_headers):
         """测试任务日志排序"""

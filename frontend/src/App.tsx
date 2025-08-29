@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
 import { Layout, Menu, Dropdown, message } from 'antd';
-import { FileAddOutlined, UnorderedListOutlined, UserOutlined, BarChartOutlined, ShareAltOutlined } from '@ant-design/icons';
+import { FileAddOutlined, UnorderedListOutlined, UserOutlined, BarChartOutlined, ShareAltOutlined, DashboardOutlined } from '@ant-design/icons';
 import { flushSync } from 'react-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import TaskCreate from './pages/TaskCreate';
 import TaskList from './pages/TaskList';
 import TaskDetailEnhanced from './pages/TaskDetailEnhanced';
 import Analytics from './pages/Analytics';
+import OperationsOverview from './pages/OperationsOverview';
 import { SharedTasks } from './pages/SharedTasks';
 import LoginPage from './pages/LoginPage';
 import CallbackHandler from './pages/CallbackHandler';
@@ -138,11 +140,18 @@ const ThemedHeader: React.FC<{ user: User | null; onLogout: () => void }> = ({ u
               icon: <ShareAltOutlined />,
               label: <Link to="/shared">共享任务</Link>
             },
-            ...(user?.is_admin ? [{
-              key: 'analytics',
-              icon: <BarChartOutlined />,
-              label: <Link to="/analytics">运营统计</Link>
-            }] : [])
+            ...(user?.is_admin ? [
+              {
+                key: 'operations',
+                icon: <DashboardOutlined />,
+                label: <Link to="/operations">运营总览</Link>
+              },
+              {
+                key: 'analytics',
+                icon: <BarChartOutlined />,
+                label: <Link to="/analytics">运营统计</Link>
+              }
+            ] : [])
           ]}
         />
         {user && <UserInfo user={user} onLogout={onLogout} />}
@@ -329,6 +338,14 @@ const AppContent: React.FC = () => {
                 } 
               />
               <Route 
+                path="/operations" 
+                element={
+                  <AdminRoute user={user}>
+                    <OperationsOverview />
+                  </AdminRoute>
+                } 
+              />
+              <Route 
                 path="/analytics" 
                 element={
                   <AdminRoute user={user}>
@@ -344,13 +361,27 @@ const AppContent: React.FC = () => {
   );
 };
 
+// 创建 QueryClient 实例
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 3,
+      staleTime: 5 * 60 * 1000, // 5分钟
+      cacheTime: 10 * 60 * 1000, // 10分钟
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
 function App() {
   return (
-    <ThemeProvider>
-      <Router>
-        <AppContent />
-      </Router>
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <Router>
+          <AppContent />
+        </Router>
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 }
 

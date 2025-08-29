@@ -3,6 +3,7 @@
 测试 /api/ai-outputs/{id} 端点
 """
 import pytest
+import io
 from fastapi.testclient import TestClient
 
 
@@ -134,11 +135,15 @@ class TestAIOutputValidation:
     
     def test_ai_output_invalid_id(self, client: TestClient, auth_headers):
         """测试无效AI输出ID"""
-        invalid_ids = ["abc", "0.5", "-1"]
+        invalid_ids = ["abc", "0.5"]  # 只测试真正无效的格式
         
         for output_id in invalid_ids:
             response = client.get(f"/api/ai-outputs/{output_id}", headers=auth_headers)
             assert response.status_code == 422, f"Should reject invalid output ID: {output_id}"
+        
+        # 测试负数ID，返回404是正常的（格式有效但不存在）
+        response = client.get("/api/ai-outputs/-1", headers=auth_headers)
+        assert response.status_code == 404
     
     def test_ai_output_large_data_handling(self, client: TestClient, sample_file, auth_headers):
         """测试大量AI输出数据处理"""
