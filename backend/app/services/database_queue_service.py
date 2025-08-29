@@ -319,13 +319,13 @@ class DatabaseQueueService:
             # 获取平均等待时间 - 数据库兼容版本
             try:
                 # 使用SQLAlchemy ORM计算，避免数据库特定函数
-                from sqlalchemy import case, extract, func
+                from sqlalchemy import case
                 
                 # 使用Python时间差计算而非数据库函数
                 wait_times = db.query(
                     case(
                         (TaskQueue.started_at.isnot(None), TaskQueue.started_at),
-                        else_=func.now()
+                        else_=func.current_timestamp()
                     ).label('end_time'),
                     TaskQueue.queued_at
                 ).filter(TaskQueue.status != QueueStatus.QUEUED).all()

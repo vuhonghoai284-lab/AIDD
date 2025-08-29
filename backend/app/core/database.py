@@ -15,6 +15,7 @@ from app.core.db_monitor import get_monitor
 # 控制连接池状态打印频率的全局变量
 _last_pool_log_time = {}
 _pool_log_interval = 30  # 30秒内不重复打印相同类型的连接池状态
+_pool_log_counter = 0    # 连接池日志计数器，每10次操作才打印一次
 
 # 获取配置
 settings = get_settings()
@@ -197,15 +198,19 @@ def get_db() -> Generator[Session, None, None]:
 
 def _log_connection_pool_status(operation: str, previous_info: dict = None) -> dict:
     """记录数据库连接池状态（兼容StaticPool，频率控制版）"""
+    global _pool_log_counter
+    
     try:
         pool = engine.pool
         pool_type = pool.__class__.__name__
         current_time = time.time()
         
-        # 频率控制：检查是否需要打印
-        operation_key = f"{operation}_{pool_type}"
+        # 使用计数器控制打印频率：每10次操作打印一次，或30秒强制打印一次
+        _pool_log_counter += 1
+        operation_key = f"general_{pool_type}"  # 统一操作类型，避免过细分化
         last_log_time = _last_pool_log_time.get(operation_key, 0)
-        should_log = (current_time - last_log_time) >= _pool_log_interval
+        
+        should_log = (_pool_log_counter % 10 == 0) or (current_time - last_log_time >= _pool_log_interval)
         
         # StaticPool和其他连接池类型的兼容性处理
         current_info = {
@@ -247,30 +252,19 @@ def _log_connection_pool_status(operation: str, previous_info: dict = None) -> d
         if should_log:
             _last_pool_log_time[operation_key] = current_time
             
-            # 计算变化量（仅对非StaticPool有意义）
-            if previous_info and pool_type != 'StaticPool':
-                delta_out = current_info['checked_out'] - previous_info.get('checked_out', 0)
-                delta_in = current_info['checked_in'] - previous_info.get('checked_in', 0)
-                time_diff = (current_time - previous_info.get('timestamp', 0)) * 1000
-                
-                if abs(delta_out) > 0 or abs(delta_in) > 0 or current_info['overflow'] > 0:
-                    print(f"🔗 [{operation}] 连接池变化 - "
-                          f"活跃:{current_info['checked_out']}({delta_out:+d}) "
-                          f"空闲:{current_info['checked_in']}({delta_in:+d}) "
-                          f"溢出:{current_info['overflow']} "
-                          f"耗时:{time_diff:.1f}ms")
-            elif not previous_info:
-                # 首次记录或StaticPool的状态记录
-                if pool_type == 'StaticPool':
-                    # StaticPool状态记录控制更严格，仅在错误或异常时记录
-                    if ('error' in operation.lower() or '异常' in operation or '失败' in operation):
-                        print(f"🔗 [{operation}] StaticPool状态 - 单连接池")
-                else:
-                    print(f"🔗 [{operation}] {pool_type}状态 - "
-                          f"活跃:{current_info['checked_out']} "
-                          f"空闲:{current_info['checked_in']} "
-                          f"总数:{current_info['size']} "
-                          f"溢出:{current_info['overflow']}")
+            # 对StaticPool进一步限制打印
+            if pool_type == 'StaticPool':
+                # StaticPool状态记录控制更严格，仅在错误或异常时记录
+                if ('error' in operation.lower() or '异常' in operation or '失败' in operation):
+                    print(f"🔗 [{operation}] StaticPool状态 - 单连接池")
+                # 否则完全不打印StaticPool的正常状态
+            else:
+                # 对于非StaticPool，打印摘要信息而非每次操作详情
+                print(f"🔗 连接池摘要[{_pool_log_counter}次操作] {pool_type} - "
+                      f"活跃:{current_info['checked_out']} "
+                      f"空闲:{current_info['checked_in']} "
+                      f"总数:{current_info['size']} "
+                      f"溢出:{current_info['overflow']}")
         
         # 警告检查（StaticPool除外）- 这些警告不受频率限制
         if pool_type != 'StaticPool':
