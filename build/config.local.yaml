@@ -1,0 +1,139 @@
+# ============================================================================
+# AI Document Testing System - 本地开发配置
+# ============================================================================
+# 用于本地开发和测试的配置文件
+# 基于 config.yaml，针对本地环境进行优化
+# ============================================================================
+
+# 服务器配置
+server:
+  host: "0.0.0.0"
+  port: ${BACKEND_PORT:8080}
+  debug: true
+  reload: true
+  workers: 1
+  
+  # 本地开发环境设置
+  cors:
+    allow_origins:
+      - "http://localhost:3000"
+      - "http://localhost:3001" 
+      - "http://127.0.0.1:3000"
+      - "http://127.0.0.1:3001"
+    allow_credentials: true
+    allow_methods: ["*"]
+    allow_headers: ["*"]
+
+# 数据库配置（本地SQLite）
+database:
+  type: "sqlite"
+  url: "sqlite:///./data/app.db"
+  echo: true
+  pool_pre_ping: true
+  
+  # 开发环境数据库设置
+  sqlite:
+    check_same_thread: false
+    timeout: 30
+    
+# Redis配置（本地）
+redis:
+  host: "localhost"
+  port: ${REDIS_PORT:6379}
+  db: 0
+  password: null
+  ssl: false
+  decode_responses: true
+  max_connections: 10
+
+# 日志配置
+logging:
+  level: ${LOG_LEVEL:DEBUG}
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  handlers:
+    - type: "console"
+      level: "DEBUG"
+    - type: "file"
+      level: "INFO"
+      filename: "./logs/app.log"
+      max_bytes: 10485760  # 10MB
+      backup_count: 5
+
+# AI服务配置（开发环境）
+ai_models:
+  default_index: 0
+  timeout: 60
+  retry_attempts: 2
+  models:
+    - label: "Mock AI (开发用)"
+      provider: "mock"
+      config:
+        delay: 1  # 模拟延迟1秒
+        success_rate: 0.9  # 90%成功率
+        model: "gpt-4o-mini-mock"
+        
+    # 如果有真实API Key，可以启用
+    # - label: "GPT-4o Mini"
+    #   provider: "openai"
+    #   config:
+    #     api_key: "${OPENAI_API_KEY}"
+    #     base_url: "https://api.openai.com/v1"
+    #     model: "gpt-4o-mini"
+
+# 文件上传配置（本地开发）
+upload:
+  max_size: 10485760  # 10MB
+  allowed_types:
+    - "application/pdf"
+    - "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    - "text/markdown"
+    - "text/plain"
+  upload_dir: "./data/uploads"
+  temp_dir: "./data/temp"
+
+# 任务配置
+task:
+  max_concurrent: 3
+  timeout: 300  # 5分钟
+  cleanup_interval: 3600  # 1小时
+  max_history: 100
+
+# 第三方登录配置（本地开发）
+third_party_auth_config:
+  frontend_domain: "http://localhost:3000"
+  providers:
+    gitee:
+      enabled: ${GITEE_OAUTH_ENABLED:false}
+      client_id: "${GITEE_CLIENT_ID:}"
+      client_secret: "${GITEE_CLIENT_SECRET:}"
+      redirect_uri: "http://localhost:3000/callback"
+
+# JWT配置（本地开发用，不安全的密钥）
+jwt:
+  secret_key: "dev-secret-key-not-for-production"
+  algorithm: "HS256"
+  expire_minutes: 1440  # 24小时（开发方便）
+
+# 安全配置（开发环境宽松设置）
+security:
+  allowed_hosts: ["*"]
+  csrf_protection: false
+  rate_limiting:
+    enabled: false
+    
+# 监控配置
+monitoring:
+  health_check:
+    enabled: true
+    endpoint: "/api/system/health"
+  metrics:
+    enabled: true
+    endpoint: "/api/system/metrics"
+
+# 开发工具配置
+development:
+  auto_reload: true
+  debug_mode: true
+  profiling: false
+  mock_ai: true
+  skip_auth: false  # 设为true可跳过认证（仅开发用）

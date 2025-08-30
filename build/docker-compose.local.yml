@@ -1,0 +1,144 @@
+# ============================================================================
+# AI Document Testing System - 本地开发 Docker Compose
+# ============================================================================
+# 用于本地开发环境的Docker容器编排
+# 包含前端、后端、Redis和开发工具
+# ============================================================================
+
+version: '3.8'
+
+services:
+  # Redis服务
+  redis:
+    image: redis:7-alpine
+    container_name: aidd-redis-local
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aidd-network
+
+  # 后端服务
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: aidd-backend-local
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    environment:
+      - CONFIG_FILE=config.local.yaml
+      - PYTHONPATH=.
+      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ./backend:/app
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config.local.yaml:/app/config.local.yaml
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/system/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - aidd-network
+    restart: unless-stopped
+    # 开发模式：启用代码热重载
+    command: >
+      sh -c "pip install watchdog &&
+             python -m uvicorn app.main:app 
+             --host 0.0.0.0 
+             --port 8080 
+             --reload 
+             --reload-dir /app/app"
+
+  # 前端服务
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: aidd-frontend-local
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=development
+      - VITE_API_BASE_URL=http://localhost:${BACKEND_PORT:-8080}
+      - VITE_HOST=0.0.0.0
+      - VITE_PORT=3000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/dist
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - aidd-network
+    restart: unless-stopped
+    # 开发模式：启用热重载
+    command: npm run dev -- --host 0.0.0.0
+
+  # 开发工具容器（可选）
+  devtools:
+    image: alpine:latest
+    container_name: aidd-devtools-local
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    command: tail -f /dev/null  # 保持容器运行
+    networks:
+      - aidd-network
+    profiles:
+      - devtools
+
+  # 数据库管理工具（可选）
+  adminer:
+    image: adminer:latest
+    container_name: aidd-adminer-local
+    ports:
+      - "8081:8080"
+    environment:
+      - ADMINER_DEFAULT_SERVER=sqlite:///data/app.db
+    volumes:
+      - ./data:/data
+    networks:
+      - aidd-network
+    profiles:
+      - admin
+
+# 网络配置
+networks:
+  aidd-network:
+    driver: bridge
+    name: aidd-local-network
+
+# 数据卷
+volumes:
+  redis_data:
+    driver: local
+    name: aidd-redis-data-local
+
+# 健康检查和监控
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 30s
+
+# 环境变量模板
+x-environment-defaults: &environment-defaults
+  TZ: Asia/Shanghai
+  LANG: en_US.UTF-8

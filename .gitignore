@@ -4,7 +4,9 @@ __pycache__/
 *$py.class
 *.so
 .Python
-build/
+# Python build directories (but keep our build scripts directory)
+**/python-build/
+**/__pycache__/
 develop-eggs/
 dist/
 downloads/
@@ -86,7 +88,7 @@ frontend/test-results/
 frontend/playwright-report/
 frontend/playwright/.cache/
 
-# Build outputs
+# Build outputs (keep our build scripts directory)
 frontend/build/
 frontend/dist/
 backend/dist/
