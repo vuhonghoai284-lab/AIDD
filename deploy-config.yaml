@@ -1,0 +1,113 @@
+# AIDD 部署配置文件
+# 支持多种数据库和环境配置
+
+# 项目基础配置
+project:
+  name: aidd
+  version: "2.0.0"
+  environment: development  # development, staging, production
+
+# 数据库配置 (选择其中一种)
+database:
+  # 当前使用的数据库类型
+  type: sqlite  # sqlite, mysql, postgresql
+  
+  # SQLite配置 (默认)
+  sqlite:
+    file: "/app/data/app.db"
+    
+  # MySQL配置
+  mysql:
+    host: mysql
+    port: 3306
+    username: aidd
+    password: aidd_mysql_2024  # 生产环境请修改
+    database: aidd_db
+    
+  # PostgreSQL配置
+  postgresql:
+    host: postgres
+    port: 5432
+    username: aidd
+    password: aidd_pg_2024     # 生产环境请修改
+    database: aidd_db
+
+# Redis配置
+redis:
+  host: redis
+  port: 6379
+  database: 0
+  password: ""  # 留空表示无密码
+
+# 应用服务配置
+services:
+  backend:
+    port: 8000
+    debug: true
+    log_level: INFO
+    workers: 1
+    
+  frontend:
+    port: 3000
+    build_path: /usr/share/nginx/html
+
+# 外部服务端口映射
+ports:
+  backend: 8080      # 主机端口:容器端口
+  frontend: 3000
+  mysql: 3306        # 仅当使用MySQL时
+  postgresql: 5432   # 仅当使用PostgreSQL时
+  redis: 6379
+
+# 安全配置
+security:
+  jwt_secret: "aidd-dev-secret-2024"  # 生产环境请修改
+  oauth_secret: "aidd-oauth-secret"   # 生产环境请修改
+
+# AI服务配置
+ai:
+  openai_api_key: "your-openai-api-key-here"  # 请填写真实的API Key
+  default_model: "gpt-4o-mini"
+  max_tokens: 4000
+
+# Docker配置
+docker:
+  restart_policy: unless-stopped
+  network_name: aidd-network
+  
+  # 数据卷配置
+  volumes:
+    backend_data: backend_data
+    backend_logs: backend_logs
+    redis_data: redis_data
+    mysql_data: mysql_data       # 仅MySQL使用
+    postgres_data: postgres_data # 仅PostgreSQL使用
+
+# 健康检查配置
+health_check:
+  backend:
+    interval: 30s
+    timeout: 10s
+    retries: 3
+    start_period: 40s
+    
+  database:
+    interval: 10s
+    timeout: 5s
+    retries: 5
+    start_period: 30s
+
+# 环境特定配置
+environments:
+  development:
+    debug: true
+    log_level: DEBUG
+    workers: 1
+    
+  production:
+    debug: false
+    log_level: INFO
+    workers: 4
+    jwt_secret: "${JWT_SECRET_KEY}"    # 从环境变量读取
+    oauth_secret: "${OAUTH_SECRET}"
+    openai_api_key: "${OPENAI_API_KEY}"

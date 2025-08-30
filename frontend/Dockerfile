@@ -34,9 +34,11 @@ RUN addgroup -g 1001 -S appgroup && \
 
 # 设置nginx以非root用户运行
 RUN touch /var/run/nginx.pid && \
-    chown -R appuser:appgroup /var/run/nginx.pid /var/cache/nginx /var/log/nginx /usr/share/nginx/html
+    chown -R appuser:appgroup /var/run/nginx.pid /var/cache/nginx /var/log/nginx /usr/share/nginx/html && \
+    chmod 755 /usr/share/nginx/html
 
-USER appuser
+# 由于nginx需要绑定80端口，暂时保持root用户
+# USER appuser
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
