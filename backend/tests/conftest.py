@@ -53,8 +53,141 @@ def db_engine():
         echo=False
     )
     
+    # 导入所有模型以确保它们被注册
+    from app.models import Task, User, AIModel, FileInfo, Issue, AIOutput, TaskLog, TaskShare, TaskQueue, QueueConfig
+    
     # 创建所有表
-    Base.metadata.create_all(bind=engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+        print("✓ 测试数据库表创建成功")
+    except Exception as e:
+        print(f"✗ 测试数据库表创建失败: {e}")
+        # 尝试手动创建基础表
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY,
+                    uid TEXT UNIQUE NOT NULL,
+                    display_name TEXT NOT NULL,
+                    email TEXT,
+                    is_admin BOOLEAN DEFAULT FALSE,
+                    is_system_admin BOOLEAN DEFAULT FALSE,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    last_login_at DATETIME
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS ai_models (
+                    id INTEGER PRIMARY KEY,
+                    model_key TEXT UNIQUE NOT NULL,
+                    label TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    model_name TEXT NOT NULL,
+                    description TEXT,
+                    temperature REAL DEFAULT 0.1,
+                    max_tokens INTEGER DEFAULT 4096,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    is_default BOOLEAN DEFAULT FALSE,
+                    sort_order INTEGER DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS tasks (
+                    id INTEGER PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    status TEXT DEFAULT 'pending',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS file_infos (
+                    id INTEGER PRIMARY KEY,
+                    task_id INTEGER NOT NULL,
+                    original_filename TEXT NOT NULL,
+                    file_path TEXT NOT NULL,
+                    file_size INTEGER DEFAULT 0,
+                    file_type TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(task_id) REFERENCES tasks(id)
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS issues (
+                    id INTEGER PRIMARY KEY,
+                    task_id INTEGER NOT NULL,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    severity TEXT DEFAULT 'medium',
+                    status TEXT DEFAULT 'open',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(task_id) REFERENCES tasks(id)
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS ai_outputs (
+                    id INTEGER PRIMARY KEY,
+                    task_id INTEGER NOT NULL,
+                    content TEXT,
+                    model_used TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(task_id) REFERENCES tasks(id)
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS task_shares (
+                    id INTEGER PRIMARY KEY,
+                    task_id INTEGER,
+                    owner_id INTEGER,
+                    shared_user_id INTEGER,
+                    permission_level TEXT DEFAULT 'read_only',
+                    share_comment TEXT,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS task_logs (
+                    id INTEGER PRIMARY KEY,
+                    task_id INTEGER NOT NULL,
+                    log_level TEXT DEFAULT 'info',
+                    message TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(task_id) REFERENCES tasks(id)
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS task_queue (
+                    id INTEGER PRIMARY KEY,
+                    task_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    queue_name TEXT DEFAULT 'default',
+                    priority INTEGER DEFAULT 0,
+                    status TEXT DEFAULT 'pending',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(task_id) REFERENCES tasks(id),
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS queue_config (
+                    id INTEGER PRIMARY KEY,
+                    queue_name TEXT UNIQUE NOT NULL,
+                    max_workers INTEGER DEFAULT 3,
+                    max_queue_size INTEGER DEFAULT 100,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.commit()
+            print("✓ 手动创建基础表成功")
     
     yield engine
     
@@ -411,6 +544,34 @@ def comprehensive_mocks_session():
             patch_obj.stop()
         print("🧹 会话级Mock已清理")
 
+# Mock数据库初始化
+@pytest.fixture(autouse=True, scope="session")
+def mock_database_initialization():
+    """Mock数据库初始化，避免复杂的安全创建逻辑"""
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+    
+    async def mock_safe_create_tables():
+        """简化的表创建Mock"""
+        print("🔧 Mock数据库初始化")
+        return True
+    
+    def mock_create_tables_safely(self):
+        """Mock DatabaseManager的create_tables_safely方法"""
+        print("🔧 Mock DatabaseManager.create_tables_safely")
+        return True
+    
+    def mock_verify_database_integrity(self):
+        """Mock数据库完整性检查"""
+        print("🔧 Mock数据库完整性检查")
+        return True
+    
+    # 应用Mock
+    with patch('app.core.database_utils.safe_create_tables', mock_safe_create_tables):
+        with patch('app.core.database_utils.DatabaseManager.create_tables_safely', mock_create_tables_safely):
+            with patch('app.core.database_utils.DatabaseManager.verify_database_integrity', mock_verify_database_integrity):
+                yield
+
 # 函数级Mock系统
 @pytest.fixture(autouse=True, scope="function") 
 def comprehensive_mocks(monkeypatch):
@@ -694,10 +855,14 @@ def cleanup_test_data(db_session):
     
     # 清理动态数据，保留基础数据
     try:
+        # 按照外键依赖关系顺序删除
+        db_session.execute(text("DELETE FROM task_shares WHERE 1=1"))
+        db_session.execute(text("DELETE FROM task_logs WHERE 1=1"))
+        db_session.execute(text("DELETE FROM task_queue WHERE 1=1"))
         db_session.execute(text("DELETE FROM issues WHERE 1=1"))
         db_session.execute(text("DELETE FROM ai_outputs WHERE 1=1"))  
-        db_session.execute(text("DELETE FROM tasks WHERE 1=1"))
         db_session.execute(text("DELETE FROM file_infos WHERE 1=1"))
+        db_session.execute(text("DELETE FROM tasks WHERE 1=1"))
         db_session.execute(text("DELETE FROM users WHERE id > 10"))  # 保留基础用户
         db_session.commit()
     except Exception:

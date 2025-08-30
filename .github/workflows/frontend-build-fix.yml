@@ -26,51 +26,28 @@ jobs:
         cache: 'npm'
         cache-dependency-path: frontend/package-lock.json
     
-    - name: Debug package.json
-      run: |
-        echo "=== Package.json check ==="
-        ls -la package.json || echo "package.json not found"
-        cat package.json | head -10 || echo "Cannot read package.json"
-        echo "=== Dependencies check ==="
-        
     - name: Install dependencies
-      run: |
-        echo "Installing dependencies..."
-        npm ci || (echo "npm ci failed, trying npm install..." && npm install)
-        echo "Dependencies installed successfully"
+      run: npm ci
         
     - name: Check TypeScript compilation
-      run: |
-        echo "Checking TypeScript compilation..."
-        npx tsc --noEmit --skipLibCheck || echo "TypeScript check completed with warnings"
+      run: npx tsc --noEmit
         
-    - name: Build project (with error handling)
-      run: |
-        echo "Starting build process..."
-        npm run build || {
-          echo "Build failed, but continuing for diagnostics..."
-          echo "=== Build error details ==="
-          ls -la src/ || echo "src directory not found"
-          echo "Build process completed with errors"
-        }
+    - name: Build project
+      run: npm run build
         
-    - name: Check build output
+    - name: Verify build output
       run: |
-        echo "=== Build output check ==="
         if [ -d "dist" ]; then
-          echo "✓ Build output directory exists"
-          ls -la dist/ || echo "Cannot list dist contents"
+          echo "✓ Build successful - output directory created"
+          ls -la dist/
         else
-          echo "✗ No build output directory found"
+          echo "✗ Build failed - no output directory found"
+          exit 1
         fi
         
-    - name: Upload build artifacts (if exists)
-      uses: actions/upload-artifact@v3
-      if: always()
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
       with:
-        name: frontend-build-attempt
-        path: |
-          frontend/dist/
-          frontend/package.json
-          frontend/tsconfig.json
+        name: frontend-build-output
+        path: frontend/dist/
         retention-days: 7

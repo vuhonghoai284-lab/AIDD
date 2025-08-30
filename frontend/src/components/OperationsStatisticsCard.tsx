@@ -93,12 +93,7 @@ export const TaskStatisticsCard: React.FC<TaskCardProps> = ({ data, loading = fa
         borderRadius: '12px',
         boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
         border: 'none',
-        transition: 'all 0.3s ease',
-        transform: 'translateY(0)',
-        '&:hover': {
-          transform: 'translateY(-4px)',
-          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)'
-        }
+        transition: 'all 0.3s ease'
       }}
       className="statistics-card"
     >

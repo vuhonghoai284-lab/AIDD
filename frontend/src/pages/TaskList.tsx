@@ -249,7 +249,7 @@ const TaskList: React.FC = () => {
 
   const calculateActualProcessingTime = useCallback((record: Task) => {
     // 计算基于时间戳的实际耗时（作为基准）
-    let actualTimeFromTimestamps = null;
+    let actualTimeFromTimestamps: number | null = null;
     if (record.status === 'completed' && record.completed_at && record.created_at) {
       const startTime = new Date(record.created_at + 'Z').getTime(); // 明确指定UTC
       const endTime = new Date(record.completed_at + 'Z').getTime(); // 明确指定UTC

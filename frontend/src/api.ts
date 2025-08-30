@@ -421,7 +421,7 @@ export const taskAPI = {
         }
       } catch (validationError) {
         console.error('文件内容验证失败:', validationError);
-        throw new Error(`文件验证失败: ${validationError.message}`);
+        throw new Error(`文件验证失败: ${validationError instanceof Error ? validationError.message : String(validationError)}`);
       }
       
       // 创建下载链接，强制使用正确的MIME类型

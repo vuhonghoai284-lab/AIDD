@@ -68,7 +68,7 @@ const OperationsOverviewPage: React.FC = () => {
     error,
     refetch,
     isFetching
-  } = useQuery<OperationsOverview>({
+  } = useQuery<OperationsOverview, Error>({
     queryKey: ['operations-overview', timeRange],
     queryFn: async () => {
       const params = {
@@ -95,7 +95,7 @@ const OperationsOverviewPage: React.FC = () => {
       return data;
     },
     staleTime: 5 * 60 * 1000, // 5分钟内认为数据是新鲜的
-    cacheTime: 15 * 60 * 1000, // 缓存15分钟
+    gcTime: 15 * 60 * 1000, // 缓存15分钟
     refetchOnWindowFocus: false, // 窗口聚焦时不自动刷新
     retry: 2, // 最多重试2次
   });
