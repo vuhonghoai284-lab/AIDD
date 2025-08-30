@@ -20,7 +20,8 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # 配置变量
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUILD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"  # 项目根目录
 QUICK_SETUP=false
 SKIP_DEPENDENCIES=false
 USE_DOCKER=false
@@ -247,9 +248,9 @@ initialize_config() {
     
     # 设置环境变量文件
     if [[ ! -f ".env" ]]; then
-        if [[ -f ".env.template" ]]; then
+        if [[ -f "$BUILD_DIR/.env.template" ]]; then
             log_info "创建环境变量文件..."
-            cp .env.template .env
+            cp "$BUILD_DIR/.env.template" .env
             
             # 更新端口配置
             sed -i "s/FRONTEND_PORT=.*/FRONTEND_PORT=$FRONTEND_PORT/" .env
@@ -268,7 +269,7 @@ initialize_config() {
                 read -p "编辑完成后按回车继续..."
             fi
         else
-            log_error ".env.template 文件不存在"
+            log_error "$BUILD_DIR/.env.template 文件不存在"
             return 1
         fi
     else
@@ -277,9 +278,9 @@ initialize_config() {
     
     # 设置后端配置
     if [[ ! -f "backend/config.local.yaml" ]]; then
-        if [[ -f "config.local.yaml" ]]; then
+        if [[ -f "$BUILD_DIR/config.local.yaml" ]]; then
             log_info "复制本地配置文件..."
-            cp config.local.yaml backend/config.local.yaml
+            cp "$BUILD_DIR/config.local.yaml" backend/config.local.yaml
             log_success "本地配置文件已创建: backend/config.local.yaml"
         elif [[ -f "backend/config.yaml" ]]; then
             log_info "从默认配置创建本地配置..."
@@ -301,13 +302,13 @@ build_application() {
     log_header "构建应用"
     
     # 检查构建脚本
-    if [[ ! -f "./build-local.sh" ]]; then
-        log_error "构建脚本不存在: ./build-local.sh"
+    if [[ ! -f "$BUILD_DIR/build-local.sh" ]]; then
+        log_error "构建脚本不存在: $BUILD_DIR/build-local.sh"
         return 1
     fi
     
     # 设置执行权限
-    chmod +x ./build-local.sh
+    chmod +x "$BUILD_DIR/build-local.sh"
     
     # 选择构建选项
     local build_args=""
@@ -348,7 +349,7 @@ build_application() {
     log_info "开始构建应用..."
     log_info "构建参数: $build_args"
     
-    if ./build-local.sh $build_args; then
+    if "$BUILD_DIR/build-local.sh" $build_args; then
         log_success "应用构建完成"
     else
         log_error "应用构建失败"
@@ -361,13 +362,13 @@ deploy_application() {
     log_header "部署应用"
     
     # 检查部署脚本
-    if [[ ! -f "./deploy-local.sh" ]]; then
-        log_error "部署脚本不存在: ./deploy-local.sh"
+    if [[ ! -f "$BUILD_DIR/deploy-local.sh" ]]; then
+        log_error "部署脚本不存在: $BUILD_DIR/deploy-local.sh"
         return 1
     fi
     
     # 设置执行权限
-    chmod +x ./deploy-local.sh
+    chmod +x "$BUILD_DIR/deploy-local.sh"
     
     # 选择部署选项
     local deploy_args="--frontend-port $FRONTEND_PORT --backend-port $BACKEND_PORT"
@@ -406,7 +407,7 @@ deploy_application() {
     log_info "开始部署应用..."
     log_info "部署参数: $deploy_args"
     
-    if ./deploy-local.sh $deploy_args; then
+    if "$BUILD_DIR/deploy-local.sh" $deploy_args; then
         log_success "应用部署完成"
         return 0
     else

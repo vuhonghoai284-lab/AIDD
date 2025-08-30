@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  backend:
+    image: ghcr.io/wantiantian/ai_docs2/backend:latest
+    container_name: aidd-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8000"
+    environment:
+      - DATABASE_TYPE=sqlite
+      - SQLITE_PATH=/app/data/app.db
+      - CACHE_STRATEGY=memory
+      - JWT_SECRET_KEY=quick-deploy-secret-key-change-in-production
+      - ENVIRONMENT=development
+      - DEBUG=true
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    networks:
+      - aidd-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  frontend:
+    image: ghcr.io/wantiantian/ai_docs2/frontend:latest
+    container_name: aidd-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    environment:
+      - REACT_APP_API_BASE_URL=http://localhost:8080
+    depends_on:
+      - backend
+    networks:
+      - aidd-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  aidd-network:
+    driver: bridge

@@ -20,7 +20,8 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # 配置变量
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUILD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_NAME="ai-document-testing-system"
 DEPLOY_MODE="dev"
 USE_DOCKER=false
@@ -719,10 +720,10 @@ main() {
     # 解析参数
     parse_args "$@"
     
-    # 进入项目目录
-    cd "$SCRIPT_DIR"
+    # 进入项目根目录
+    cd "$PROJECT_DIR"
     
-    log_info "项目目录: $SCRIPT_DIR"
+    log_info "项目目录: $PROJECT_DIR"
     log_info "部署模式: $DEPLOY_MODE"
     log_info "使用Docker: $USE_DOCKER"
     

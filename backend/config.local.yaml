@@ -1,0 +1,279 @@
+# 服务器配置
+server:
+  host: "${SERVER_HOST:0.0.0.0}"  # 监听地址
+  port: "${SERVER_PORT:8080}"  # 监听端口
+  debug: "${DEBUG:false}"  # 调试模式
+  reload: "${RELOAD:false}"  # 自动重载
+  workers: "${WORKERS:1}"  # 工作进程数
+  # 外部访问地址配置
+  external_host: "${EXTERNAL_HOST:localhost}"  # 外部访问主机名
+  external_port: "${EXTERNAL_PORT:8080}"  # 外部访问端口
+  external_protocol: "${EXTERNAL_PROTOCOL:http}"  # 外部访问协议
+
+# 缓存配置
+cache:
+  # 缓存策略: memory(本地内存) 或 redis
+  strategy: "${CACHE_STRATEGY:memory}"
+  # 默认缓存TTL (秒)
+  default_ttl: 30
+  
+  # Redis配置（生产环境）
+  redis:
+    host: "${REDIS_HOST:localhost}"
+    port: "${REDIS_PORT:6379}"
+    password: "${REDIS_PASSWORD:}"
+    database: "${REDIS_DATABASE:0}"
+    # 连接池配置
+    pool:
+      max_connections: 20
+      retry_on_timeout: true
+      health_check_interval: 30
+  
+  # 内存缓存配置（开发环境）
+  memory:
+    max_entries: 1000
+    cleanup_interval: 60
+
+# 数据库配置
+database:
+  # 数据库类型: sqlite 或 mysql
+  type: "${DATABASE_TYPE:postgresql}"
+  
+  # SQLite配置（默认）
+  sqlite:
+    path: "./data/app.db"
+  
+  postgresql:
+    host: ${POSTGRES_HOST:localhost}
+    port: ${POSTGRES_PORT:5432}
+    username: ${POSTGRES_USER:ai_docs}
+    password: ${POSTGRES_PASSWORD:ai_docs_password}
+    database: ${POSTGRES_DB:ai_docs_db}
+
+  mysql:
+    host: "${MYSQL_HOST:localhost}"
+    port: "${MYSQL_PORT:3306}"
+    username: "${MYSQL_USERNAME:ai_docs_user}"
+    password: "${MYSQL_PASSWORD:ai_docs_password}"
+    database: "${MYSQL_DATABASE:ai_docs_db}"
+    charset: "utf8mb4"
+    # 连接池配置 - 生产环境优化版本
+    pool:
+      pool_size: 25  # 增加基础连接池大小，匹配批量任务并发需求
+      max_overflow: 30  # 增加溢出连接数，处理峰值流量
+      pool_timeout: 30
+      pool_recycle: 1800  # 减少到30分钟，避免MySQL长连接超时
+      pool_pre_ping: true
+      # 新增MySQL生产环境优化参数
+      pool_reset_on_return: "rollback"  # 返回时重置连接状态
+      pool_recycle_queries: 10000  # 每个连接执行查询数上限
+
+# AI模型配置（保持现有结构）
+ai_models:
+  default_index: 0
+  models:
+    - label: "GPT-4o Mini (快速)"
+      provider: "openai"
+      config:
+        api_key: "${OPENAI_API_KEY}"
+        base_url: "https://api.openai.com/v1"
+        model: "gpt-4o-mini"
+        temperature: 0.3
+        max_tokens: 8000
+        context_window: 128000
+        reserved_tokens: 2000
+        timeout: 12000
+        max_retries: 3
+      description: "适合快速处理，成本较低"
+    - label: "Baidu Ernie Speed (官方)"  # 前端显示名称
+      provider: "BaiDu"
+      config:
+        api_key: "${BAIDU_API_KEY}"  # 从环境变量获取
+        base_url: "https://qianfan.baidubce.com/v1"
+        model: "ernie-speed-pro-128k"
+        temperature: 0.3
+        max_tokens: 5000
+        context_window: 128000  # 模型的上下文窗口大小
+        reserved_tokens: 2000    # 预留给系统提示词的tokens
+        timeout: 12000
+        max_retries: 3
+      description: "官方稳定，专业可靠"
+    - label: "DeepSeek Chat (官方)"  # 前端显示名称
+      provider: "deepseek"
+      config:
+        api_key: "${DEEPSEEK_API_KEY}"  # 从环境变量获取
+        base_url: "https://api.deepseek.com/v1"
+        model: "deepseek-chat"
+        temperature: 0.3
+        max_tokens: 4000
+        context_window: 128000  # 模型的上下文窗口大小
+        reserved_tokens: 2000    # 预留给系统提示词的tokens
+        timeout: 12000
+        max_retries: 3
+      description: "官方稳定，专业可靠"      
+
+
+# 文件设置  
+file_settings:
+  max_file_size: 10485760  # 10MB 上传文件大小限制
+  allowed_extensions:
+    - pdf
+    - docx
+    - md
+    - txt
+
+# 目录配置
+directories:
+  upload_dir: ./data/uploads
+  report_dir: ./data/reports
+  log_dir: ./data/logs
+  temp_dir: ./data/temp
+
+# 日志配置
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "./data/logs/app.log"
+  max_size: 10485760  # 10MB
+  backup_count: 5
+
+# 任务处理配置
+task_processing:
+  # 并发限制配置
+  concurrency_limits:
+    # 系统级并发限制
+    system_max_concurrent_tasks: 100  # 系统同时处理的最大任务数
+    
+    # 用户级并发限制（可通过数据库动态调整）
+    default_user_max_concurrent_tasks: 5  # 普通用户默认并发限制
+    admin_max_concurrent_tasks: 50  # 管理员用户默认并发限制
+    vip_max_concurrent_tasks: 20  # VIP用户并发限制（预留扩展）
+    
+    # 并发控制策略
+    enable_user_level_control: true  # 启用用户级并发控制
+    enable_system_level_control: true  # 启用系统级并发控制
+    queue_overflow_strategy: "queue"  # 超限处理策略：reject(拒绝) | queue(排队)
+    
+  # 任务执行配置
+  task_timeout: 12000  # 单个任务超时时间（秒）
+  retry_failed_tasks: true  # 是否自动重试失败的任务
+  max_retry_attempts: 3  # 最大重试次数
+  
+  # 大文档处理配置
+  document_processing:
+    max_document_chars: 1000000  # 允许处理的最大文档字符数（1M字符）
+    enable_intelligent_chunking: true  # 启用智能分块处理
+    chunk_overlap_chars: 200  # 分块重叠字符数
+    min_chunk_chars: 20000  # 最小分批大小（20K字符，约5-8页PDF）
+    max_chunks_per_document: 50  # 单个文档最大分块数量
+    
+    # 分批处理配置
+    batch_size_small: 50000   # 小文档批次大小（50K字符，约10-15页PDF）
+    batch_size_medium: 60000  # 中等文档批次大小（60K字符，约12-18页PDF） 
+    batch_size_large: 80000   # 大文档批次大小（80K字符，约16-24页PDF）
+    
+    # 文档大小阈值（字符数）
+    small_doc_threshold: 100000   # 小文档阈值（10万字符，约20页）
+    large_doc_threshold: 200000   # 大文档阈值（20万字符，约40页）
+  
+  # 章节合并配置
+  section_merge:
+    enabled: true  # 是否启用章节合并
+    max_chars: 15000  # 合并后章节最大字符数（约3000-4000 tokens，适合AI处理）
+    min_chars: 500   # 最小章节字符数（短于此数值的章节总是被合并）
+    preserve_structure: true  # 是否保持章节层级结构
+  
+  # 任务处理和恢复配置
+  task_processing:
+    processing_timeout: 1800  # 任务处理超时时间（秒），默认30分钟
+    recovery_enabled: true    # 是否启用任务恢复机制
+    auto_retry_failed_tasks: false  # 是否自动重试失败的任务
+    max_concurrent_tasks: 5   # 系统最大并发任务数
+    zombie_detection_interval: 300  # 僵尸任务检测间隔（秒），默认5分钟
+  
+# CORS配置
+cors:
+  enabled: true
+  origins:
+    - "${FRONTEND_URL_1:http://localhost:3000}"  # 主前端地址
+    - "${FRONTEND_URL_2:http://localhost:3001}"  # 备用前端地址1
+    - "${FRONTEND_URL_3:http://localhost:3002}"  # 备用前端地址2
+    - "${FRONTEND_URL_4:http://localhost:3003}"  # 备用前端地址3
+    - "${FRONTEND_URL_5:http://localhost:5173}"  # Vite开发服务器地址
+    - "${FRONTEND_URL_6:http://127.0.0.1:3000}"  # 本地IP访问
+    - "${FRONTEND_URL_7:http://127.0.0.1:5173}"  # 本地IP Vite访问
+    # 生产环境前端地址
+    - "${FRONTEND_PRODUCTION_URL:}"  # 生产环境前端地址
+  allow_credentials: true
+  allow_methods: ["*"]
+  allow_headers: ["*"]
+  # 开发模式：允许更宽松的CORS策略
+  development_mode: "${CORS_DEVELOPMENT_MODE:false}"  # 默认false，可通过环境变量启用
+
+
+# 第三方登录配置
+# Gitee OAuth真实配置
+third_party_auth:
+  # 提供商类型：使用Gitee
+  provider_type: "gitee"
+  
+  # 实际的Gitee应用配置
+  client_id: "077b1f29dbb4c4fda233c93ba34676b00421b2b16d11abc36b38f6298e495876"
+  client_secret: "f3d0cfe1a3143a1b99ca58f234920f0ac63645e6272f65c5771a3a4e4f085fa4"
+  
+  # 回调配置 - 前端域名和路径
+  frontend_domain: "${FRONTEND_DOMAIN:http://localhost:3000}"
+  redirect_path: "${OAUTH_REDIRECT_PATH:/third-login/callback}"
+  
+  # Gitee权限范围
+  scope: "user_info"
+  
+  # Gitee标准API端点（会自动设置，这里列出供参考）
+  api_endpoints:
+    authorization_url: "https://gitee.com/oauth/authorize"
+    token_url: "https://gitee.com/oauth/token"
+    userinfo_url: "https://gitee.com/api/v5/user"
+  
+  
+  # 超时和重试配置
+  request_timeout: 30  # 请求超时时间（秒）
+  max_retries: 3  # 最大重试次数
+  
+
+# JWT配置
+jwt:
+  secret_key: "${JWT_SECRET_KEY}"  # 从环境变量获取
+  algorithm: "HS256"
+  access_token_expire_minutes: 30
+
+# 性能监控配置
+performance:
+  # 数据库性能监控
+  enable_db_query_logging: false  # 启用数据库查询日志
+  slow_query_threshold: 1.0  # 慢查询阈值（秒）
+  
+  # API性能监控
+  enable_api_timing: true  # 启用API响应时间监控
+  api_timeout_threshold: 30.0  # API超时阈值（秒）
+  
+  # 内存使用监控
+  enable_memory_monitoring: false  # 启用内存使用监控
+  memory_warning_threshold: 1024  # 内存警告阈值（MB）
+
+# 安全配置
+security:
+  # 请求限制
+  enable_rate_limiting: false  # 启用API速率限制
+  rate_limit_per_minute: 60  # 每分钟最大请求数
+  
+  # 文件安全
+  scan_uploaded_files: false  # 扫描上传文件安全性
+  max_filename_length: 255  # 文件名最大长度
+  
+  # 数据保护
+  mask_sensitive_logs: true  # 在日志中屏蔽敏感信息
+  enable_audit_logging: false  # 启用审计日志
+
+# 环境变量映射
+env_mapping:
+  JWT_SECRET_KEY: "JWT_SECRET_KEY"
