@@ -59,6 +59,7 @@ const TaskDetailEnhanced: React.FC = () => {
   const [expandedIssues, setExpandedIssues] = useState<Set<number>>(new Set());
   const [expandedSections, setExpandedSections] = useState<{ [key: number]: Set<string> }>({});
   const [expandedComments, setExpandedComments] = useState<Set<number>>(new Set());
+  const [commentInputs, setCommentInputs] = useState<{ [key: number]: string }>({});
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
@@ -381,10 +382,18 @@ const TaskDetailEnhanced: React.FC = () => {
         newExpanded.delete(issueId);
       } else {
         newExpanded.add(issueId);
+        // 当展开评论时，初始化评论输入状态
+        const currentIssue = issues.find(issue => issue.id === issueId);
+        if (currentIssue) {
+          setCommentInputs(prevInputs => ({
+            ...prevInputs,
+            [issueId]: currentIssue.feedback_comment || ''
+          }));
+        }
       }
       return newExpanded;
     });
-  }, []);
+  }, [issues]);
 
   const handleTabChange = useCallback((activeKey: string) => {
     // 当切换到AI输出标签页时，懒加载AI输出数据
@@ -918,10 +927,13 @@ const TaskDetailEnhanced: React.FC = () => {
                                 <TextArea
                                   placeholder="请输入反馈意见..."
                                   rows={3}
-                                  value={issue.feedback_comment || ''}
+                                  value={commentInputs[issue.id] || ''}
                                   onChange={(e) => {
-                                    // 直接更新当前问题对象的评论
-                                    issue.feedback_comment = e.target.value;
+                                    // 更新评论输入状态
+                                    setCommentInputs(prev => ({
+                                      ...prev,
+                                      [issue.id]: e.target.value
+                                    }));
                                   }}
                                   className="comment-textarea"
                                 />
@@ -948,9 +960,11 @@ const TaskDetailEnhanced: React.FC = () => {
                                           const template = templates[parseInt(key) - 1] || '';
                                           
                                           if (template) {
-                                            // 直接设置评论到当前问题的状态，不更新整个列表
-                                            // 这个更改将在保存时提交到服务器
-                                            issue.feedback_comment = template;
+                                            // 更新评论输入状态
+                                            setCommentInputs(prev => ({
+                                              ...prev,
+                                              [issue.id]: template
+                                            }));
                                           }
                                         }
                                       }}
@@ -964,8 +978,13 @@ const TaskDetailEnhanced: React.FC = () => {
                                       type="primary"
                                       onClick={async () => {
                                         try {
-                                          // 保存评论，不刷新页面
-                                          await taskAPI.updateCommentOnly(issue.id, issue.feedback_comment);
+                                          const currentComment = commentInputs[issue.id] || '';
+                                          // 保存评论
+                                          await taskAPI.updateCommentOnly(issue.id, currentComment);
+                                          
+                                          // 刷新当前页面以更新评论显示
+                                          await refreshCurrentPage();
+                                          
                                           message.success('评论已保存');
                                           toggleComment(issue.id);
                                         } catch (error) {
