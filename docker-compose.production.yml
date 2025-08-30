@@ -1,0 +1,297 @@
+# AI文档测试系统 - 生产环境Docker Compose配置
+# 使用预构建的Docker镜像，支持完整的生产环境部署
+
+version: '3.8'
+
+services:
+  # 后端服务
+  backend:
+    image: ${REGISTRY:-ghcr.io/wantiantian/ai_docs2}/backend:${VERSION:-latest}
+    container_name: ${APP_NAME:-aidd}-backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-8080}:8000"
+    environment:
+      # 运行时配置
+      - CONFIG_FILE=${CONFIG_FILE:-config.yaml}
+      - PYTHONPATH=/app
+      - WAIT_FOR_DB=${WAIT_FOR_DB:-true}
+      - RUN_MIGRATIONS=${RUN_MIGRATIONS:-true}
+      # 构建信息
+      - VERSION=${VERSION:-latest}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+    env_file:
+      - .env
+    volumes:
+      # 配置文件挂载
+      - ${CONFIG_PATH:-./config.yaml}:/app/config.yaml:ro
+      # 数据持久化
+      - ${DATA_PATH:-./data}:/app/data
+      - ${LOG_PATH:-./logs}:/app/logs
+      # 可选: 自定义配置目录
+      - ${CUSTOM_CONFIG_PATH:-/dev/null}:/app/config:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - aidd-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: ${BACKEND_MEMORY_LIMIT:-2G}
+          cpus: '${BACKEND_CPU_LIMIT:-2}'
+        reservations:
+          memory: ${BACKEND_MEMORY_RESERVATION:-512M}
+          cpus: '${BACKEND_CPU_RESERVATION:-0.5}'
+
+  # 前端服务
+  frontend:
+    image: ${REGISTRY:-ghcr.io/wantiantian/ai_docs2}/frontend:${VERSION:-latest}
+    container_name: ${APP_NAME:-aidd}-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    environment:
+      - VERSION=${VERSION:-latest}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - aidd-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: ${FRONTEND_MEMORY_LIMIT:-512M}
+          cpus: '${FRONTEND_CPU_LIMIT:-1}'
+        reservations:
+          memory: ${FRONTEND_MEMORY_RESERVATION:-128M}
+          cpus: '${FRONTEND_CPU_RESERVATION:-0.1}'
+
+  # PostgreSQL数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: ${APP_NAME:-aidd}-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-aidd_db}
+      - POSTGRES_USER=${POSTGRES_USER:-aidd}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_INITDB_ARGS=${POSTGRES_INITDB_ARGS:---auth-host=md5}
+      # 性能优化配置
+      - POSTGRES_MAX_CONNECTIONS=${POSTGRES_MAX_CONNECTIONS:-200}
+      - POSTGRES_SHARED_BUFFERS=${POSTGRES_SHARED_BUFFERS:-256MB}
+      - POSTGRES_EFFECTIVE_CACHE_SIZE=${POSTGRES_EFFECTIVE_CACHE_SIZE:-1GB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # 可选: 自定义初始化脚本
+      - ${POSTGRES_INIT_SCRIPT:-/dev/null}:/docker-entrypoint-initdb.d/init.sql:ro
+      # PostgreSQL配置文件
+      - ${POSTGRES_CONFIG:-/dev/null}:/etc/postgresql/postgresql.conf:ro
+    ports:
+      # 可选：暴露数据库端口（生产环境建议关闭）
+      - "${POSTGRES_EXTERNAL_PORT:-}:5432"
+    networks:
+      - aidd-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aidd} -d ${POSTGRES_DB:-aidd_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: ${POSTGRES_MEMORY_LIMIT:-1G}
+          cpus: '${POSTGRES_CPU_LIMIT:-2}'
+        reservations:
+          memory: ${POSTGRES_MEMORY_RESERVATION:-256M}
+          cpus: '${POSTGRES_CPU_RESERVATION:-0.25}'
+
+  # Redis缓存
+  redis:
+    image: redis:7-alpine
+    container_name: ${APP_NAME:-aidd}-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory ${REDIS_MAXMEMORY:-512mb}
+      --maxmemory-policy allkeys-lru
+      ${REDIS_PASSWORD:+--requirepass ${REDIS_PASSWORD}}
+    volumes:
+      - redis_data:/data
+      # 可选: Redis配置文件
+      - ${REDIS_CONFIG:-/dev/null}:/usr/local/etc/redis/redis.conf:ro
+    ports:
+      # 可选：暴露Redis端口（生产环境建议关闭）  
+      - "${REDIS_EXTERNAL_PORT:-}:6379"
+    networks:
+      - aidd-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: ${REDIS_MEMORY_LIMIT:-1G}
+          cpus: '${REDIS_CPU_LIMIT:-1}'
+        reservations:
+          memory: ${REDIS_MEMORY_RESERVATION:-64M}
+          cpus: '${REDIS_CPU_RESERVATION:-0.1}'
+
+  # 可选：Nginx反向代理（用于SSL终止和负载均衡）
+  nginx:
+    image: nginx:alpine
+    container_name: ${APP_NAME:-aidd}-nginx
+    restart: unless-stopped
+    ports:
+      - "${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_HTTPS_PORT:-443}:443"
+    volumes:
+      - ${NGINX_CONFIG:-./nginx.conf}:/etc/nginx/nginx.conf:ro
+      - ${SSL_CERT_PATH:-/dev/null}:/etc/ssl/certs:ro
+      - ${NGINX_LOG_PATH:-./nginx-logs}:/var/log/nginx
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - aidd-network
+    profiles:
+      - nginx  # 仅在指定profile时启动
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
+
+  # 可选：监控服务（Prometheus + Grafana）
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ${APP_NAME:-aidd}-prometheus
+    restart: unless-stopped
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ${PROMETHEUS_CONFIG:-./monitoring/prometheus.yml}:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - aidd-network
+    profiles:
+      - monitoring
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1'
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ${APP_NAME:-aidd}-grafana
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin123}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ${GRAFANA_PROVISIONING:-/dev/null}:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    networks:
+      - aidd-network
+    profiles:
+      - monitoring
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1'
+
+# 数据卷配置
+volumes:
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${POSTGRES_DATA_PATH:-./data/postgres}
+  
+  redis_data:
+    driver: local
+    driver_opts:
+      type: none  
+      o: bind
+      device: ${REDIS_DATA_PATH:-./data/redis}
+  
+  prometheus_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind  
+      device: ${PROMETHEUS_DATA_PATH:-./data/prometheus}
+      
+  grafana_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${GRAFANA_DATA_PATH:-./data/grafana}
+
+# 网络配置
+networks:
+  aidd-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${DOCKER_SUBNET:-172.20.0.0/16}
+    driver_opts:
+      com.docker.network.bridge.name: ${DOCKER_BRIDGE_NAME:-aidd-bridge}
+
+# 配置覆盖示例（在docker-compose.override.yml中使用）
+# services:
+#   backend:
+#     environment:
+#       - DEBUG=true
+#       - LOG_LEVEL=DEBUG
+#   
+#   postgres:
+#     ports:
+#       - "5432:5432"  # 开发环境暴露数据库端口
+#
+#   redis: 
+#     ports:
+#       - "6379:6379"  # 开发环境暴露Redis端口
