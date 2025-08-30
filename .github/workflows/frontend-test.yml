@@ -22,7 +22,7 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '22'
         cache: 'npm'
         cache-dependency-path: frontend/package-lock.json
     
@@ -63,7 +63,7 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '22'
         cache: 'npm'
         cache-dependency-path: frontend/package-lock.json
     
@@ -79,7 +79,7 @@ jobs:
         python -m venv venv
         source venv/bin/activate
         pip install -r requirements.txt
-        python main.py &
+        python app/main.py &
         sleep 10
       env:
         PYTHONPATH: .
@@ -119,7 +119,7 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '22'
         cache: 'npm'
         cache-dependency-path: frontend/package-lock.json
     
@@ -154,7 +154,7 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '22'
         cache: 'npm'
         cache-dependency-path: frontend/package-lock.json
     
