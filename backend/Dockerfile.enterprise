@@ -1,0 +1,134 @@
+# AI文档测试系统 - 企业级后端Dockerfile
+# 多阶段构建，优化缓存和安全性
+
+# 阶段1: 构建环境 - 安装和准备依赖
+FROM python:3.12-slim AS builder
+
+# 安装构建工具
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# 设置工作目录
+WORKDIR /app
+
+# 复制依赖文件并安装
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# 阶段2: 运行时环境 - 精简镜像
+FROM python:3.12-slim AS runtime
+
+# 接收构建参数
+ARG BUILDTIME
+ARG VERSION
+ARG GIT_COMMIT
+ARG GIT_BRANCH
+
+# 设置标签
+LABEL maintainer="AI文档测试系统团队"
+LABEL version="${VERSION}"
+LABEL build-date="${BUILDTIME}"
+LABEL git-commit="${GIT_COMMIT}"
+LABEL git-branch="${GIT_BRANCH}"
+LABEL description="AI文档测试系统后端服务"
+
+# 安装运行时依赖
+RUN apt-get update && apt-get install -y \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# 创建应用用户
+RUN groupadd -g 1001 appgroup \
+    && useradd -r -u 1001 -g appgroup -m -s /bin/bash appuser
+
+# 设置工作目录
+WORKDIR /app
+
+# 从构建阶段复制Python包
+COPY --from=builder /root/.local /home/appuser/.local
+
+# 设置环境变量
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV PATH=/home/appuser/.local/bin:$PATH
+ENV USER=appuser
+ENV HOME=/home/appuser
+
+# 创建必要的目录结构
+RUN mkdir -p /app/data/uploads \
+    /app/data/reports \
+    /app/data/logs \
+    /app/config \
+    /app/tmp \
+    && chown -R appuser:appgroup /app
+
+# 复制应用代码
+COPY --chown=appuser:appgroup . .
+
+# 创建配置文件挂载点
+RUN touch /app/config.yaml && chown appuser:appgroup /app/config.yaml
+
+# 切换到应用用户
+USER appuser
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# 暴露端口
+EXPOSE 8000
+
+# 启动脚本
+COPY --chown=appuser:appgroup <<EOF /app/entrypoint.sh
+#!/bin/bash
+set -e
+
+# 等待数据库就绪 (可选)
+if [ "\${WAIT_FOR_DB}" = "true" ]; then
+    echo "等待数据库连接..."
+    python -c "
+import time
+import sys
+from app.core.database import engine
+from sqlalchemy import text
+
+max_tries = 30
+for i in range(max_tries):
+    try:
+        with engine.connect() as conn:
+            conn.execute(text('SELECT 1'))
+        print('数据库连接成功')
+        break
+    except Exception as e:
+        if i == max_tries - 1:
+            print(f'数据库连接失败: {e}')
+            sys.exit(1)
+        print(f'等待数据库... ({i+1}/{max_tries})')
+        time.sleep(2)
+"
+fi
+
+# 运行数据库迁移 (可选)
+if [ "\${RUN_MIGRATIONS}" = "true" ]; then
+    echo "运行数据库迁移..."
+    alembic upgrade head
+fi
+
+# 启动应用
+echo "启动AI文档测试系统后端服务..."
+echo "版本: ${VERSION:-unknown}"
+echo "Git提交: ${GIT_COMMIT:-unknown}"
+echo "构建时间: ${BUILDTIME:-unknown}"
+
+exec python app/main.py
+EOF
+
+RUN chmod +x /app/entrypoint.sh
+
+# 默认启动命令
+CMD ["/app/entrypoint.sh"]
