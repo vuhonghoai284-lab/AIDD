@@ -802,9 +802,12 @@ const TaskDetailEnhanced: React.FC = () => {
                                     value={issue.satisfaction_rating || 0}
                                     onChange={async (value) => {
                                       try {
-                                        // 直接更新当前问题对象
-                                        issue.satisfaction_rating = value;
+                                        // 先调用API保存评分
                                         await taskAPI.submitSatisfactionRating(issue.id, value);
+                                        
+                                        // 触发页面刷新以更新评分显示
+                                        await refreshCurrentPage();
+                                        
                                         message.success('评分已保存');
                                       } catch (error) {
                                         message.error('评分保存失败');
