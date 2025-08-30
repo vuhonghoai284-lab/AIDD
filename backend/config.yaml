@@ -85,6 +85,32 @@ ai_models:
         timeout: 12000
         max_retries: 3
       description: "适合快速处理，成本较低"
+    - label: "Baidu Ernie Speed (官方)"  # 前端显示名称
+      provider: "BaiDu"
+      config:
+        api_key: "${BAIDU_API_KEY}"  # 从环境变量获取
+        base_url: "https://qianfan.baidubce.com/v1"
+        model: "ernie-speed-pro-128k"
+        temperature: 0.3
+        max_tokens: 5000
+        context_window: 128000  # 模型的上下文窗口大小
+        reserved_tokens: 2000    # 预留给系统提示词的tokens
+        timeout: 12000
+        max_retries: 3
+      description: "官方稳定，专业可靠"
+    - label: "DeepSeek Chat (官方)"  # 前端显示名称
+      provider: "deepseek"
+      config:
+        api_key: "${DEEPSEEK_API_KEY}"  # 从环境变量获取
+        base_url: "https://api.deepseek.com/v1"
+        model: "deepseek-chat"
+        temperature: 0.3
+        max_tokens: 4000
+        context_window: 128000  # 模型的上下文窗口大小
+        reserved_tokens: 2000    # 预留给系统提示词的tokens
+        timeout: 12000
+        max_retries: 3
+      description: "官方稳定，专业可靠"      
 
 
 # 文件设置  

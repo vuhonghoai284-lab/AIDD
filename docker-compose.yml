@@ -7,8 +7,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     # 或使用预构建镜像
-    # image: ghcr.io/wantiantian/ai_docs2/backend:latest
-    container_name: ai-docs-backend
+    # image: ghcr.io/wantiantian/aidd/backend:latest
+    container_name: aidd-backend
     restart: unless-stopped
     ports:
       - "8000:8000"
@@ -32,7 +32,7 @@ services:
       - postgres
       - redis
     networks:
-      - ai-docs-network
+      - aidd-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -46,8 +46,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     # 或使用预构建镜像
-    # image: ghcr.io/wantiantian/ai_docs2/frontend:latest
-    container_name: ai-docs-frontend
+    # image: ghcr.io/wantiantian/aidd/frontend:latest
+    container_name: aidd-frontend
     restart: unless-stopped
     ports:
       - "80:80"
@@ -58,7 +58,7 @@ services:
     depends_on:
       - backend
     networks:
-      - ai-docs-network
+      - aidd-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 30s
@@ -68,7 +68,7 @@ services:
   # PostgreSQL数据库
   postgres:
     image: postgres:15-alpine
-    container_name: ai-docs-postgres
+    container_name: aidd-postgres
     restart: unless-stopped
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-ai_docs_db}
@@ -77,7 +77,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - ai-docs-network
+      - aidd-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ai_docs} -d ${POSTGRES_DB:-ai_docs_db}"]
       interval: 10s
@@ -87,13 +87,13 @@ services:
   # Redis服务
   redis:
     image: redis:7-alpine
-    container_name: ai-docs-redis
+    container_name: aidd-redis
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
     networks:
-      - ai-docs-network
+      - aidd-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -111,5 +111,5 @@ volumes:
     driver: local
 
 networks:
-  ai-docs-network:
+  aidd-network:
     driver: bridge
