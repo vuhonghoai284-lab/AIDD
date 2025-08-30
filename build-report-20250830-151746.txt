@@ -1,0 +1,28 @@
+AI Document Testing System - 构建报告
+=====================================
+
+构建时间: Sat Aug 30 15:17:46 CST 2025
+构建类型: development
+脚本版本: v1.0.0
+
+系统信息:
+---------
+操作系统: Linux 6.6.87.2-microsoft-standard-WSL2
+Node.js: v22.18.0
+Python: 3.12.3
+Docker: 27.5.1
+
+构建配置:
+---------
+跳过测试: true
+跳过前端: true
+跳过后端: true
+并行构建: true
+清理构建: false
+
+构建结果:
+---------
+前端: ⏭️ 已跳过
+后端: ⏭️ 已跳过
+
+报告生成时间: Sat Aug 30 15:17:46 CST 2025
