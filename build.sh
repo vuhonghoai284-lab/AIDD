@@ -1,15 +1,18 @@
 #!/bin/bash
 
-# AI文档测试系统 - 自动构建脚本
-# 支持多平台构建和推送到Docker Hub/GitHub Registry
+# AI文档测试系统 - 统一构建脚本
+# 支持本地构建和CI环境，构建标准化的Docker镜像
 
 set -e
 
-# 配置变量
-PROJECT_NAME="aidd"
+# 默认配置
+REGISTRY=${REGISTRY:-"ghcr.io/wantiantian/ai_docs2"}
 VERSION=${VERSION:-"latest"}
-REGISTRY=${REGISTRY:-"ghcr.io/wantiantian"}
-PLATFORMS=${PLATFORMS:-"linux/amd64,linux/arm64"}
+PLATFORM=${PLATFORM:-"linux/amd64"}
+PUSH=${PUSH:-"false"}
+BUILD_ARGS=""
+CACHE_FROM=""
+CACHE_TO=""
 
 # 颜色输出
 RED='\033[0;31m'
