@@ -202,8 +202,17 @@ class AuthView(BaseView):
             auth_service = AuthService(db)
             print(f"✅ [系统登录] AuthService初始化成功")
             
-            # 验证管理员凭据（在实际应用中应该使用加密密码验证）
-            if username == "admin" and password == "admin123":
+            # 从配置或环境变量获取管理员凭据
+            import os
+            from app.core.config import get_settings
+            settings = get_settings()
+            
+            # 获取管理员凭据（支持环境变量配置）
+            admin_username = os.getenv('ADMIN_USERNAME', 'admin')
+            admin_password = os.getenv('ADMIN_PASSWORD', 'admin123')
+            
+            # 验证管理员凭据
+            if username == admin_username and password == admin_password:
                 print(f"✅ [系统登录] 用户名密码验证通过")
                 
                 # 创建或获取系统管理员用户

@@ -37,13 +37,19 @@ cache:
 # 数据库配置
 database:
   # 数据库类型: sqlite 或 mysql
-  type: "${DATABASE_TYPE:mysql}"
+  type: "${DATABASE_TYPE:postgresql}"
   
   # SQLite配置（默认）
   sqlite:
     path: "./data/app.db"
   
-  # MySQL配置（可选）
+  postgresql:
+    host: ${POSTGRES_HOST:localhost}
+    port: ${POSTGRES_PORT:5432}
+    username: ${POSTGRES_USER:ai_docs}
+    password: ${POSTGRES_PASSWORD:ai_docs_password}
+    database: ${POSTGRES_DB:ai_docs_db}
+
   mysql:
     host: "${MYSQL_HOST:localhost}"
     port: "${MYSQL_PORT:3306}"
@@ -120,7 +126,7 @@ task_processing:
     # 并发控制策略
     enable_user_level_control: true  # 启用用户级并发控制
     enable_system_level_control: true  # 启用系统级并发控制
-    queue_overflow_strategy: "reject"  # 超限处理策略：reject(拒绝) | queue(排队)
+    queue_overflow_strategy: "queue"  # 超限处理策略：reject(拒绝) | queue(排队)
     
   # 任务执行配置
   task_timeout: 12000  # 单个任务超时时间（秒）

@@ -228,56 +228,101 @@ const AppContent: React.FC = () => {
     
     window.addEventListener('userLogin', handleUserLoginEvent as EventListener);
     
-    // 优化的token检查函数，减少不必要的API调用
+    // 防抖优化的token检查函数，防止无限循环
+    let checkInProgress = false;
+    let checkAttempts = 0;
+    const maxCheckAttempts = 3; // 最大尝试次数
+    
     const checkTokenAndUser = async () => {
-      const token = localStorage.getItem('token');
-      const userString = localStorage.getItem('user');
-      
-      // 如果有token和用户数据，且React状态中也有用户，跳过检查
-      if (token && userString && user) {
+      // 防止重复执行
+      if (checkInProgress) {
+        console.log('🔄 认证检查已在进行中，跳过');
         return;
       }
       
-      if (token && userString) {
-        // 如果有token和用户数据但React状态为空，优先使用localStorage数据
-        if (!user) {
-          try {
-            const storedUser = JSON.parse(userString);
-            setUser(storedUser);
-            console.log('🔄 从localStorage恢复用户状态');
-          } catch (error) {
-            console.warn('解析localStorage中的用户数据失败:', error);
-            // 只有在localStorage数据损坏时才从API获取
+      // 防止无限重试
+      if (checkAttempts >= maxCheckAttempts) {
+        console.warn('⚠️ 认证检查达到最大尝试次数，停止检查');
+        return;
+      }
+      
+      checkInProgress = true;
+      checkAttempts++;
+      
+      try {
+        const token = localStorage.getItem('token');
+        const userString = localStorage.getItem('user');
+        
+        // 如果有token和用户数据，且React状态中也有用户，跳过检查
+        if (token && userString && user) {
+          console.log('✅ 认证状态正常，跳过检查');
+          checkAttempts = 0; // 重置计数器
+          return;
+        }
+        
+        if (token && userString) {
+          // 如果有token和用户数据但React状态为空，优先使用localStorage数据
+          if (!user) {
             try {
-              const currentUser = await getCurrentUser();
-              if (currentUser) {
-                setUser(currentUser);
-                localStorage.setItem('user', JSON.stringify(currentUser));
+              const storedUser = JSON.parse(userString);
+              setUser(storedUser);
+              console.log('🔄 从localStorage恢复用户状态');
+              checkAttempts = 0; // 成功后重置计数器
+            } catch (parseError) {
+              console.warn('解析localStorage中的用户数据失败:', parseError);
+              // 只有在localStorage数据损坏时才从API获取，但要防止循环
+              if (checkAttempts <= 2) { // 只在前两次尝试时调用API
+                try {
+                  const currentUser = await getCurrentUser();
+                  if (currentUser) {
+                    setUser(currentUser);
+                    localStorage.setItem('user', JSON.stringify(currentUser));
+                    checkAttempts = 0;
+                  }
+                } catch (apiError) {
+                  console.error('获取用户信息失败:', apiError);
+                  // 避免立即清理，可能导致循环
+                  if (checkAttempts >= 2) {
+                    console.log('🧹 清理无效的认证信息');
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('user');
+                    clearUserCache();
+                    setUser(null);
+                  }
+                }
               }
-            } catch (e) {
-              console.error('获取用户信息失败:', e);
-              localStorage.removeItem('token');
-              localStorage.removeItem('user');
-              clearUserCache();
             }
           }
+        } else if (!token && user) {
+          // 没有token但用户状态存在，需要登出
+          console.log('🚪 没有token，清理用户状态');
+          setUser(null);
+          clearUserCache();
+          checkAttempts = 0;
+        } else if (token && !userString) {
+          // 有token但没有用户数据，清除可能无效的token
+          console.log('🧹 清理不完整的认证信息');
+          localStorage.removeItem('token');
+          clearUserCache();
+          checkAttempts = 0;
         }
-      } else if (!token && user) {
-        // 没有token但用户状态存在，需要登出
-        setUser(null);
-        clearUserCache();
-      } else if (token && !userString) {
-        // 有token但没有用户数据，清除可能无效的token
-        localStorage.removeItem('token');
-        clearUserCache();
+      } catch (error) {
+        console.error('认证检查过程中出错:', error);
+      } finally {
+        checkInProgress = false;
       }
     };
 
     // 立即执行一次检查
     checkTokenAndUser();
 
-    // 定期检查token变化（降低频率避免过度请求）
-    const checkTokenInterval = setInterval(checkTokenAndUser, 5000); // 从100ms改为5秒
+    // 大幅降低检查频率，避免过度请求
+    const checkTokenInterval = setInterval(() => {
+      // 只在页面可见时进行检查，避免不必要的API调用
+      if (!document.hidden) {
+        checkTokenAndUser();
+      }
+    }, 30000); // 改为30秒检查一次
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);

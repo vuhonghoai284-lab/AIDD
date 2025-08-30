@@ -109,7 +109,16 @@ class Settings:
         # 新配置格式（字典）
         db_type = db_config.get('type', 'sqlite').lower()
         
-        if db_type == 'mysql':
+        if db_type == 'postgresql':
+            pg_config = db_config.get('postgresql', {})
+            host = pg_config.get('host', 'localhost')
+            port = pg_config.get('port', 5432)
+            username = pg_config.get('username', 'ai_docs')
+            password = pg_config.get('password', '')
+            database = pg_config.get('database', 'ai_docs_db')
+            
+            return f"postgresql://{username}:{password}@{host}:{port}/{database}"
+        elif db_type == 'mysql':
             mysql_config = db_config.get('mysql', {})
             host = mysql_config.get('host', 'localhost')
             port = mysql_config.get('port', 3306)

@@ -18,7 +18,15 @@ def get_engine_config():
     """根据数据库类型获取引擎配置"""
     db_type = settings.database_type
     
-    if db_type == 'mysql':
+    if db_type == 'postgresql':
+        return {
+            'pool_size': 10,
+            'max_overflow': 20,
+            'pool_recycle': 3600,
+            'pool_pre_ping': True,
+            'echo': False
+        }
+    elif db_type == 'mysql':
         return {
             'connect_args': {
                 'charset': 'utf8mb4',
@@ -33,13 +41,20 @@ def get_engine_config():
             'echo': False
         }
     else:
-        # SQLite配置（默认）
-        from sqlalchemy.pool import StaticPool
+        # SQLite配置（默认） - 优化并发处理
+        from sqlalchemy.pool import QueuePool
         return {
             'connect_args': {
                 "check_same_thread": False,
+                "timeout": 30,  # 增加超时时间
+                "isolation_level": None,  # 自动提交模式
             },
-            'poolclass': StaticPool,
+            'poolclass': QueuePool,
+            'pool_size': 10,  # 连接池大小
+            'max_overflow': 20,  # 最大溢出连接数
+            'pool_timeout': 30,  # 获取连接超时时间
+            'pool_recycle': 3600,  # 连接回收时间(1小时)
+            'pool_pre_ping': True,  # 连接前测试
             'echo': False
         }
 
@@ -61,7 +76,14 @@ AsyncSessionLocal = None
 
 try:
     # 仅在有异步驱动时创建异步引擎
-    async_database_url = settings.database_url.replace('pymysql://', 'aiomysql://') if 'mysql://' in settings.database_url else settings.database_url.replace('sqlite:///', 'sqlite+aiosqlite:///')
+    async_database_url = settings.database_url
+    if 'postgresql://' in settings.database_url:
+        async_database_url = settings.database_url.replace('postgresql://', 'postgresql+asyncpg://')
+    elif 'mysql://' in settings.database_url:
+        async_database_url = settings.database_url.replace('pymysql://', 'aiomysql://')
+    elif 'sqlite:///' in settings.database_url:
+        async_database_url = settings.database_url.replace('sqlite:///', 'sqlite+aiosqlite:///')
+    
     async_engine_config = engine_config.copy()
     # 移除异步引擎不支持的参数
     async_engine_config.pop('isolation_level', None)

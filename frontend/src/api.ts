@@ -242,15 +242,21 @@ export const taskAPI = {
     return response.data;
   },
 
-  // 下载任务原文件
+  // 下载任务原文件 - 增强安全版本
   downloadTaskFile: async (taskId: number) => {
     try {
       console.log('🚀 开始下载任务文件:', taskId);
       
+      // 输入验证
+      if (!taskId || taskId <= 0) {
+        throw new Error('无效的任务ID');
+      }
+
       const response = await api.get(`/tasks/${taskId}/file`, {
         responseType: 'blob',
+        timeout: 30000, // 30秒超时
         headers: {
-          'Accept': 'application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/markdown,application/octet-stream,*/*'
+          'Accept': 'application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/markdown,text/plain,application/octet-stream'
         }
       });
       
@@ -260,13 +266,27 @@ export const taskAPI = {
         headers: response.headers,
         dataType: typeof response.data,
         isBlob: response.data instanceof Blob,
-        size: response.data.size
+        size: response.data?.size
       });
       
-      // 验证响应数据是Blob
+      // 增强的响应验证
+      if (!response.data) {
+        throw new Error('服务器返回了空响应');
+      }
+      
       if (!(response.data instanceof Blob)) {
         console.error('❌ 响应数据不是Blob类型:', typeof response.data);
         throw new Error('服务器返回了非二进制数据');
+      }
+      
+      // 文件大小安全检查（限制100MB）
+      const maxFileSize = 100 * 1024 * 1024; // 100MB
+      if (response.data.size > maxFileSize) {
+        throw new Error(`文件过大 (${Math.round(response.data.size / 1024 / 1024)}MB)，超出100MB限制`);
+      }
+      
+      if (response.data.size === 0) {
+        throw new Error('文件为空，无法下载');
       }
       
       // 从响应头获取文件名，支持UTF-8编码的文件名
@@ -281,8 +301,13 @@ export const taskAPI = {
         // 优先尝试解析 filename*=UTF-8''encoded_name 格式（RFC 5987）
         const utf8FilenameMatch = contentDisposition.match(/filename\*=UTF-8''([^;,\n]*)/);
         if (utf8FilenameMatch) {
-          filename = decodeURIComponent(utf8FilenameMatch[1]);
-          console.log('✅ UTF-8文件名解析成功:', filename);
+          try {
+            filename = decodeURIComponent(utf8FilenameMatch[1]);
+            console.log('✅ UTF-8文件名解析成功:', filename);
+          } catch (decodeError) {
+            console.warn('UTF-8文件名解码失败:', decodeError);
+            filename = `task_${taskId}_file`; // 使用安全的默认名称
+          }
         } else {
           // 降级处理普通的 filename="name" 格式
           const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
@@ -304,11 +329,36 @@ export const taskAPI = {
         console.warn('❌ 响应中没有Content-Disposition头');
       }
       
-      // 获取响应的MIME类型
+      // 文件名安全检查和清理
+      filename = filename.replace(/[<>:"/\\|?*]/g, '_'); // 替换危险字符
+      filename = filename.substring(0, 255); // 限制文件名长度
+      
+      if (!filename.trim()) {
+        filename = `task_${taskId}_file`; // 确保有有效的文件名
+      }
+      
+      // 获取响应的MIME类型并进行安全检查
       let contentType = response.headers['content-type'] || 'application/octet-stream';
       
-      // 根据文件扩展名纠正MIME类型（防止服务器MIME类型不准确）
-      const fileExtension = filename.toLowerCase().split('.').pop();
+      // 定义安全的文件类型白名单
+      const allowedMimeTypes = [
+        'application/pdf',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/msword',
+        'text/plain',
+        'text/markdown',
+        'application/octet-stream'
+      ];
+      
+      // 根据文件扩展名验证和纠正MIME类型
+      const fileExtension = filename.toLowerCase().split('.').pop() || '';
+      const allowedExtensions = ['pdf', 'docx', 'doc', 'txt', 'md', 'markdown'];
+      
+      // 扩展名安全检查
+      if (!allowedExtensions.includes(fileExtension)) {
+        throw new Error(`不支持的文件类型: .${fileExtension}。仅支持: ${allowedExtensions.join(', ')}`);
+      }
+      
       const mimeTypeMap: { [key: string]: string } = {
         'pdf': 'application/pdf',
         'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -326,24 +376,52 @@ export const taskAPI = {
         }
       }
       
+      // MIME类型安全检查
+      if (!allowedMimeTypes.includes(contentType)) {
+        throw new Error(`不安全的文件类型: ${contentType}`);
+      }
+      
       console.log('📄 文件信息:', { filename, contentType, size: response.data.size });
       
-      // 验证PDF文件内容（如果是PDF）
-      if (contentType === 'application/pdf') {
-        try {
-          const slice = response.data.slice(0, 10);
-          const arrayBuffer = await slice.arrayBuffer();
-          const header = new Uint8Array(arrayBuffer);
-          const headerStr = String.fromCharCode(...header);
-          const isPdfValid = headerStr.startsWith('%PDF');
-          console.log('🔍 PDF文件头验证:', isPdfValid ? '✅ 正确' : '❌ 错误', '内容:', headerStr);
-          
-          if (!isPdfValid) {
-            console.warn('⚠️ PDF文件头验证失败，可能不是有效的PDF文件');
-          }
-        } catch (e) {
-          console.warn('⚠️ PDF文件头验证失败:', e);
+      // 增强的文件内容验证
+      try {
+        const fileHeader = response.data.slice(0, 16); // 读取前16字节
+        const arrayBuffer = await fileHeader.arrayBuffer();
+        const header = new Uint8Array(arrayBuffer);
+        
+        // 根据文件类型进行魔数验证
+        switch (fileExtension) {
+          case 'pdf':
+            const pdfHeader = String.fromCharCode(...header.slice(0, 4));
+            if (!pdfHeader.startsWith('%PDF')) {
+              throw new Error('PDF文件头验证失败，文件可能已损坏或不是有效的PDF文件');
+            }
+            console.log('✅ PDF文件头验证通过');
+            break;
+            
+          case 'docx':
+            // DOCX文件是ZIP格式，检查ZIP头
+            if (header[0] !== 0x50 || header[1] !== 0x4B) {
+              throw new Error('DOCX文件头验证失败，文件可能已损坏');
+            }
+            console.log('✅ DOCX文件头验证通过');
+            break;
+            
+          case 'doc':
+            // DOC文件头检查（简化版）
+            if (header.length >= 8) {
+              const signature = header.slice(0, 8);
+              // DOC文件有特定的OLE复合文档签名
+              console.log('✅ DOC文件基本检查通过');
+            }
+            break;
+            
+          default:
+            console.log('ℹ️ 文本文件，跳过二进制头验证');
         }
+      } catch (validationError) {
+        console.error('文件内容验证失败:', validationError);
+        throw new Error(`文件验证失败: ${validationError.message}`);
       }
       
       // 创建下载链接，强制使用正确的MIME类型

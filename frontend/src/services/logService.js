@@ -299,35 +299,57 @@ class LogService {
   }
 
   /**
-   * 断开连接
+   * 断开连接 - 增强版资源清理
    */
   disconnect(code = 1000, reason = 'Normal closure') {
-    console.log('Disconnecting WebSocket:', reason);
+    console.log('🔌 断开WebSocket连接:', reason);
     
-    // 标记为主动关闭
+    // 标记为主动关闭，防止自动重连
     this.connectionClosed = true;
     this.shouldReconnect = false;
+    this.isConnecting = false;
     
-    // 清除所有定时器
+    // 清除所有定时器，防止定时器泄漏
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
+      console.log('✅ 重连定时器已清除');
     }
 
+    // 停止心跳机制
     this.stopHeartbeat();
+    console.log('✅ 心跳定时器已清除');
 
     // 关闭WebSocket连接
     if (this.websocket) {
-      if (this.websocket.readyState === WebSocket.OPEN) {
-        this.websocket.close(code, reason);
+      try {
+        // 移除所有事件监听器，防止事件泄漏
+        this.websocket.onopen = null;
+        this.websocket.onmessage = null;
+        this.websocket.onclose = null;
+        this.websocket.onerror = null;
+        
+        // 安全关闭连接
+        if (this.websocket.readyState === WebSocket.OPEN || 
+            this.websocket.readyState === WebSocket.CONNECTING) {
+          this.websocket.close(code, reason);
+          console.log('✅ WebSocket连接已关闭');
+        }
+      } catch (error) {
+        console.error('关闭WebSocket时出错:', error);
+      } finally {
+        this.websocket = null;
       }
-      this.websocket = null;
     }
 
-    // 重置状态
+    // 重置所有状态变量
     this.reconnectAttempts = 0;
     this.currentTaskId = null;
-    this.isConnecting = false;
+    
+    // 清理日志缓存（可选，根据业务需求）
+    // this.logs.clear(); // 如果需要保留日志缓存，可以注释这行
+    
+    console.log('✨ WebSocket服务完全清理完成');
   }
 
   /**

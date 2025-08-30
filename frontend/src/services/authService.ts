@@ -21,16 +21,54 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// 添加响应拦截器，处理认证错误
+// 防止重复处理401错误的标志
+let isHandling401 = false;
+
+// 添加响应拦截器，处理认证错误 - 增强版防循环
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      // 认证失败，清除本地存储并跳转到登录页
-      localStorage.removeItem('user');
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+    // 只有在401错误且未在处理中时才处理
+    if (error.response?.status === 401 && !isHandling401) {
+      isHandling401 = true;
+      
+      console.log('🔒 检测到401认证失败，开始清理认证信息');
+      
+      // 防抖处理，避免快速重复调用
+      setTimeout(() => {
+        try {
+          // 清除本地存储
+          localStorage.removeItem('user');
+          localStorage.removeItem('token');
+          
+          // 检查当前路径，避免在登录页面时重复跳转
+          if (!window.location.pathname.includes('/login')) {
+            // 使用React Router的方式进行跳转，避免强制刷新
+            const currentPath = window.location.pathname;
+            
+            // 保存当前路径以便登录后跳转回来
+            if (currentPath !== '/login') {
+              sessionStorage.setItem('redirectPath', currentPath);
+            }
+            
+            // 延迟跳转，给清理操作时间
+            setTimeout(() => {
+              window.location.href = '/login';
+            }, 100);
+            
+            console.log('🔄 即将跳转到登录页面');
+          }
+        } catch (cleanupError) {
+          console.error('清理认证信息时出错:', cleanupError);
+        } finally {
+          // 重置处理标志，但延迟重置避免快速重复
+          setTimeout(() => {
+            isHandling401 = false;
+          }, 2000);
+        }
+      }, 100);
     }
+    
     return Promise.reject(error);
   }
 );

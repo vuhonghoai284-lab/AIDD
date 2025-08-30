@@ -72,6 +72,7 @@ const TaskDetailEnhanced: React.FC = () => {
     hasNextPage,
     feedbackLoading,
     handleQuickFeedback: optimizedHandleQuickFeedback,
+    updateSatisfactionRating,
     goToPage,
     refreshCurrentPage
   } = useOptimizedIssues({
@@ -87,36 +88,78 @@ const TaskDetailEnhanced: React.FC = () => {
   const [aiPageSize] = useState(5); // AI输出每页较少，减少加载时间
   const [aiOutputsTotal, setAiOutputsTotal] = useState(0); // AI输出总数
 
-  const loadTaskDetail = useCallback(async () => {
+  // 防重复请求的引用
+  const loadingTaskDetail = useRef(false);
+  const lastLoadedId = useRef<string | null>(null);
+
+  const loadTaskDetail = useCallback(async (forceReload = false) => {
     if (!id) return;
     
+    const currentId = id;
+    
+    // 防止重复加载同一个任务
+    if (!forceReload && loadingTaskDetail.current) {
+      console.log('📋 任务详情正在加载中，跳过重复请求');
+      return;
+    }
+    
+    // 防止相同ID的重复请求
+    if (!forceReload && lastLoadedId.current === currentId) {
+      console.log('📋 任务详情已加载，跳过重复请求');
+      return;
+    }
+    
+    loadingTaskDetail.current = true;
+    
     try {
-      const data = await taskAPI.getTaskDetail(parseInt(id));
+      console.log(`📋 开始加载任务详情: ${currentId}`);
+      
+      const data = await taskAPI.getTaskDetail(parseInt(currentId));
+      
+      // 检查组件是否还在当前任务
+      if (id !== currentId) {
+        console.log('📋 任务ID已变更，丢弃过期请求结果');
+        return;
+      }
+      
       setTaskDetail(data as EnhancedTaskDetail);
+      lastLoadedId.current = currentId;
       
       // 获取任务的全部问题总数（用于筛选器显示判断）
       if (data.task.status === 'completed') {
-        const allIssuesResponse = await taskAPI.getTaskIssues(parseInt(id), {
-          page: 1,
-          page_size: 1, // 只需要获取总数，不需要具体数据
-          sort_by: 'id',
-          sort_order: 'desc' as const
-        });
-        setAllIssuesTotal(allIssuesResponse.total);
+        // 使用Promise.allSettled避免一个请求失败影响其他请求
+        const [issuesResult, permissionResult] = await Promise.allSettled([
+          taskAPI.getTaskIssues(parseInt(currentId), {
+            page: 1,
+            page_size: 1, // 只需要获取总数，不需要具体数据
+            sort_by: 'id',
+            sort_order: 'desc' as const
+          }),
+          checkDownloadPermission(parseInt(currentId))
+        ]);
+        
+        if (issuesResult.status === 'fulfilled') {
+          setAllIssuesTotal(issuesResult.value.total);
+        } else {
+          console.warn('获取问题总数失败:', issuesResult.reason);
+        }
+        
+        if (permissionResult.status === 'rejected') {
+          console.warn('检查下载权限失败:', permissionResult.reason);
+        }
       }
       
       // 更新状态引用
       taskStatusRef.current = data.task.status;
+      console.log(`✅ 任务详情加载完成: ${currentId}`);
       
-      // 如果任务完成，检查下载权限
-      if (data.task.status === 'completed') {
-        await checkDownloadPermission(parseInt(id));
-      }
     } catch (error) {
+      console.error('加载任务详情失败:', error);
       message.error('加载任务详情失败');
-      console.error(error);
+    } finally {
+      setLoading(false);
+      loadingTaskDetail.current = false;
     }
-    setLoading(false);
   }, [id]);
 
 
@@ -177,8 +220,15 @@ const TaskDetailEnhanced: React.FC = () => {
 
   useEffect(() => {
     // 只加载任务详情，问题列表由优化Hook管理
-    loadTaskDetail();
-  }, [loadTaskDetail]);
+    // 使用防抖机制，避免快速切换时的重复请求
+    const timeoutId = setTimeout(() => {
+      loadTaskDetail();
+    }, 100); // 100ms防抖
+    
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [id]); // 只依赖id，避免loadTaskDetail变化引起的重复调用
 
   // 清理定时器 useEffect - 仅在组件卸载时清理
   useEffect(() => {
@@ -811,13 +861,9 @@ const TaskDetailEnhanced: React.FC = () => {
                                     value={issue.satisfaction_rating || 0}
                                     onChange={async (value) => {
                                       try {
-                                        // 先调用API保存评分
-                                        await taskAPI.submitSatisfactionRating(issue.id, value);
-                                        
-                                        // 触发页面刷新以更新评分显示
-                                        await refreshCurrentPage();
-                                        
-                                        message.success('评分已保存');
+                                        // 使用乐观更新方法，无感知更新
+                                        await updateSatisfactionRating(issue.id, value);
+                                        message.success('评分已保存', 1);
                                       } catch (error) {
                                         message.error('评分保存失败');
                                       }

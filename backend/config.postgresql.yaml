@@ -1,0 +1,81 @@
+# PostgreSQL 数据库配置示例
+# 服务器配置
+host: "0.0.0.0"
+port: 8000
+debug: false
+
+# 数据库配置 - PostgreSQL
+database:
+  type: postgresql
+  postgresql:
+    host: ${POSTGRES_HOST:localhost}
+    port: ${POSTGRES_PORT:5432}
+    username: ${POSTGRES_USER:ai_docs}
+    password: ${POSTGRES_PASSWORD:ai_docs_password}
+    database: ${POSTGRES_DB:ai_docs_db}
+
+# Redis配置
+cache:
+  strategy: "redis"
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    database: 0
+
+# 目录配置
+directories:
+  data_dir: "./data"
+  upload_dir: "./data/uploads"
+
+# AI模型配置
+ai_models:
+  default_index: 0
+  models:
+    - label: "GPT-4o Mini (快速)"
+      provider: "openai"
+      config:
+        api_key: "${OPENAI_API_KEY}"
+        base_url: "https://api.openai.com/v1"
+        model: "gpt-4o-mini"
+
+# 第三方认证配置
+third_party_auth:
+  gitee:
+    client_id: "${GITEE_CLIENT_ID}"
+    client_secret: "${GITEE_CLIENT_SECRET}"
+    frontend_domain: "${FRONTEND_DOMAIN:http://localhost}"
+
+# JWT配置
+jwt:
+  secret_key: "${JWT_SECRET_KEY:ai_doc_test_secret_key_change_in_production}"
+  algorithm: "HS256"
+  access_token_expire_minutes: 30
+
+# CORS配置
+cors:
+  enabled: true
+  development_mode: "${CORS_DEVELOPMENT_MODE:false}"
+  origins:
+    - "http://localhost:3000"
+    - "http://localhost:5173"
+    - "${FRONTEND_DOMAIN:}"
+
+# 文件配置
+file_settings:
+  max_file_size: 10485760  # 10MB
+  allowed_extensions: [".pdf", ".docx", ".md", ".txt"]
+
+# 任务处理配置
+task_processing:
+  document_processing:
+    max_document_chars: 1000000
+    enable_intelligent_chunking: true
+    chunk_overlap_chars: 200
+    min_chunk_chars: 1000
+    max_chunks_per_document: 50
+  section_merge:
+    enabled: true
+    max_chars: 5000
+    min_chars: 100
+    preserve_structure: true

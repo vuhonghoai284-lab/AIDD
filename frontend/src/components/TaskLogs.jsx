@@ -31,30 +31,55 @@ const TaskLogs = ({ taskId, taskStatus }) => {
   const logsContainerRef = useRef(null);
   const logIdsRef = useRef(new Set()); // 用于跟踪已添加的日志ID，避免重复
 
-  // 连接WebSocket并设置监听器
+  // 连接WebSocket并设置监听器 - 增强版内存泄漏防护
   useEffect(() => {
     if (!taskId) return;
+
+    let isComponentMounted = true; // 组件挂载状态标志
+    
+    console.log(`🔌 TaskLogs连接到任务: ${taskId}`);
 
     // 连接WebSocket，传递任务状态
     logService.connect(taskId, taskStatus);
 
-    // 设置事件监听器
+    // 设置事件监听器 - 添加挂载状态检查
     const handleLog = (log) => {
+      if (!isComponentMounted) {
+        console.log('组件已卸载，忽略日志事件');
+        return;
+      }
+      
       // 生成唯一ID（基于时间戳和消息内容）
       const logId = `${log.timestamp}_${log.level}_${log.message}`;
       
       // 避免重复添加
       if (!logIdsRef.current.has(logId)) {
         logIdsRef.current.add(logId);
-        setLogs(prev => [...prev, { ...log, id: logId }]);
+        setLogs(prev => {
+          if (!isComponentMounted) return prev; // 双重检查
+          return [...prev, { ...log, id: logId }];
+        });
+        
+        // 日志数量限制，防止内存过度占用
+        if (logIdsRef.current.size > 1000) {
+          const oldLogs = Array.from(logIdsRef.current).slice(0, 200);
+          oldLogs.forEach(id => logIdsRef.current.delete(id));
+          
+          setLogs(prev => {
+            if (!isComponentMounted) return prev;
+            return prev.slice(200);
+          });
+        }
       }
     };
 
     const handleStatus = (status) => {
+      if (!isComponentMounted) return;
       setCurrentStatus(status);
     };
 
     const handleProgress = (data) => {
+      if (!isComponentMounted) return;
       setCurrentStatus(prev => ({
         ...prev,
         progress: data.progress
@@ -62,14 +87,17 @@ const TaskLogs = ({ taskId, taskStatus }) => {
     };
 
     const handleConnected = () => {
+      if (!isComponentMounted) return;
       setConnectionStatus('connected');
     };
 
     const handleDisconnected = () => {
+      if (!isComponentMounted) return;
       setConnectionStatus('disconnected');
     };
 
     const handleReconnecting = () => {
+      if (!isComponentMounted) return;
       setConnectionStatus('reconnecting');
     };
 
@@ -81,8 +109,13 @@ const TaskLogs = ({ taskId, taskStatus }) => {
     logService.on('disconnected', handleDisconnected);
     logService.on('reconnecting', handleReconnecting);
 
-    // 获取历史日志
+    // 获取历史日志 - 添加错误处理和挂载状态检查
     logService.fetchHistory(taskId).then(data => {
+      if (!isComponentMounted) {
+        console.log('组件已卸载，忽略历史日志加载结果');
+        return;
+      }
+      
       if (data.logs) {
         // 清空之前的日志ID集合
         logIdsRef.current.clear();
@@ -95,21 +128,51 @@ const TaskLogs = ({ taskId, taskStatus }) => {
         });
         
         setLogs(logsWithId);
+        console.log(`📋 加载了 ${logsWithId.length} 条历史日志`);
       }
       if (data.current_status) {
         setCurrentStatus(data.current_status);
       }
+    }).catch(error => {
+      if (!isComponentMounted) return;
+      console.error('获取历史日志失败:', error);
     });
 
-    // 清理函数
+    // 增强的清理函数 - 防止内存泄漏
     return () => {
-      logService.off('log', handleLog);
-      logService.off('status', handleStatus);
-      logService.off('progress', handleProgress);
-      logService.off('connected', handleConnected);
-      logService.off('disconnected', handleDisconnected);
-      logService.off('reconnecting', handleReconnecting);
-      logService.disconnect();
+      console.log(`🧹 TaskLogs清理中 - 任务: ${taskId}`);
+      
+      // 立即标记组件已卸载，防止异步回调执行
+      isComponentMounted = false;
+      
+      // 移除所有事件监听器
+      try {
+        logService.off('log', handleLog);
+        logService.off('status', handleStatus);
+        logService.off('progress', handleProgress);
+        logService.off('connected', handleConnected);
+        logService.off('disconnected', handleDisconnected);
+        logService.off('reconnecting', handleReconnecting);
+        console.log('✅ 事件监听器已清理');
+      } catch (error) {
+        console.error('清理事件监听器时出错:', error);
+      }
+      
+      // 强制断开WebSocket连接
+      try {
+        logService.disconnect();
+        console.log('✅ WebSocket连接已断开');
+      } catch (error) {
+        console.error('断开WebSocket连接时出错:', error);
+      }
+      
+      // 清理本地引用和缓存
+      if (logIdsRef.current) {
+        logIdsRef.current.clear();
+        console.log('✅ 日志ID缓存已清理');
+      }
+      
+      console.log(`✨ TaskLogs清理完成 - 任务: ${taskId}`);
     };
   }, [taskId]);
 

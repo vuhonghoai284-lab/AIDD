@@ -29,31 +29,15 @@ async def lifespan(app: FastAPI):
     from app.services.task_recovery_service import task_recovery_service
     from app.services.background_task_service import background_task_service
     
-    # 1. 首先执行数据库迁移
+    # 1. 使用优化的SQLAlchemy数据库初始化
     try:
-        from app.core.alembic_manager import run_migrations_on_startup
-        config_file = os.getenv('CONFIG_FILE')
-        await run_migrations_on_startup(config_file)
-        print("✓ 数据库迁移完成")
-    except ImportError as import_error:
-        print(f"⚠️ Alembic未安装，跳过自动迁移: {import_error}")
-        print("💡 请在虚拟环境中安装: pip install alembic==1.13.1")
-        # 降级到原来的表创建方式
-        try:
-            Base.metadata.create_all(bind=engine)
-            print("✓ 使用SQLAlchemy创建数据库表（降级模式）")
-        except Exception as fallback_error:
-            print(f"✗ 数据库表创建失败: {fallback_error}")
+        from app.core.database_utils import safe_create_tables
+        await safe_create_tables()
+        print("✓ 数据库表创建/更新完成")
     except Exception as e:
-        print(f"✗ 数据库迁移失败: {e}")
-        print("🔄 尝试使用SQLAlchemy降级创建表...")
-        # 迁移失败时使用降级方案
-        try:
-            Base.metadata.create_all(bind=engine)
-            print("✓ 使用SQLAlchemy创建数据库表（降级模式）")
-        except Exception as fallback_error:
-            print(f"✗ 数据库表创建失败: {fallback_error}")
-            print("❌ 数据库初始化完全失败，应用可能无法正常工作")
+        print(f"✗ 数据库初始化失败: {e}")
+        print("❌ 数据库初始化失败，应用无法正常工作")
+        raise e
     
     # 2. 初始化缓存
     try:

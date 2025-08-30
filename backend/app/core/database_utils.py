@@ -1,16 +1,200 @@
 """
-数据库事务处理增强工具
-解决大数据插入和事务回滚问题
+安全的数据库初始化和管理工具
+替代Alembic，提供更简单但安全的数据库schema管理
 """
 import logging
 from contextlib import contextmanager
+from sqlalchemy import inspect, text, MetaData
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import DataError, IntegrityError
-from typing import Optional, Dict, Any
+from sqlalchemy.exc import DataError, IntegrityError, SQLAlchemyError
+from typing import Optional, Dict, Any, List
+from pathlib import Path
 import json
 
+from app.core.database import engine, Base
+from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+class DatabaseManager:
+    """数据库管理器 - 提供安全的schema操作"""
+    
+    def __init__(self):
+        self.settings = get_settings()
+        self.engine = engine
+        self.inspector = inspect(engine)
+    
+    def get_existing_tables(self) -> List[str]:
+        """获取现有表列表"""
+        return self.inspector.get_table_names()
+    
+    def table_exists(self, table_name: str) -> bool:
+        """检查表是否存在"""
+        return table_name in self.get_existing_tables()
+    
+    def get_table_columns(self, table_name: str) -> Dict[str, str]:
+        """获取表的列信息"""
+        if not self.table_exists(table_name):
+            return {}
+        
+        columns = self.inspector.get_columns(table_name)
+        return {col['name']: str(col['type']) for col in columns}
+    
+    def backup_data_if_needed(self, table_name: str) -> Optional[str]:
+        """如果需要，备份表数据（仅SQLite）"""
+        if self.settings.database_type != 'sqlite':
+            return None
+            
+        if not self.table_exists(table_name):
+            return None
+            
+        backup_table = f"{table_name}_backup_{int(__import__('time').time())}"
+        
+        try:
+            with self.engine.connect() as conn:
+                # 创建备份表
+                conn.execute(text(f"CREATE TABLE {backup_table} AS SELECT * FROM {table_name}"))
+                conn.commit()
+                logger.info(f"✓ 表 {table_name} 数据已备份到 {backup_table}")
+                return backup_table
+        except Exception as e:
+            logger.warning(f"⚠️ 备份表 {table_name} 失败: {e}")
+            return None
+    
+    def create_tables_safely(self):
+        """安全地创建表结构"""
+        logger.info("开始安全创建数据库表...")
+        
+        existing_tables = self.get_existing_tables()
+        logger.info(f"现有表: {existing_tables}")
+        
+        # 获取所有模型定义的表
+        model_tables = list(Base.metadata.tables.keys())
+        logger.info(f"模型定义的表: {model_tables}")
+        
+        # 新表（不存在的表）
+        new_tables = [table for table in model_tables if table not in existing_tables]
+        
+        if new_tables:
+            logger.info(f"将创建新表: {new_tables}")
+            
+            # 只创建新表，避免影响现有数据
+            for table_name in new_tables:
+                table_obj = Base.metadata.tables[table_name]
+                try:
+                    table_obj.create(bind=self.engine, checkfirst=True)
+                    logger.info(f"✓ 成功创建表: {table_name}")
+                except Exception as e:
+                    logger.error(f"✗ 创建表 {table_name} 失败: {e}")
+                    raise
+        else:
+            logger.info("✓ 所有必需的表已存在，无需创建新表")
+        
+        # 验证关键表是否存在
+        critical_tables = ['users', 'tasks', 'file_infos', 'ai_models', 'issues']
+        missing_critical = [t for t in critical_tables if not self.table_exists(t)]
+        
+        if missing_critical:
+            logger.error(f"✗ 缺少关键表: {missing_critical}")
+            # 尝试创建缺少的关键表
+            logger.info("尝试创建缺少的关键表...")
+            Base.metadata.create_all(bind=self.engine, checkfirst=True)
+            
+            # 再次检查
+            still_missing = [t for t in critical_tables if not self.table_exists(t)]
+            if still_missing:
+                raise RuntimeError(f"无法创建关键表: {still_missing}")
+            else:
+                logger.info("✓ 成功创建所有关键表")
+        
+        logger.info("✓ 数据库表创建/验证完成")
+    
+    def verify_database_integrity(self) -> bool:
+        """验证数据库完整性"""
+        try:
+            # 检查关键表
+            critical_tables = ['users', 'tasks', 'file_infos', 'ai_models']
+            for table in critical_tables:
+                if not self.table_exists(table):
+                    logger.error(f"✗ 关键表缺失: {table}")
+                    return False
+            
+            # 简单的连接测试
+            with self.engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            
+            logger.info("✓ 数据库完整性验证通过")
+            return True
+            
+        except Exception as e:
+            logger.error(f"✗ 数据库完整性验证失败: {e}")
+            return False
+    
+    def get_database_info(self) -> Dict:
+        """获取数据库信息"""
+        try:
+            tables = self.get_existing_tables()
+            table_info = {}
+            
+            for table_name in tables:
+                try:
+                    with self.engine.connect() as conn:
+                        result = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
+                        count = result.scalar()
+                        table_info[table_name] = count
+                except Exception as e:
+                    table_info[table_name] = f"Error: {e}"
+            
+            return {
+                'database_type': self.settings.database_type,
+                'database_url': self.settings.database_url,
+                'total_tables': len(tables),
+                'table_names': tables,
+                'table_row_counts': table_info
+            }
+            
+        except Exception as e:
+            return {'error': str(e)}
+
+
+async def safe_create_tables():
+    """安全地创建数据库表（异步接口）"""
+    db_manager = DatabaseManager()
+    
+    try:
+        # 创建必要的目录
+        settings = get_settings()
+        if settings.database_type == 'sqlite':
+            db_url = settings.database_url.replace('sqlite:///', '')
+            db_path = Path(db_url) if not db_url.startswith('./') else Path(db_url)
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            logger.info(f"确保SQLite数据库目录存在: {db_path.parent}")
+        
+        # 安全创建表
+        db_manager.create_tables_safely()
+        
+        # 验证数据库完整性
+        if not db_manager.verify_database_integrity():
+            raise RuntimeError("数据库完整性验证失败")
+        
+        logger.info("✅ 数据库初始化完成")
+        
+    except Exception as e:
+        logger.error(f"❌ 数据库初始化失败: {e}")
+        raise
+
+
+def create_tables_sync():
+    """同步方式创建表（用于脚本调用）"""
+    db_manager = DatabaseManager()
+    db_manager.create_tables_safely()
+
+
+def get_db_status() -> Dict:
+    """获取数据库状态（用于健康检查）"""
+    db_manager = DatabaseManager()
+    return db_manager.get_database_info()
 
 
 @contextmanager
