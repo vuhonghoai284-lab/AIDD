@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Row, 
   Col, 
@@ -33,6 +33,33 @@ const { Title, Text } = Typography;
 const OperationsOverviewPage: React.FC = () => {
   const [timeRange, setTimeRange] = useState<TimeRangeType>({ type: '30days' });
   const [lastRefreshTime, setLastRefreshTime] = useState<Date>(new Date());
+
+  // 缓存默认数据，避免每次渲染创建新对象
+  const defaultTasksData = useMemo(() => ({
+    total: 0, running: 0, completed: 0, failed: 0, success_rate: 0,
+    today_total: 0, today_completed: 0, today_failed: 0
+  }), []);
+
+  const defaultUsersData = useMemo(() => ({
+    total_users: 0, active_users: 0, new_registrations: 0,
+    today_active: 0, today_new_registrations: 0, current_online: 0
+  }), []);
+
+  const defaultIssuesData = useMemo(() => ({
+    total_issues: 0, new_issues: 0, accepted_issues: 0, rejected_issues: 0,
+    pending_issues: 0, critical_issues: 0, high_issues: 0, medium_issues: 0,
+    low_issues: 0, today_new: 0, today_accepted: 0
+  }), []);
+
+  const defaultFeedbackData = useMemo(() => ({
+    total_feedback: 0, valid_feedback: 0, average_score: 0,
+    score_distribution: {}, today_feedback: 0, today_average_score: 0
+  }), []);
+
+  const defaultTokensData = useMemo(() => ({
+    total_tokens: 0, input_tokens: 0, output_tokens: 0, estimated_cost: 0,
+    today_tokens: 0, today_cost: 0, by_model: {}
+  }), []);
 
   // 使用React Query进行数据获取和缓存管理
   const {
@@ -185,10 +212,7 @@ const OperationsOverviewPage: React.FC = () => {
                 filter: isLoading ? 'blur(2px)' : 'none'
               }}>
                 <TaskStatisticsCard 
-                  data={operationsData?.tasks || {
-                    total: 0, running: 0, completed: 0, failed: 0, success_rate: 0,
-                    today_total: 0, today_completed: 0, today_failed: 0
-                  }}
+                  data={operationsData?.tasks || defaultTasksData}
                   loading={isLoading}
                 />
               </div>
@@ -201,10 +225,7 @@ const OperationsOverviewPage: React.FC = () => {
                 filter: isLoading ? 'blur(2px)' : 'none'
               }}>
                 <UserStatisticsCard 
-                  data={operationsData?.users || {
-                    total_users: 0, active_users: 0, new_registrations: 0,
-                    today_active: 0, today_new_registrations: 0, current_online: 0
-                  }}
+                  data={operationsData?.users || defaultUsersData}
                   trends={operationsData?.trends?.user_trends || []}
                   loading={isLoading}
                 />
@@ -218,11 +239,7 @@ const OperationsOverviewPage: React.FC = () => {
                 filter: isLoading ? 'blur(2px)' : 'none'
               }}>
                 <IssueStatisticsCard 
-                  data={operationsData?.issues || {
-                    total_issues: 0, new_issues: 0, accepted_issues: 0, rejected_issues: 0,
-                    pending_issues: 0, critical_issues: 0, high_issues: 0, medium_issues: 0,
-                    low_issues: 0, today_new: 0, today_accepted: 0
-                  }}
+                  data={operationsData?.issues || defaultIssuesData}
                   loading={isLoading}
                 />
               </div>
@@ -255,10 +272,7 @@ const OperationsOverviewPage: React.FC = () => {
                 filter: isLoading ? 'blur(2px)' : 'none'
               }}>
                 <FeedbackStatisticsCard 
-                  data={operationsData?.feedback || {
-                    total_feedback: 0, valid_feedback: 0, average_score: 0,
-                    score_distribution: {}, today_feedback: 0, today_average_score: 0
-                  }}
+                  data={operationsData?.feedback || defaultFeedbackData}
                   loading={isLoading}
                 />
               </div>
@@ -271,10 +285,7 @@ const OperationsOverviewPage: React.FC = () => {
                 filter: isLoading ? 'blur(2px)' : 'none'
               }}>
                 <TokenStatisticsCard 
-                  data={operationsData?.tokens || {
-                    total_tokens: 0, input_tokens: 0, output_tokens: 0, estimated_cost: 0,
-                    today_tokens: 0, today_cost: 0, by_model: {}
-                  }}
+                  data={operationsData?.tokens || defaultTokensData}
                   loading={isLoading}
                 />
               </div>

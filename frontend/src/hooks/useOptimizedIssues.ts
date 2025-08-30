@@ -190,6 +190,9 @@ export function useOptimizedIssues({
       
       // 3. 延迟移除动画效果
       const timeoutId = setTimeout(() => {
+        let shouldUpdatePreloaded = false;
+        let preloadedIssueToAdd: any = null;
+        
         setIssues(prevIssues => {
           const newIssues = prevIssues.filter(issue => issue.id !== issueId);
           
@@ -198,14 +201,20 @@ export function useOptimizedIssues({
             const issueToAdd = preloadedIssues[0];
             newIssues.push({ ...issueToAdd, isNew: true });
             
-            // 更新预加载内容
-            setPreloadedIssues(prev => prev.slice(1));
+            // 标记需要更新预加载状态
+            shouldUpdatePreloaded = true;
+            preloadedIssueToAdd = issueToAdd;
             
             console.log(`🔄 从预加载内容补充问题：${issueToAdd.id}`);
           }
           
           return newIssues;
         });
+        
+        // 分离预加载状态更新，避免状态更新竞态
+        if (shouldUpdatePreloaded) {
+          setPreloadedIssues(prev => prev.slice(1));
+        }
         
         // 清理超时引用
         removalTimeouts.current.delete(issueId);
@@ -237,7 +246,7 @@ export function useOptimizedIssues({
     } finally {
       setFeedbackLoading(prev => ({ ...prev, [issueId]: false }));
     }
-  }, [taskId, pageSize, preloadedIssues]);
+  }, [taskId, pageSize]); // 移除preloadedIssues依赖避免频繁重新创建
   
   // 页面跳转
   const goToPage = useCallback(async (page: number) => {
