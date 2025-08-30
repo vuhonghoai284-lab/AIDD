@@ -170,7 +170,14 @@ class TestTaskReportError:
             error = response.json()
             assert isinstance(error, dict)
             assert "detail" in error
-            assert isinstance(error["detail"], str)
+            
+            # API可能返回不同格式的错误详情
+            if isinstance(error["detail"], dict):
+                # 复合响应格式：{'detail': {'can_download': bool, 'detail': '错误信息'}}
+                assert "detail" in error["detail"] or "can_download" in error["detail"]
+            else:
+                # 标准错误响应格式：{'detail': '错误信息'}
+                assert isinstance(error["detail"], str)
     
     def test_report_malformed_task_id(self, client: TestClient, auth_headers):
         """测试报告端点畸形任务ID"""

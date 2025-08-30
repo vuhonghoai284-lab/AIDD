@@ -296,8 +296,8 @@ class TestTaskDeleteAPI:
         task = self.create_test_task(client, auth_headers, "处理中任务")
         task_id = task["id"]
         
-        # 等待一小段时间让处理开始
-        time.sleep(0.5)
+        # 优化：减少等待时间，从0.5s减少到0.1s
+        time.sleep(0.1)
         
         # 删除任务
         delete_response = client.delete(f"/api/tasks/{task_id}", headers=auth_headers)

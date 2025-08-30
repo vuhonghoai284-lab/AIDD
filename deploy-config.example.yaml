@@ -1,0 +1,118 @@
+# AI文档测试系统 - 部署配置示例文件
+# 复制此文件并根据需要修改配置
+
+# 应用基础配置
+app:
+  name: "aidd"                    # 应用名称，用于容器命名
+  version: "2.0.0"                # 应用版本
+
+# 服务端口配置
+ports:
+  frontend: 3000                  # 前端访问端口
+  backend: 8080                   # 后端API端口
+  
+# 数据库配置 - 选择一种数据库类型
+database:
+  type: "postgresql"              # 数据库类型: sqlite/mysql/postgresql
+  
+  # SQLite配置（最简单，开箱即用）
+  sqlite:
+    path: "./data/app.db"
+    
+  # MySQL配置
+  mysql:
+    host: "mysql"
+    port: 3306
+    database: "aidd_db"
+    username: "aidd"
+    password: "MySecurePassword123!"      # 🔐 请修改为安全密码
+    root_password: "MyRootPassword123!"   # 🔐 请修改为安全密码
+    
+  # PostgreSQL配置（推荐用于生产环境）
+  postgresql:
+    host: "postgres"
+    port: 5432
+    database: "aidd_db"
+    username: "aidd"
+    password: "MyPgPassword123!"          # 🔐 请修改为安全密码
+
+# Redis缓存配置
+redis:
+  host: "redis"
+  port: 6379
+  password: ""                    # Redis密码（可选，留空表示无密码）
+  database: 0
+
+# 外部访问配置
+external:
+  protocol: "http"                # 协议: http/https
+  host: "localhost"               # 外部访问域名或IP，生产环境请修改
+  backend_port: 8080              # 后端外部端口
+  frontend_port: 3000             # 前端外部端口
+
+# AI服务配置 - 至少配置一个
+ai_services:
+  openai:
+    api_key: "sk-your-openai-key-here"        # 🔑 请填写真实的OpenAI API密钥
+    base_url: "https://api.openai.com/v1"     # API基础URL
+  baidu:
+    api_key: "your-baidu-key-here"            # 🔑 百度AI API密钥（可选）
+  deepseek:
+    api_key: "your-deepseek-key-here"         # 🔑 DeepSeek API密钥（可选）
+
+# 第三方登录配置
+oauth:
+  provider: "gitee"                           # 登录提供商: gitee
+  client_id: "your-gitee-client-id"           # 🔑 Gitee应用ID
+  client_secret: "your-gitee-client-secret"   # 🔑 Gitee应用密钥
+  scope: "user_info"                          # 权限范围
+
+# 安全配置
+security:
+  jwt_secret: "your-super-secret-jwt-key-2024"  # 🔐 JWT密钥，请生成安全的随机字符串
+  oauth_secret: "your-oauth-secret-2024"        # 🔐 OAuth密钥
+
+# 环境配置
+environment:
+  mode: "production"              # 运行模式: development/production
+  debug: false                    # 调试模式（生产环境建议为false）
+  log_level: "INFO"               # 日志级别: DEBUG/INFO/WARNING/ERROR
+
+# 文件存储配置
+storage:
+  max_file_size: "10MB"           # 最大上传文件大小
+  upload_dir: "/app/data/uploads" # 上传目录
+  report_dir: "/app/data/reports" # 报告目录
+
+# 任务处理配置
+task_processing:
+  max_concurrent_tasks: 10        # 最大并发任务数
+  timeout: 1800                   # 任务超时时间（秒，30分钟）
+  retry_attempts: 3               # 最大重试次数
+
+# ======================================================================
+# 🔧 配置指南
+# ======================================================================
+#
+# 必需配置项：
+# 1. 数据库密码 (如果不使用SQLite)
+# 2. AI服务API密钥 (至少配置一个)
+# 3. OAuth配置 (Gitee应用ID和密钥)
+# 4. 安全密钥 (JWT和OAuth密钥)
+#
+# 可选配置项：
+# - 端口号 (如果默认端口被占用)
+# - 外部访问域名 (如果部署到服务器)
+# - 任务处理参数 (根据服务器性能调整)
+#
+# 🔗 快速链接：
+# - Gitee OAuth应用: https://gitee.com/oauth/applications
+# - OpenAI API: https://platform.openai.com/api-keys
+# - 详细文档: ./DOCKER_DEPLOY_README.md
+#
+# ⚠️ 安全提醒：
+# - 生产环境必须修改所有默认密码和密钥
+# - 不要将包含真实密钥的配置文件提交到版本控制
+# - 定期轮换API密钥和密码
+# - 使用HTTPS协议保护数据传输
+# ======================================================================

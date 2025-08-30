@@ -45,12 +45,17 @@ TEST_DB_URL = "sqlite:///:memory:"
 
 @pytest.fixture(scope="session")
 def db_engine():
-    """会话级数据库引擎"""
+    """会话级数据库引擎 - 性能优化版本"""
     engine = create_engine(
         TEST_DB_URL,
-        connect_args={"check_same_thread": False},
+        connect_args={
+            "check_same_thread": False,
+            "timeout": 5,         # 减少超时时间
+        },
         poolclass=StaticPool,
-        echo=False
+        echo=False,
+        pool_pre_ping=False,      # 跳过连接检查
+        pool_recycle=-1,          # 禁用连接回收
     )
     
     # 导入所有模型以确保它们被注册
@@ -847,23 +852,25 @@ def create_stress_test_users():
     except ImportError:
         pass
 
-# 数据清理
+# 数据清理 - 优化版本
 @pytest.fixture(autouse=True)
 def cleanup_test_data(db_session):
-    """测试后清理数据"""
+    """测试后快速清理数据"""
     yield  # 测试运行
     
-    # 清理动态数据，保留基础数据
+    # 快速批量清理，减少数据库操作
     try:
-        # 按照外键依赖关系顺序删除
-        db_session.execute(text("DELETE FROM task_shares WHERE 1=1"))
-        db_session.execute(text("DELETE FROM task_logs WHERE 1=1"))
-        db_session.execute(text("DELETE FROM task_queue WHERE 1=1"))
-        db_session.execute(text("DELETE FROM issues WHERE 1=1"))
-        db_session.execute(text("DELETE FROM ai_outputs WHERE 1=1"))  
-        db_session.execute(text("DELETE FROM file_infos WHERE 1=1"))
-        db_session.execute(text("DELETE FROM tasks WHERE 1=1"))
-        db_session.execute(text("DELETE FROM users WHERE id > 10"))  # 保留基础用户
+        # 使用事务批量删除，减少单次操作
+        db_session.execute(text("""
+            DELETE FROM task_shares WHERE 1=1;
+            DELETE FROM task_logs WHERE 1=1;
+            DELETE FROM task_queue WHERE 1=1;
+            DELETE FROM issues WHERE 1=1;
+            DELETE FROM ai_outputs WHERE 1=1;
+            DELETE FROM file_infos WHERE 1=1;
+            DELETE FROM tasks WHERE 1=1;
+            DELETE FROM users WHERE id > 10;
+        """))
         db_session.commit()
     except Exception:
         db_session.rollback()

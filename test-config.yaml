@@ -1,0 +1,67 @@
+# AI文档测试系统 - 测试配置文件
+
+# 应用基础配置
+app:
+  name: "aidd-test"
+  version: "2.0.0"
+
+# 服务端口配置
+ports:
+  frontend: 3001  # 使用不同端口避免冲突
+  backend: 8081
+
+# 数据库配置 - 使用SQLite简化测试
+database:
+  type: "sqlite"
+  sqlite:
+    path: "./data/app.db"
+
+# Redis缓存配置
+redis:
+  host: "redis"
+  port: 6379
+  password: ""
+  database: 0
+
+# 外部访问配置
+external:
+  protocol: "http"
+  host: "localhost"
+  backend_port: 8081
+  frontend_port: 3001
+
+# AI服务配置 - 使用测试密钥
+ai_services:
+  openai:
+    api_key: "test-openai-key"
+    base_url: "https://api.openai.com/v1"
+
+# 第三方登录配置 - 使用测试配置
+oauth:
+  provider: "gitee"
+  client_id: "test-client-id"
+  client_secret: "test-client-secret"
+  scope: "user_info"
+
+# 安全配置
+security:
+  jwt_secret: "test-jwt-secret-key-for-development"
+  oauth_secret: "test-oauth-secret"
+
+# 环境配置
+environment:
+  mode: "development"
+  debug: true
+  log_level: "DEBUG"
+
+# 文件存储配置
+storage:
+  max_file_size: "10MB"
+  upload_dir: "/app/data/uploads"
+  report_dir: "/app/data/reports"
+
+# 任务处理配置
+task_processing:
+  max_concurrent_tasks: 5
+  timeout: 900
+  retry_attempts: 2
